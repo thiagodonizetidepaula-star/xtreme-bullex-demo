@@ -64,9 +64,50 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1'}
+
+def repetition(candles, now):
+    bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
+    if len(bars)<23:return {'direction':None,'signal':None,'reason':'Aguardando histórico para EMA20 e ATR14.'}
+    if len({b['from'] for b in bars})!=len(bars) or any(b['from']-a['from']!=60 for a,b in zip(bars,bars[1:])):raise ValueError('Histórico M1 inválido ou com lacunas')
+    for b in bars:
+        o,c,h,l=[float(b[k]) for k in ('open','close','max','min')]
+        if not all(math.isfinite(v) and v>0 for v in (o,c,h,l)) or not l<=min(o,c)<=max(o,c)<=h:raise ValueError('OHLC inválido')
+    result={'direction':None,'signal':None,'candle':bars[-1]['from'],'strategy':STRATEGIES['repetition'],'checks':{}}
+    def reject(reason):result['reason']=reason;return result
+    prior=bars[:-3];seq=bars[-3:]
+    tr=[max(b['max']-b['min'],abs(b['max']-prior[i-1]['close']),abs(b['min']-prior[i-1]['close'])) for i,b in enumerate(prior) if i]
+    atr=sum(tr[:14])/14
+    for value in tr[14:]:atr=(atr*13+value)/14
+    result['atr14Reference']=atr
+    if any(b['max']-b['min']<=0 or abs(b['close']-b['open'])<=.1*(b['max']-b['min']) for b in seq):return reject('Sequência descartada: doji ou amplitude zero.')
+    direction='call' if all(b['close']>b['open'] for b in seq) else 'put' if all(b['close']<b['open'] for b in seq) else None
+    if not direction:return reject('Sequência sem três velas na mesma direção.')
+    if atr<=0 or any(b['max']-b['min']>2*atr for b in seq):return reject('Sequência descartada: amplitude acima de 2 × ATR14 anterior.')
+    averages=ema([b['close'] for b in bars],20);result['ema20']=averages[-1]
+    confirmed=(seq[-1]['close']>averages[-1] and averages[-1]>averages[-4]) if direction=='call' else (seq[-1]['close']<averages[-1] and averages[-1]<averages[-4])
+    if not confirmed:return reject('Sequência descartada: tendência EMA20 não confirmou.')
+    result['signal']=direction
+    age=now-bars[-1]['from']-60;result['age']=age
+    if not 0<=age<=2:return reject('Sinal descartado: janela de dois segundos encerrada.')
+    result.update(direction=direction,reason='Três velas alinhadas à EMA20; ATR14 anterior aprovado.')
+    return result
+
+def analyze_selected(candles, now, strategy='rejection'):
+    return repetition(candles,now) if strategy=='repetition' else analyze(candles,now)
+
+def entry_allowed(trades, asset, candle, strategy):
+    previous=[t for t in trades if t.get('asset')==asset and t.get('candle') is not None]
+    if any(t['candle']==candle for t in previous):return False,'Sinal duplicado para ativo e candle.'
+    if strategy=='repetition' and any(t.get('strategy_key')=='repetition' and t.get('status')!='IGNORADA' and candle<t['candle']+180 for t in previous):return False,'Aguardando três novas velas sem reutilizar a sequência anterior.'
+    return True,''
+
 def validate_config(c):
     for k in ['stake','stop_win','stop_loss','payout','limit']:
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
+    for flag in ['stop_win_enabled','stop_loss_enabled']:
+        if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
+    if c.get('strategy','rejection') not in STRATEGIES:raise ValueError('Estratégia inválida')
     if c['stake']<=0 or c['stop_win']<=0 or c['stop_loss']<c['stake']: raise ValueError('Entrada e stops inválidos. Stop loss deve cobrir uma entrada.')
     if not 0<=c['payout']<=100 or int(c['limit'])!=c['limit'] or not 1<=c['limit']<=100: raise ValueError('Payout ou limite inválido')
     import re
@@ -74,4 +115,4 @@ def validate_config(c):
     return c
 
 def risk_ok(config, profit, count):
-    return profit<config['stop_win'] and profit-config['stake']>=-config['stop_loss'] and count<config['limit']
+    return (not config.get('stop_win_enabled',True) or profit<config['stop_win']) and (not config.get('stop_loss_enabled',True) or profit-config['stake']>=-config['stop_loss']) and count<config['limit']

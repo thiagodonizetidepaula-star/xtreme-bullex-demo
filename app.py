@@ -1,7 +1,7 @@
 import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math
 from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template
-from strategy import analyze,validate_config,risk_ok
+from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -9,7 +9,7 @@ app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True}}
 
 def log(s):
     state['message']=s
@@ -45,6 +45,13 @@ def management():
     profit=round(sum(t.get('profit',0) for t in done),2)
     c=state['config'];wins=sum(t['status']=='WIN' for t in done);losses=sum(t['status']=='LOSS' for t in done)
     return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'can_trade':risk_ok(c,profit,len(ts))}
+def comparison():
+    out=[]
+    for key,name in STRATEGIES.items():
+        ts=[t for t in state['trades'] if t.get('strategy_key','rejection')==key and t['status'] in ('WIN','LOSS','EMPATE')]
+        payouts=[t['payout'] for t in ts if isinstance(t.get('payout'),(int,float))]
+        out.append({'strategy':name,'operations':len(ts),'wins':sum(t['status']=='WIN' for t in ts),'losses':sum(t['status']=='LOSS' for t in ts),'ties':sum(t['status']=='EMPATE' for t in ts),'profit':round(sum(t['profit'] for t in ts),2),'payout_mean':round(sum(payouts)/len(payouts),2) if payouts else None})
+    return out
 def limits(c):
     m=management()
     return risk_ok(c,m['profit'],m['used'])
@@ -56,15 +63,15 @@ def loop(c):
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
             if time.time()-catalog_at>30:
-                candidates=client.call('market',payout=c['payout'])['assets'];catalog_at=time.time()
+                candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout acima de '+str(max(80,c['payout']))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy')=='repetition' else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             c['asset']=candidates[cursor%len(candidates)]['asset'];cursor+=1
             data=client.call('candles',asset=c['asset'])
             try:
-                a=analyze(data['candles'],data['now'])
+                a=analyze_selected(data['candles'],data['now'],c.get('strategy','rejection'))
             except (ValueError,KeyError,TypeError) as e:
                 log(c['asset']+': dados de velas inválidos ('+str(e)+'). Ativo ignorado; busca continua.')
                 stop.wait(1);continue
@@ -76,18 +83,24 @@ def loop(c):
                 log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
             state['message']=a['reason']
             if (c['asset'],a.get('candle'))!=last and a.get('direction'):
+                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'],c.get('strategy','rejection'))
+                if not allowed:
+                    log(c['asset']+': '+reason);stop.wait(.2);continue
                 last=(c['asset'],a['candle']);state['last_candle']=last
                 with lock:
                     if stop.is_set():break
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO'}
+                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
                     state['trades'].append(trade)
                     state['uncertain']=True
-                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'])
+                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;log(order['reason'])
                 else:
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout']);log('Ordem confirmada na DEMO. Aguardando resultado.')
+                    trade.update(id=order['id'],status='ABERTA',payout=order['payout']);
+                    if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
+                    log('Ordem confirmada na DEMO. Aguardando resultado.')
                     result=client.call('result',timeout=150,id=order['id'])
+                    trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
                     trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
                     state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status'])
             stop.wait(1)
@@ -122,7 +135,7 @@ def access():
     return jsonify(csrf=session['csrf'])
 @app.get('/api/state')
 def status():
-    with lock:return jsonify(**state,management=management(),csrf=session['csrf'])
+    with lock:return jsonify(**state,management=management(),comparison=comparison(),csrf=session['csrf'])
 @app.post('/api/connect')
 def connect():
     global client

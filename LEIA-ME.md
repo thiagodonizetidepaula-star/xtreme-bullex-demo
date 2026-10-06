@@ -25,3 +25,16 @@ Este pacote contém o servidor, painel mobile, estratégia própria e integraç�
 
 ## Testes e execução local opcional
 Python 3.11+. Instalar requirements.txt; executar bootstrap.py para baixar a biblioteca; definir APP_ACCESS_KEY com 16 ou mais caracteres; executar python app.py. Testes: python -m unittest discover -s tests -v.
+
+## Repetição M1 — teste comparativo
+Selecione a estratégia no gerenciamento com o robô parado; salve e inicie na demo. Retorno e Rejeição v1 continua disponível. Repetição M1 é determinística e experimental, sem relação com regras privadas do Trader Extreme.
+
+Usa somente velas fechadas: três candles da mesma direção, corpo maior que 10% da amplitude, EMA20 confirmada e amplitude de cada vela <= 2 vezes o ATR14 Wilder calculado antes das três velas. O catálogo turbo M1 precisa confirmar ativo aberto e payout >= mínimo configurado, inclusive OTC.
+
+A biblioteca fixada expõe buy_by_raw_expirations, que envia option_type_id=3 e expired explícito. Repetição M1 envia expiração no fechamento da próxima vela (candle do sinal + 120 segundos), somente nos primeiros 2 segundos. Isso é expiração por relógio, cerca de 58–60 segundos desde o envio. Uma guarda valida o relógio também na chamada websocket. Compatibilidade foi verificada no código/protocolo e em mocks; aceitação dessa modalidade pela conta precisa ser validada em demo. Não se substitui por outra expiração se falhar.
+
+Uma operação aberta por vez; deduplicação por ativo/candle usa o histórico da sessão e persiste entre parar/iniciar ou trocar de estratégia. Repetição M1 exige três velas novas após uma entrada. Timeout é incerto e bloqueia o robô, sem reenvio automático.
+
+Stops podem ser desligados explicitamente pelas caixas de seleção. Valores vazios, zero ou inválidos continuam rejeitados; desligar não significa definir zero. Limite de ordens permanece ativo. Win/Loss/empates e lucro líquido só usam resultados confirmados. A tabela de comparação apresenta contagem e payout médio observado, sem inventar resultados.
+
+Continuidade e armazenamento não foram ampliados nesta atualização: o bot executa no servidor enquanto o processo estiver ativo, mas Render Free pode suspender/reiniciar. Histórico, configurações e deduplicação são temporários; exporte antes de publicar/reiniciar. Não existe banco permanente nesta versão. Credenciais não são gravadas.

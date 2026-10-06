@@ -58,7 +58,7 @@ class Core(unittest.TestCase):
             if len(calls)==2:module.stop.set()
             return {'candles':[],'now':6000}
         client.call.side_effect=rpc
-        with patch.object(module,'client',client),patch.object(module,'analyze',side_effect=[ValueError('Histórico M1 com lacunas'),{'direction':None,'reason':'Sem sinal'}]),patch.object(module.stop,'wait',return_value=None):
+        with patch.object(module,'client',client),patch.object(module,'analyze_selected',side_effect=[ValueError('Histórico M1 com lacunas'),{'direction':None,'reason':'Sem sinal'}]),patch.object(module.stop,'wait',return_value=None):
             module.loop(dict(module.state['config']))
         self.assertEqual(calls,['BAD-OTC','GOOD-OTC'])
         self.assertTrue(module.state['connected']);client.close.assert_not_called()
