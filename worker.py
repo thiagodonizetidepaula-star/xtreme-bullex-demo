@@ -1,8 +1,21 @@
-import sys,pathlib,json,logging,time,contextlib,math
+import sys,pathlib,json,logging,time,contextlib,math,signal
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
 api=None
+
+@contextlib.contextmanager
+def stage(name, seconds):
+    def expired(*_):
+        raise RuntimeError('Tempo esgotado na etapa: '+name+'. A corretora não concluiu a resposta.')
+    previous=signal.signal(signal.SIGALRM,expired)
+    signal.setitimer(signal.ITIMER_REAL,seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL,0)
+        signal.signal(signal.SIGALRM,previous)
+
 
 def demo():
     if api is None or not api.check_connect(): raise RuntimeError('Desconectado')
@@ -13,16 +26,20 @@ def dispatch(c):
     op=c['op']
     if op=='connect':
         api=Bullex(c['email'],c['password'])
-        ok,reason=api.connect()
+        with stage('autenticação e abertura da sessão',35):
+            ok,reason=api.connect()
         if not ok: raise RuntimeError('A corretora pediu 2FA. Esta versão não suporta 2FA.' if reason=='2FA' else 'Login recusado ou integração incompatível. Verifique os dados e acesso à corretora.')
-        api.change_balance('PRACTICE');demo()
-        api.update_ACTIVES_OPCODE()
-        return {'balance':api.get_balance(),'currency':api.get_currency(),'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
+        with stage('seleção e saldo da conta demo',10):
+            api.change_balance('PRACTICE');demo()
+            balance=api.get_balance();currency=api.get_currency()
+        # Não aguardar os catálogos de CFD, forex e cripto para conectar M1.
+        return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
     if op=='candles':
         now=api.get_server_timestamp()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
-        bars=api.get_candles(c['asset'],60,120,int(now))
+        with stage('leitura de velas M1',15):
+            bars=api.get_candles(c['asset'],60,120,int(now))
         if not isinstance(bars,list): raise RuntimeError('Corretora não forneceu velas')
         return {'candles':bars,'now':now}
     if op=='order':
