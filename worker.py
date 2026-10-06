@@ -60,7 +60,7 @@ def dispatch(c):
         now=api.get_server_timestamp()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
         with stage('leitura de velas M1',15):
-            bars=api.get_candles(c['asset'],60,120,int(now))
+            bars=api.get_candles(c['asset'],60,300,int(now))
         if not isinstance(bars,list): raise RuntimeError('Corretora não forneceu velas')
         return {'candles':bars,'now':now}
     if op=='order':

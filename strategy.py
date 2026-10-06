@@ -1,4 +1,4 @@
-"""Estratégia experimental própria. Usa apenas velas M1 encerradas."""
+"""Nuvem GRC enviada pelo usuário, filtrada pelo Xtreme Tendência. Usa apenas velas M1 encerradas."""
 import math
 
 def ema(values, period):
@@ -6,6 +6,30 @@ def ema(values, period):
     alpha=2/(period+1)
     for x in values[1:]: out.append(alpha*x+(1-alpha)*out[-1])
     return out
+
+def xtreme_trend(bars, period=18, multiplier=2):
+    # Wilder RMA: primeira média simples, depois atualização recursiva.
+    tr=[];stop=0.;pos=0;atr=None
+    for i,b in enumerate(bars):
+        close=float(b['close']);high=float(b['max']);low=float(b['min'])
+        if not all(math.isfinite(v) and v>0 for v in (close,high,low)) or not low<=close<=high:raise ValueError('OHLC inválido')
+        previous=float(bars[i-1]['close']) if i else close
+        tr.append(max(high-low,abs(high-previous),abs(low-previous)))
+        if len(tr)<period:continue
+        atr=sum(tr[-period:])/period if atr is None else (atr*(period-1)+tr[-1])/period
+        old=stop;distance=atr*multiplier
+        if close>old and previous>old:stop=max(old,close-distance)
+        elif close<old and previous<old:stop=min(old,close+distance)
+        else:stop=close-distance if close>old else close+distance
+        if previous<old and close>old:pos=1
+        elif previous>old and close<old:pos=-1
+    return pos,stop
+
+def aligned_signal(fast,slow,pos):
+    buy=fast[-1]>slow[-1] and fast[-2]<=slow[-2]
+    sell=fast[-1]<slow[-1] and fast[-2]>=slow[-2]
+    raw='call' if buy else 'put' if sell else None
+    return raw,raw if (buy and pos==1) or (sell and pos==-1) else None
 
 def analyze(candles, now):
     bars=sorted(candles,key=lambda c:c['from'])
@@ -18,15 +42,13 @@ def analyze(candles, now):
     age=now-bars[-1]['from']-60
     if age>65: return {'direction':None,'reason':f'Velas atrasadas na corretora ({int(age)} s desde o fechamento).','age':age}
     fast,slow=ema(closes,9),ema(closes,21)
-    macd=[a-b for a,b in zip(ema(closes,12),ema(closes,26))]
-    hist=[a-b for a,b in zip(macd,ema(macd,9))]
-    up=fast[-1]>slow[-1] and slow[-1]>slow[-2] and hist[-1]>0 and closes[-1]>closes[-2] and closes[-2]<=fast[-2] and closes[-1]>fast[-1]
-    down=fast[-1]<slow[-1] and slow[-1]<slow[-2] and hist[-1]<0 and closes[-1]<closes[-2] and closes[-2]>=fast[-2] and closes[-1]<fast[-1]
-    direction='call' if up else 'put' if down else None
-    checks={'tendência': 'alta' if fast[-1]>slow[-1] and slow[-1]>slow[-2] else 'baixa' if fast[-1]<slow[-1] and slow[-1]<slow[-2] else 'indefinida','MACD': 'positivo' if hist[-1]>0 else 'negativo','retomada':bool(up or down)}
-    result={'direction':direction,'reason':'Retomada da EMA 9 alinhada com EMA 21 e MACD.' if direction else 'Sem confluência: aguardando retomada da média.','candle':bars[-1]['from'],'ema9':fast[-1],'ema21':slow[-1],'macdHistogram':hist[-1],'age':age,'checks':checks,'signal':direction}
-    if age>5:
-        result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal identificado após a janela; entrada bloqueada.' if direction else 'Última análise sem confluência: tendência '+checks['tendência']+', MACD '+checks['MACD']+', sem retomada.'))
+    pos,atr_stop=xtreme_trend(bars)
+    raw,direction=aligned_signal(fast,slow,pos)
+    trend='alta' if pos==1 else 'baixa' if pos==-1 else 'indefinida'
+    reason='Cruzamento da Nuvem GRC alinhado ao Xtreme Tendência.' if direction else 'Cruzamento contra a tendência: bloqueado.' if raw else 'Sem cruzamento da Nuvem GRC. Tendência '+trend+'.'
+    checks={'tendência':trend,'cruzamento':raw or 'nenhum'}
+    result={'direction':direction,'reason':reason,'candle':bars[-1]['from'],'ema9':fast[-1],'ema21':slow[-1],'atrStop':atr_stop,'trend':pos,'age':age,'checks':checks,'signal':direction}
+    if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
 def validate_config(c):

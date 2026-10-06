@@ -24,7 +24,7 @@ class Core(unittest.TestCase):
         for changed in [{'stake':-1},{'limit':2.5},{'payout':101},{'asset':'../x'},{'stake':float('nan')}]:
             with self.assertRaises(ValueError):validate_config({**module.state['config'],**changed})
     def test_closed_candles_and_stale(self):
-        bars=[{'from':i*60,'close':100+i*.1} for i in range(100)]
+        bars=[{'from':i*60,'close':100+i*.1,'min':99+i*.1,'max':101+i*.1} for i in range(100)]
         a=analyze(bars,6000);b=analyze(bars+[{'from':6000,'close':900}],6000)
         self.assertEqual(a,b)
         self.assertIsNone(analyze(bars,6030)['direction'])
@@ -33,6 +33,21 @@ class Core(unittest.TestCase):
         self.assertEqual(analyze(bars,6030)['ema9'],a['ema9'])
         self.assertIn('atrasadas',analyze(bars,6120)['reason'])
         with self.assertRaises(ValueError):analyze(bars[:-2]+bars[-1:],6000)
+    def test_grc_cross_must_follow_xtreme_trend(self):
+        from strategy import aligned_signal
+        self.assertEqual(aligned_signal([1,3],[2,2],1),('call','call'))
+        self.assertEqual(aligned_signal([1,3],[2,2],-1),('call',None))
+        self.assertEqual(aligned_signal([3,1],[2,2],-1),('put','put'))
+        self.assertEqual(aligned_signal([3,1],[2,2],1),('put',None))
+        self.assertEqual(aligned_signal([1,3],[2,2],0),('call',None))
+        self.assertEqual(aligned_signal([3,4],[2,2],1),(None,None))
+    def test_xtreme_atr_wilder_and_trailing_stop(self):
+        from strategy import xtreme_trend
+        bars=[{'close':100,'max':101,'min':99} for _ in range(18)]
+        self.assertEqual(xtreme_trend(bars),(0,96))
+        bars.append({'close':95,'max':96,'min':94})
+        pos,stop=xtreme_trend(bars)
+        self.assertEqual(pos,-1);self.assertAlmostEqual(stop,95+2*(40/18))
     def test_failed_connection_does_not_enable_bot(self):
         token=self.login()
         with patch.object(module,'Client') as cls:
