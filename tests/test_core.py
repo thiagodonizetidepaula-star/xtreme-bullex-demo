@@ -48,6 +48,21 @@ class Core(unittest.TestCase):
         bars.append({'close':95,'max':96,'min':94})
         pos,stop=xtreme_trend(bars)
         self.assertEqual(pos,-1);self.assertAlmostEqual(stop,95+2*(40/18))
+    def test_bad_asset_does_not_disconnect_scanner(self):
+        from unittest.mock import MagicMock
+        client=MagicMock();module.state.update(connected=True,last_candle=None,logs=[]);module.stop.clear()
+        calls=[]
+        def rpc(op,**kwargs):
+            if op=='market':return {'assets':[{'asset':'BAD-OTC'},{'asset':'GOOD-OTC'}]}
+            calls.append(kwargs['asset'])
+            if len(calls)==2:module.stop.set()
+            return {'candles':[],'now':6000}
+        client.call.side_effect=rpc
+        with patch.object(module,'client',client),patch.object(module,'analyze',side_effect=[ValueError('Histórico M1 com lacunas'),{'direction':None,'reason':'Sem sinal'}]),patch.object(module.stop,'wait',return_value=None):
+            module.loop(dict(module.state['config']))
+        self.assertEqual(calls,['BAD-OTC','GOOD-OTC'])
+        self.assertTrue(module.state['connected']);client.close.assert_not_called()
+        module.stop.clear()
     def test_failed_connection_does_not_enable_bot(self):
         token=self.login()
         with patch.object(module,'Client') as cls:

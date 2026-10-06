@@ -63,7 +63,12 @@ def loop(c):
                 stop.wait(2);continue
             c['asset']=candidates[cursor%len(candidates)]['asset'];cursor+=1
             data=client.call('candles',asset=c['asset'])
-            a=analyze(data['candles'],data['now']);state['analysis']=a;state['candles']=data['candles'][-50:]
+            try:
+                a=analyze(data['candles'],data['now'])
+            except (ValueError,KeyError,TypeError) as e:
+                log(c['asset']+': dados de velas inválidos ('+str(e)+'). Ativo ignorado; busca continua.')
+                stop.wait(1);continue
+            state['analysis']=a;state['candles']=data['candles'][-50:]
             if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
                 evaluated=(c['asset'],a['candle']);state['analyzed_count']+=1
                 checks=a.get('checks',{})
