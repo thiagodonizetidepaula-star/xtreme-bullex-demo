@@ -24,13 +24,13 @@ class Core(unittest.TestCase):
         for changed in [{'stake':-1},{'limit':2.5},{'payout':101},{'asset':'../x'},{'stake':float('nan')}]:
             with self.assertRaises(ValueError):validate_config({**module.state['config'],**changed})
     def test_closed_candles_and_stale(self):
-        bars=[{'from':i*60,'close':100+i*.1,'min':99+i*.1,'max':101+i*.1} for i in range(100)]
+        bars=[{'from':i*60,'open':100+i*.1,'close':100+i*.1,'min':99+i*.1,'max':101+i*.1} for i in range(100)]
         a=analyze(bars,6000);b=analyze(bars+[{'from':6000,'close':900}],6000)
         self.assertEqual(a,b)
         self.assertIsNone(analyze(bars,6030)['direction'])
         self.assertIn('próxima vela',analyze(bars,6030)['reason'])
         self.assertIn('checks',analyze(bars,6030))
-        self.assertEqual(analyze(bars,6030)['ema9'],a['ema9'])
+        self.assertEqual(analyze(bars,6030)['ema21'],a['ema21'])
         self.assertIn('atrasadas',analyze(bars,6120)['reason'])
         with self.assertRaises(ValueError):analyze(bars[:-2]+bars[-1:],6000)
     def test_grc_cross_must_follow_xtreme_trend(self):
@@ -63,6 +63,15 @@ class Core(unittest.TestCase):
         self.assertEqual(calls,['BAD-OTC','GOOD-OTC'])
         self.assertTrue(module.state['connected']);client.close.assert_not_called()
         module.stop.clear()
+    def test_rejection_strategy_buy_sell_and_flat(self):
+        from strategy import rejection_signal
+        buy={'open':101.1,'close':101.4,'min':100.5,'max':101.5}
+        sell={'open':98.9,'close':98.6,'min':98.5,'max':99.5}
+        self.assertEqual(rejection_signal(buy,101,100,99.9,1)[0],'call')
+        self.assertEqual(rejection_signal(sell,99,100,100.1,1)[0],'put')
+        self.assertIsNone(rejection_signal(buy,101,101,101,1)[0])
+        self.assertIsNone(rejection_signal(buy,101,102,102.1,1)[0])
+        self.assertIsNone(rejection_signal(buy,101,100,99.9,.1)[0])
     def test_failed_connection_does_not_enable_bot(self):
         token=self.login()
         with patch.object(module,'Client') as cls:

@@ -1,4 +1,4 @@
-"""Nuvem GRC enviada pelo usuário, filtrada pelo Xtreme Tendência. Usa apenas velas M1 encerradas."""
+"""Retorno e Rejeição v1, estratégia experimental para demo. Usa apenas velas M1 encerradas."""
 import math
 
 def ema(values, period):
@@ -31,6 +31,19 @@ def aligned_signal(fast,slow,pos):
     raw='call' if buy else 'put' if sell else None
     return raw,raw if (buy and pos==1) or (sell and pos==-1) else None
 
+def rejection_signal(bar, fast, slow, previous_slow, atr):
+    o,c,h,l=[float(bar[k]) for k in ('open','close','max','min')]
+    if not all(math.isfinite(v) and v>0 for v in (o,c,h,l)) or not l<=min(o,c)<=max(o,c)<=h:raise ValueError('OHLC inválido')
+    span=h-l;body=abs(c-o)
+    if atr<=0 or span<=0 or not .3*atr<=span<=1.8*atr:return None,'Vela sem amplitude adequada ou com movimento excessivo.'
+    if abs(fast-slow)<.15*atr:return None,'Médias próximas: mercado sem direção clara.'
+    upper=h-max(o,c);lower=min(o,c)-l
+    up=fast>slow and slow>previous_slow
+    down=fast<slow and slow<previous_slow
+    if up and l<=fast and c>fast and c>o and lower>=max(body,.3*span) and c>=l+.65*span:return 'call','Alta + retorno à EMA 21 + rejeição inferior confirmada.'
+    if down and h>=fast and c<fast and c<o and upper>=max(body,.3*span) and c<=h-.65*span:return 'put','Baixa + retorno à EMA 21 + rejeição superior confirmada.'
+    return None,'Aguardando retorno à EMA 21 com vela de rejeição na tendência.'
+
 def analyze(candles, now):
     bars=sorted(candles,key=lambda c:c['from'])
     bars=[c for c in bars if c['from']+60<=now]
@@ -41,13 +54,13 @@ def analyze(candles, now):
     if any(not math.isfinite(x) or x<=0 for x in closes): raise ValueError('Preços inválidos')
     age=now-bars[-1]['from']-60
     if age>65: return {'direction':None,'reason':f'Velas atrasadas na corretora ({int(age)} s desde o fechamento).','age':age}
-    fast,slow=ema(closes,9),ema(closes,21)
-    pos,atr_stop=xtreme_trend(bars)
-    raw,direction=aligned_signal(fast,slow,pos)
-    trend='alta' if pos==1 else 'baixa' if pos==-1 else 'indefinida'
-    reason='Cruzamento da Nuvem GRC alinhado ao Xtreme Tendência.' if direction else 'Cruzamento contra a tendência: bloqueado.' if raw else 'Sem cruzamento da Nuvem GRC. Tendência '+trend+'.'
-    checks={'tendência':trend,'cruzamento':raw or 'nenhum'}
-    result={'direction':direction,'reason':reason,'candle':bars[-1]['from'],'ema9':fast[-1],'ema21':slow[-1],'atrStop':atr_stop,'trend':pos,'age':age,'checks':checks,'signal':direction}
+    fast,slow=ema(closes,21),ema(closes,50)
+    tr=[max(float(b['max'])-float(b['min']),abs(float(b['max'])-closes[i-1]),abs(float(b['min'])-closes[i-1])) for i,b in enumerate(bars) if i]
+    atr=sum(tr[:14])/14
+    for value in tr[14:]:atr=(atr*13+value)/14
+    direction,reason=rejection_signal(bars[-1],fast[-1],slow[-1],slow[-2],atr)
+    trend='alta' if fast[-1]>slow[-1] and slow[-1]>slow[-2] else 'baixa' if fast[-1]<slow[-1] and slow[-1]<slow[-2] else 'indefinida'
+    result={'direction':direction,'reason':reason,'candle':bars[-1]['from'],'ema21':fast[-1],'ema50':slow[-1],'atr14':atr,'age':age,'checks':{'tendência':trend},'signal':direction,'strategy':'Retorno e Rejeição v1'}
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
