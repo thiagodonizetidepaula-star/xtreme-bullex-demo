@@ -15,7 +15,9 @@ def analyze(candles, now):
     if any(b['from']-a['from']!=60 for a,b in zip(bars[-80:],bars[-79:])): raise ValueError('Histórico M1 com lacunas')
     closes=[float(b['close']) for b in bars]
     if any(not math.isfinite(x) or x<=0 for x in closes): raise ValueError('Preços inválidos')
-    if now-bars[-1]['from']-60>8: return {'direction':None,'reason':'Última vela desatualizada.'}
+    age=now-bars[-1]['from']-60
+    if age>65: return {'direction':None,'reason':f'Velas atrasadas na corretora ({int(age)} s desde o fechamento).','age':age}
+    if age>5: return {'direction':None,'reason':'Aguardando fechamento da próxima vela M1. Entrada apenas nos primeiros 5 segundos.','age':age,'candle':bars[-1]['from']}
     fast,slow=ema(closes,9),ema(closes,21)
     macd=[a-b for a,b in zip(ema(closes,12),ema(closes,26))]
     hist=[a-b for a,b in zip(macd,ema(macd,9))]

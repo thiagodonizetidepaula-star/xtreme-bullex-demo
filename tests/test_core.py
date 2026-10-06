@@ -28,6 +28,8 @@ class Core(unittest.TestCase):
         a=analyze(bars,6000);b=analyze(bars+[{'from':6000,'close':900}],6000)
         self.assertEqual(a,b)
         self.assertIsNone(analyze(bars,6030)['direction'])
+        self.assertIn('próxima vela',analyze(bars,6030)['reason'])
+        self.assertIn('atrasadas',analyze(bars,6120)['reason'])
         with self.assertRaises(ValueError):analyze(bars[:-2]+bars[-1:],6000)
     def test_failed_connection_does_not_enable_bot(self):
         token=self.login()

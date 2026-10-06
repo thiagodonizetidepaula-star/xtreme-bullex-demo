@@ -13,7 +13,7 @@ state={'connected':False,'running':False,'message':'Conecte sua demo para verifi
 
 def log(s):
     state['message']=s
-    state['logs'].append({'time':datetime.now().isoformat(timespec='seconds'),'text':s})
+    state['logs'].append({'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'text':s})
     state['logs']=state['logs'][-60:]
 
 class Client:
@@ -55,7 +55,7 @@ def loop(c):
                 last=a['candle'];state['last_candle']=last
                 with lock:
                     if stop.is_set():break
-                    trade={'time':datetime.now().isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO'}
+                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO'}
                     state['trades'].append(trade)
                     state['uncertain']=True
                 order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'])
