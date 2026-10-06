@@ -58,6 +58,7 @@ class OrderGuards(unittest.TestCase):
         self.api.get_balance_mode.return_value='PRACTICE'
         self.api.get_all_open_time.return_value={'turbo':{'EURUSD':{'open':True}}}
         self.api.get_all_profit.return_value={'EURUSD':{'turbo':.87}}
+        self.api.get_all_init_v2.return_value={'turbo':{'actives':{'1':{'name':'front.EURUSD','enabled':True,'is_suspended':False,'option':{'profit':{'commission':13}}}}}}
         self.api.get_server_timestamp.return_value=time.time()
         self.api.get_balance.return_value=100
         self.api.buy.return_value=(True,123)
@@ -67,7 +68,19 @@ class OrderGuards(unittest.TestCase):
         with self.assertRaises(RuntimeError):self.worker.dispatch(self.c)
         self.api.buy.assert_not_called()
     def test_low_payout_is_blocked(self):
-        self.api.get_all_profit.return_value={'EURUSD':{'turbo':.7}}
+        self.api.get_all_init_v2.return_value['turbo']['actives']['1']['option']['profit']['commission']=30
+        self.assertFalse(self.worker.dispatch(self.c)['sent']);self.api.buy.assert_not_called()
+    def test_scanner_includes_otc_and_excludes_exact_80_and_closed(self):
+        import copy
+        base=self.api.get_all_init_v2.return_value['turbo']['actives']['1']
+        otc=copy.deepcopy(base);otc['name']='front.EURUSD-OTC'
+        exact=copy.deepcopy(base);exact['name']='front.GBPUSD';exact['option']['profit']['commission']=20
+        closed=copy.deepcopy(base);closed['name']='front.USDJPY';closed['is_suspended']=True
+        self.api.get_all_init_v2.return_value['turbo']['actives'].update({'2':otc,'3':exact,'4':closed})
+        assets=self.worker.dispatch({'op':'market','payout':80})['assets']
+        self.assertEqual({a['asset'] for a in assets},{'EURUSD','EURUSD-OTC'})
+    def test_exact_80_is_blocked_at_order(self):
+        self.api.get_all_init_v2.return_value['turbo']['actives']['1']['option']['profit']['commission']=20
         self.assertFalse(self.worker.dispatch(self.c)['sent']);self.api.buy.assert_not_called()
     def test_late_order_is_blocked(self):
         self.c['candle']=time.time()-80

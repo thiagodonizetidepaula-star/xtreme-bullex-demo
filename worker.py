@@ -3,6 +3,7 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
 api=None
+market_cache={};market_at=0
 
 @contextlib.contextmanager
 def stage(name, seconds):
@@ -21,6 +22,23 @@ def demo():
     if api is None or not api.check_connect(): raise RuntimeError('Desconectado')
     if api.get_balance_mode()!='PRACTICE': raise RuntimeError('Conta não é demo. Operação bloqueada.')
 
+def market(force=False):
+    global market_cache,market_at
+    if not force and time.time()-market_at<15:return market_cache
+    with stage('catálogo de opções binárias M1',10):
+        info=api.get_all_init_v2()
+    if not isinstance(info,dict):raise RuntimeError('Catálogo M1 indisponível.')
+    fresh={}
+    for asset_id,a in info.get('turbo',{}).get('actives',{}).items():
+        name=str(a.get('name','')).split('.',1)[-1]
+        commission=a.get('option',{}).get('profit',{}).get('commission')
+        if not name or not isinstance(commission,(int,float)) or not math.isfinite(commission) or not 0<=commission<=100:continue
+        payout=100-float(commission)
+        fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
+        api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
+    market_cache=fresh;market_at=time.time()
+    return fresh
+
 def dispatch(c):
     global api
     op=c['op']
@@ -35,6 +53,9 @@ def dispatch(c):
         # Não aguardar os catálogos de CFD, forex e cripto para conectar M1.
         return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
+    if op=='market':
+        available=market(force=True)
+        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and v['payout']>max(80,c['payout'])]}
     if op=='candles':
         now=api.get_server_timestamp()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
@@ -43,10 +64,10 @@ def dispatch(c):
         if not isinstance(bars,list): raise RuntimeError('Corretora não forneceu velas')
         return {'candles':bars,'now':now}
     if op=='order':
-        opened=api.get_all_open_time().get('turbo',{}).get(c['asset'],{}).get('open',False)
-        payout=api.get_all_profit().get(c['asset'],{}).get('turbo')
-        if not opened: return {'sent':False,'reason':'Ativo M1 fechado.'}
-        if payout is None or not math.isfinite(float(payout)) or not 0<=payout<=1 or payout*100<c['payout']: return {'sent':False,'reason':'Payout abaixo do mínimo ou indisponível.'}
+        details=market(force=True).get(c['asset'],{})
+        payout=details.get('payout')
+        if not details.get('open'):return {'sent':False,'reason':'Ativo M1 fechado ou indisponível.'}
+        if payout is None or payout<=max(80,c['payout']):return {'sent':False,'reason':'Payout não está acima do mínimo.'}
         demo()
         now=api.get_server_timestamp()
         if abs(time.time()-now)>10 or now-c['candle']-60<0 or now-c['candle']-60>5: return {'sent':False,'reason':'Janela de entrada encerrada.'}
@@ -54,7 +75,7 @@ def dispatch(c):
         demo()
         ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],1)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
-        return {'sent':True,'id':order_id,'payout':payout*100}
+        return {'sent':True,'id':order_id,'payout':payout}
     if op=='result':
         result,profit=api.check_win_v4(c['id'])
         if not math.isfinite(float(profit)): raise RuntimeError('Resultado inválido')

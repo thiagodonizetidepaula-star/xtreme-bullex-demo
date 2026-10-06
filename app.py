@@ -45,19 +45,27 @@ def limits(c):
 
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
+    candidates=[];cursor=0;catalog_at=0
     try:
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
+            if time.time()-catalog_at>30:
+                candidates=client.call('market',payout=c['payout'])['assets'];catalog_at=time.time()
+                state['scan_assets']=candidates
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout acima de '+str(max(80,c['payout']))+'%.')
+            if not candidates:
+                stop.wait(2);continue
+            c['asset']=candidates[cursor%len(candidates)]['asset'];cursor+=1
             data=client.call('candles',asset=c['asset'])
             a=analyze(data['candles'],data['now']);state['analysis']=a;state['candles']=data['candles'][-50:]
-            if a.get('candle') is not None and a['candle']!=evaluated:
-                evaluated=a['candle'];state['analyzed_count']+=1
+            if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
+                evaluated=(c['asset'],a['candle']);state['analyzed_count']+=1
                 checks=a.get('checks',{})
-                closed=datetime.fromtimestamp(evaluated+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
+                closed=datetime.fromtimestamp(a['candle']+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
                 log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
             state['message']=a['reason']
-            if a.get('candle')!=last and a.get('direction'):
-                last=a['candle'];state['last_candle']=last
+            if (c['asset'],a.get('candle'))!=last and a.get('direction'):
+                last=(c['asset'],a['candle']);state['last_candle']=last
                 with lock:
                     if stop.is_set():break
                     trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO'}
