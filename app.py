@@ -39,9 +39,15 @@ class Client:
         if self.p.poll() is None:self.p.terminate()
 
 def day():return datetime.now(timezone(timedelta(hours=-3))).date().isoformat()
-def limits(c):
+def management():
     ts=[t for t in state['trades'] if t['day']==day() and t['status']!='IGNORADA']
-    return risk_ok(c,sum(t.get('profit',0) for t in ts),len(ts))
+    done=[t for t in ts if t['status'] in ('WIN','LOSS','EMPATE')]
+    profit=round(sum(t.get('profit',0) for t in done),2)
+    c=state['config'];wins=sum(t['status']=='WIN' for t in done);losses=sum(t['status']=='LOSS' for t in done)
+    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'can_trade':risk_ok(c,profit,len(ts))}
+def limits(c):
+    m=management()
+    return risk_ok(c,m['profit'],m['used'])
 
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
@@ -111,7 +117,7 @@ def access():
     return jsonify(csrf=session['csrf'])
 @app.get('/api/state')
 def status():
-    with lock:return jsonify(**state,csrf=session['csrf'])
+    with lock:return jsonify(**state,management=management(),csrf=session['csrf'])
 @app.post('/api/connect')
 def connect():
     global client

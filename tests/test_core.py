@@ -43,6 +43,12 @@ class Core(unittest.TestCase):
         token=self.login();module.state.update(uncertain=True,connected=True)
         r=self.web.post('/api/start',json={},headers={'X-CSRF-Token':token})
         self.assertEqual(r.status_code,409)
+    def test_management_counts_only_confirmed_results_today(self):
+        module.state['trades']=[{'day':module.day(),'status':'WIN','profit':1.68},{'day':module.day(),'status':'LOSS','profit':-2},{'day':module.day(),'status':'IGNORADA'},{'day':'2000-01-01','status':'WIN','profit':50}]
+        token=self.login();m=self.web.get('/api/state').json['management']
+        self.assertEqual((m['wins'],m['losses'],m['used']),(1,1,2))
+        self.assertEqual(m['profit'],-.32)
+        self.assertEqual(m['stop_loss_remaining'],9.68)
     def test_page_and_health(self):
         self.assertEqual(self.web.get('/').status_code,200)
         self.assertEqual(self.web.get('/health').status_code,200)
