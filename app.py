@@ -44,13 +44,18 @@ def limits(c):
     return risk_ok(c,sum(t.get('profit',0) for t in ts),len(ts))
 
 def loop(c):
-    last=state["last_candle"]
+    last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
     try:
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
             data=client.call('candles',asset=c['asset'])
             a=analyze(data['candles'],data['now']);state['analysis']=a;state['candles']=data['candles'][-50:]
-            log(a['reason'])
+            if a.get('candle') is not None and a['candle']!=evaluated:
+                evaluated=a['candle'];state['analyzed_count']+=1
+                checks=a.get('checks',{})
+                closed=datetime.fromtimestamp(evaluated+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
+                log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
+            state['message']=a['reason']
             if a.get('candle')!=last and a.get('direction'):
                 last=a['candle'];state['last_candle']=last
                 with lock:

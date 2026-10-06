@@ -17,14 +17,17 @@ def analyze(candles, now):
     if any(not math.isfinite(x) or x<=0 for x in closes): raise ValueError('Preços inválidos')
     age=now-bars[-1]['from']-60
     if age>65: return {'direction':None,'reason':f'Velas atrasadas na corretora ({int(age)} s desde o fechamento).','age':age}
-    if age>5: return {'direction':None,'reason':'Aguardando fechamento da próxima vela M1. Entrada apenas nos primeiros 5 segundos.','age':age,'candle':bars[-1]['from']}
     fast,slow=ema(closes,9),ema(closes,21)
     macd=[a-b for a,b in zip(ema(closes,12),ema(closes,26))]
     hist=[a-b for a,b in zip(macd,ema(macd,9))]
     up=fast[-1]>slow[-1] and slow[-1]>slow[-2] and hist[-1]>0 and closes[-1]>closes[-2] and closes[-2]<=fast[-2] and closes[-1]>fast[-1]
     down=fast[-1]<slow[-1] and slow[-1]<slow[-2] and hist[-1]<0 and closes[-1]<closes[-2] and closes[-2]>=fast[-2] and closes[-1]<fast[-1]
     direction='call' if up else 'put' if down else None
-    return {'direction':direction,'reason':'Retomada da EMA 9 alinhada com EMA 21 e MACD.' if direction else 'Sem confluência: aguardando retomada da média.','candle':bars[-1]['from'],'ema9':fast[-1],'ema21':slow[-1],'macdHistogram':hist[-1]}
+    checks={'tendência': 'alta' if fast[-1]>slow[-1] and slow[-1]>slow[-2] else 'baixa' if fast[-1]<slow[-1] and slow[-1]<slow[-2] else 'indefinida','MACD': 'positivo' if hist[-1]>0 else 'negativo','retomada':bool(up or down)}
+    result={'direction':direction,'reason':'Retomada da EMA 9 alinhada com EMA 21 e MACD.' if direction else 'Sem confluência: aguardando retomada da média.','candle':bars[-1]['from'],'ema9':fast[-1],'ema21':slow[-1],'macdHistogram':hist[-1],'age':age,'checks':checks,'signal':direction}
+    if age>5:
+        result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal identificado após a janela; entrada bloqueada.' if direction else 'Última análise sem confluência: tendência '+checks['tendência']+', MACD '+checks['MACD']+', sem retomada.'))
+    return result
 
 def validate_config(c):
     for k in ['stake','stop_win','stop_loss','payout','limit']:
