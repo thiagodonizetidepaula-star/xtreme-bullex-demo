@@ -9,7 +9,8 @@ _timestamp_property=TimeSync.server_timestamp
 if not getattr(TimeSync,'_demo_clock_instrumented',False):
     def _record_timestamp(obj,value):
         _timestamp_property.fset(obj,value)
-        obj._demo_sync_sample=(float(value)/1000,time.monotonic())
+        # connect() limpa o relógio com None antes da autenticação.
+        obj._demo_sync_sample=None if value is None else (float(value)/1000,time.monotonic())
     TimeSync.server_timestamp=property(_timestamp_property.fget,_record_timestamp)
     TimeSync._demo_clock_instrumented=True
 

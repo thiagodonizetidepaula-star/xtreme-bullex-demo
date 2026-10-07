@@ -24,3 +24,10 @@ class ClockTests(unittest.TestCase):
     def test_new_sample_refreshes_age(self):
         self.sample(6000);self.sample(6004,104)
         with patch.object(worker.time,'monotonic',return_value=105),patch.object(worker.time,'time',return_value=6005):self.assertEqual(worker.broker_now(),6005)
+
+    def test_library_connect_reset_none_then_new_sync(self):
+        self.sample(6000)
+        self.api.api.timesync.server_timestamp=None
+        self.assertIsNone(self.api.api.timesync._demo_sync_sample)
+        self.sample(6004,104)
+        with patch.object(worker.time,'monotonic',return_value=105),patch.object(worker.time,'time',return_value=6005):self.assertEqual(worker.broker_now(),6005)
