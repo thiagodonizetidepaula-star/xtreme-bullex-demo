@@ -15,7 +15,7 @@ Este pacote contém o servidor, painel mobile, estratégia própria e integraç�
 ## Limitações concretas
 - Biblioteca de terceiro, revisão 3178f332db662ea60c570c842362b391aa618c57. Ela é baixada no build; não é redistribuída neste pacote. HTTPS e WebSocket exigem certificados válidos.
 - Login com 2FA não implementado nesta versão. Recusas ou bloqueios da corretora interrompem o teste; não há tentativa de contorná-los.
-- Estratégia M1: EMA9/EMA21, tendência da EMA21, histograma MACD12/26/9 e retomada da EMA9. Usa apenas velas encerradas, sem alegação de IA ou probabilidade de acerto.
+- Estratégias selecionáveis: Retorno e Rejeição v1, Repetição M1 e Retomada de Tendência M1. Apenas velas encerradas; regras experimentais sem alegação de IA ou probabilidade de acerto.
 - Uma ordem por vez, mão fixa, sem gale; mercado turbo M1 deve estar aberto e payout confirmado deve atingir o mínimo. Janela máxima de entrada: 5 segundos após fechamento. Não repete uma ordem após resposta incerta.
 - Stops são deste processo/dia (Brasília), não incorporam operações feitas em outros apps ou manualmente. Não existe banco durável. Exportar o histórico é recomendado.
 - Render Free suspende por inatividade e pode reiniciar. Histórico/configurações desaparecem nesses eventos. Robô nunca reinicia automaticamente nem guarda credenciais em disco. Confira o histórico Bullex antes de reconectar.
@@ -38,3 +38,7 @@ Uma operação aberta por vez; deduplicação por ativo/candle usa o histórico 
 Stops podem ser desligados explicitamente pelas caixas de seleção. Valores vazios, zero ou inválidos continuam rejeitados; desligar não significa definir zero. Limite de ordens permanece ativo. Win/Loss/empates e lucro líquido só usam resultados confirmados. A tabela de comparação apresenta contagem e payout médio observado, sem inventar resultados.
 
 Continuidade e armazenamento não foram ampliados nesta atualização: o bot executa no servidor enquanto o processo estiver ativo, mas Render Free pode suspender/reiniciar. Histórico, configurações e deduplicação são temporários; exporte antes de publicar/reiniciar. Não existe banco permanente nesta versão. Credenciais não são gravadas.
+
+## Retomada de Tendência M1
+Terceira opção experimental, sem substituir as anteriores. EMA20/50 alinhadas e ambas inclinadas na direção da entrada (comparação com três velas atrás); separação mínima 0,25 ATR14. Recuo de exatamente duas ou três velas contrárias seguido de rejeição na tendência. Região EMA20 com tolerância de 0,1 ATR; fechamento a no máximo 0,8 ATR da EMA20. Confirmação com pavio contrário >= metade do corpo e 25% da amplitude, fechamento nos 30% finais na direção da tendência, além da EMA20 e do fechamento anterior. Doji <=10% é descartado. Amplitudes do recuo e confirmação <=1,8 ATR14 Wilder anterior à confirmação. Exige 80 velas M1 fechadas válidas, sem lacunas.
+Envia nos primeiros dois segundos, com a mesma guarda de relógio e expiração explícita turbo usada por Repetição M1. Payout >= mínimo configurado; conta demo, mão fixa e gerenciamento existente. Testes automatizados usam fixtures e mocks, não são evidência de rentabilidade. Não há validação ao vivo desta estratégia nem garantia de originalidade ou lucro.

@@ -64,7 +64,7 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
-STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1'}
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1'}
 
 def repetition(candles, now):
     bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
@@ -93,8 +93,48 @@ def repetition(candles, now):
     result.update(direction=direction,reason='Três velas alinhadas à EMA20; ATR14 anterior aprovado.')
     return result
 
+def resumption(candles, now):
+    bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
+    if len(bars)<80:return {'direction':None,'signal':None,'reason':'Aguardando 80 velas fechadas.'}
+    if len({b['from'] for b in bars})!=len(bars) or any(b['from']-a['from']!=60 for a,b in zip(bars,bars[1:])):raise ValueError('Histórico M1 inválido ou com lacunas')
+    for b in bars:
+        o,c,h,l=[float(b[k]) for k in ('open','close','max','min')]
+        if not all(math.isfinite(v) and v>0 for v in (o,c,h,l)) or not l<=min(o,c)<=max(o,c)<=h:raise ValueError('OHLC inválido')
+    closes=[b['close'] for b in bars];fast=ema(closes,20);slow=ema(closes,50)
+    prior=bars[:-1]
+    tr=[max(b['max']-b['min'],abs(b['max']-prior[i-1]['close']),abs(b['min']-prior[i-1]['close'])) for i,b in enumerate(prior) if i]
+    atr=sum(tr[:14])/14
+    for v in tr[14:]:atr=(atr*13+v)/14
+    result={'direction':None,'signal':None,'candle':bars[-1]['from'],'strategy':STRATEGIES['resumption'],'ema20':fast[-1],'ema50':slow[-1],'atr14Reference':atr,'checks':{}}
+    def reject(reason):result['reason']=reason;return result
+    up=fast[-1]>slow[-1] and fast[-1]>fast[-4] and slow[-1]>slow[-4]
+    down=fast[-1]<slow[-1] and fast[-1]<fast[-4] and slow[-1]<slow[-4]
+    if atr<=0 or not (up or down) or abs(fast[-1]-slow[-1])<.25*atr:return reject('Sem tendência confirmada ou médias próximas: mercado lateral.')
+    direction='call' if up else 'put'
+    n=0
+    for b in reversed(bars[:-1]):
+        if (b['close']<b['open'] if up else b['close']>b['open']):n+=1
+        else:break
+    if n not in (2,3):return reject('Aguardando recuo de duas ou três velas contra a tendência.')
+    setup=bars[-n-1:]
+    if any(b['max']-b['min']<=0 or b['max']-b['min']>1.8*atr for b in setup):return reject('Recuo/rejeição descartado: amplitude zero ou movimento excessivo.')
+    b=bars[-1];o,c,h,l=[b[k] for k in ('open','close','max','min')];span=h-l;body=abs(c-o)
+    if body<=.1*span:return reject('Vela de confirmação é doji.')
+    if abs(c-fast[-1])>.8*atr:return reject('Preço distante da EMA20: retomada estendida.')
+    touched=any(x['min']<=fast[i]+.1*atr and x['max']>=fast[i]-.1*atr for i,x in enumerate(bars) if i>=len(bars)-n-1)
+    if not touched:return reject('Recuo não alcançou a região da EMA20.')
+    confirmed=(c>o and c>fast[-1] and c>bars[-2]['close'] and min(o,c)-l>=max(.5*body,.25*span) and c>=l+.7*span) if up else (c<o and c<fast[-1] and c<bars[-2]['close'] and h-max(o,c)>=max(.5*body,.25*span) and c<=h-.7*span)
+    if not confirmed:return reject('Aguardando rejeição fechada retomando a tendência.')
+    result['signal']=direction;age=now-b['from']-60;result['age']=age
+    if not 0<=age<=2:return reject('Sinal descartado: janela de dois segundos encerrada.')
+    result.update(direction=direction,reason='Tendência EMA20/50 + recuo + rejeição confirmada; ATR aprovado.')
+    return result
+
 def analyze_selected(candles, now, strategy='rejection'):
-    return repetition(candles,now) if strategy=='repetition' else analyze(candles,now)
+    if strategy=='repetition':return repetition(candles,now)
+    if strategy=='resumption':return resumption(candles,now)
+    if strategy!='rejection':raise ValueError('Estratégia inválida')
+    return analyze(candles,now)
 
 def entry_allowed(trades, asset, candle, strategy):
     previous=[t for t in trades if t.get('asset')==asset and t.get('candle') is not None]

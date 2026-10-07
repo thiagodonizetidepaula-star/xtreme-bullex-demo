@@ -65,7 +65,7 @@ def loop(c):
             if time.time()-catalog_at>30:
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy')=='repetition' else 'acima de '+str(max(80,c['payout'])))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             c['asset']=candidates[cursor%len(candidates)]['asset'];cursor+=1
