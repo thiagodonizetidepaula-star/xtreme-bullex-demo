@@ -20,7 +20,7 @@ class StreamingTests(unittest.TestCase):
         self.api.get_candles.return_value=[{'from':5940}];self.api.get_all_ACTIVES_OPCODE.return_value={'A':1,'B':2}
         self.snapshot(6010);self.api.get_candles.assert_called_once_with('A',60,120,6010);self.api.api.subscribe.assert_called_once_with(1,60);self.assertEqual(worker.stream_assets,{'A'})
     def test_bad_clock_blocks(self):
-        with patch.object(worker.time,'time',return_value=6005):
+        with patch.object(worker.time,'time',return_value=6020):
             with self.assertRaises(RuntimeError):worker.dispatch({'op':'snapshot','assets':['A']})
     def test_batch_prioritizes_later_asset_signal(self):
         c={**app.state['config'],'strategy':'resumption'};client=MagicMock();app.stop.clear()

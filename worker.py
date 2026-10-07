@@ -2,6 +2,31 @@ import sys,pathlib,json,logging,time,contextlib,math,signal
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
+# A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
+# Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
+from bullexapi.ws.objects.timesync import TimeSync
+_timestamp_property=TimeSync.server_timestamp
+if not getattr(TimeSync,'_demo_clock_instrumented',False):
+    def _record_timestamp(obj,value):
+        _timestamp_property.fset(obj,value)
+        obj._demo_sync_sample=(float(value)/1000,time.monotonic())
+    TimeSync.server_timestamp=property(_timestamp_property.fget,_record_timestamp)
+    TimeSync._demo_clock_instrumented=True
+
+def broker_now():
+    raw=api.get_server_timestamp()
+    sample=getattr(api.api.timesync,'_demo_sync_sample',None)
+    if isinstance(sample,tuple) and len(sample)==2:
+        timestamp,received=sample
+        elapsed=time.monotonic()-received
+        if not 0<=elapsed<=5:raise RuntimeError('Sem atualização recente do relógio da corretora; entradas bloqueadas.')
+        now=timestamp+elapsed
+    else:now=raw
+    if not isinstance(now,(int,float)) or not math.isfinite(now) or abs(time.time()-now)>10:
+        raise RuntimeError('Relógio da corretora indisponível ou divergente; entradas bloqueadas.')
+    # Conservador: não enviar usando uma amostra atrasada que faria a janela parecer aberta.
+    return max(now,time.time())
+
 api=None
 market_cache={};market_at=0
 stream_assets=set();stream_retry={};stream_seed_at=0
@@ -59,8 +84,8 @@ def dispatch(c):
         available=market(force=True)
         return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption') else v['payout']>max(80,c['payout']))]}
     if op=='snapshot':
-        now=api.get_server_timestamp()
-        if not now or abs(time.time()-now)>1:raise RuntimeError('Relógio fora de sincronia no streaming')
+        now=broker_now()
+        # broker_now valida amostra, divergência e avanço monotônico.
         wanted=c['assets'];errors=[]
         # Nunca inicializar histórico durante a janela de entrada; uma assinatura por vez.
         pending=[a for a in wanted if a not in stream_assets and time.time()-stream_retry.get(a,0)>60]
@@ -76,7 +101,7 @@ def dispatch(c):
                 api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
-        now=api.get_server_timestamp();items=[]
+        now=broker_now();items=[]
         for asset in wanted:
             if asset not in stream_assets:continue
             # Copiar: o receptor websocket atualiza o dicionário em outra thread.
@@ -87,7 +112,7 @@ def dispatch(c):
             items.append({'asset':asset,'candles':closed})
         return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
     if op=='candles':
-        now=api.get_server_timestamp()
+        now=broker_now()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
         with stage('leitura de velas M1',15):
             bars=api.get_candles(c['asset'],60,300,int(now))
@@ -99,14 +124,14 @@ def dispatch(c):
         if not details.get('open'):return {'sent':False,'reason':'Ativo M1 fechado ou indisponível.'}
         if payout is None or (payout<c['payout'] if c.get('strategy') in ('repetition','resumption') else payout<=max(80,c['payout'])):return {'sent':False,'reason':'Payout não está acima do mínimo.'}
         demo()
-        now=api.get_server_timestamp()
+        now=broker_now()
         if abs(time.time()-now)>10 or now-c['candle']-60<0 or now-c['candle']-60>(2 if c.get('strategy') in ('repetition','resumption') else 5): return {'sent':False,'reason':'Janela de entrada encerrada.'}
         if api.get_balance()<c['stake']: return {'sent':False,'reason':'Saldo demo insuficiente.'}
         demo()
         if c.get('strategy') in ('repetition','resumption'):
             if not callable(getattr(api,'buy_by_raw_expirations',None)):return {'sent':False,'reason':'Integração sem expiração explícita M1.'}
-            now=api.get_server_timestamp()
-            if abs(time.time()-now)>1 or not 0<=now-c['candle']-60<=2:return {'sent':False,'reason':'Janela M1 ou sincronização inválida antes do envio.'}
+            now=broker_now()
+            if not 0<=now-c['candle']-60<=2:return {'sent':False,'reason':'Janela M1 ou sincronização inválida antes do envio.'}
             # Guarda na chamada websocket efetiva, após eventuais esperas da biblioteca.
             ws=api.api.websocket
             original=ws.send
@@ -115,9 +140,9 @@ def dispatch(c):
                 nonlocal sent_at
                 msg=json.loads(payload).get('msg',{})
                 if msg.get('name')=='binary-options.open-option':
-                    current=api.get_server_timestamp()
-                    if abs(time.time()-current)>1 or not 0<=max(current,time.time())-c['candle']-60<=2:raise RuntimeError('Janela de dois segundos encerrada antes do envio websocket')
-                    sent_at=max(current,time.time())
+                    current=broker_now()
+                    if not 0<=current-c['candle']-60<=2:raise RuntimeError('Janela de dois segundos encerrada antes do envio websocket')
+                    sent_at=current
                 return original(payload,*args,**kwargs)
             ws.send=guarded_send
             try:ok,order_id=api.buy_by_raw_expirations(c['stake'],c['asset'],c['direction'],'turbo',int(c['candle']+120))
