@@ -4,6 +4,7 @@ logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
 api=None
 market_cache={};market_at=0
+stream_assets=set();stream_retry={};stream_seed_at=0
 
 @contextlib.contextmanager
 def stage(name, seconds):
@@ -40,9 +41,10 @@ def market(force=False):
     return fresh
 
 def dispatch(c):
-    global api
+    global api,stream_seed_at
     op=c['op']
     if op=='connect':
+        stream_assets.clear();stream_retry.clear();stream_seed_at=0
         api=Bullex(c['email'],c['password'])
         with stage('autenticação e abertura da sessão',35):
             ok,reason=api.connect()
@@ -56,6 +58,34 @@ def dispatch(c):
     if op=='market':
         available=market(force=True)
         return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption') else v['payout']>max(80,c['payout']))]}
+    if op=='snapshot':
+        now=api.get_server_timestamp()
+        if not now or abs(time.time()-now)>1:raise RuntimeError('Relógio fora de sincronia no streaming')
+        wanted=c['assets'];errors=[]
+        # Nunca inicializar histórico durante a janela de entrada; uma assinatura por vez.
+        pending=[a for a in wanted if a not in stream_assets and time.time()-stream_retry.get(a,0)>60]
+        if pending and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
+            asset=pending[0];stream_seed_at=time.time();stream_retry[asset]=time.time()
+            try:
+                with stage('histórico inicial do streaming M1',8):bars=api.get_candles(asset,60,120,int(now))
+                if not isinstance(bars,list):raise ValueError('Histórico indisponível')
+                api.api.real_time_candles_maxdict_table[asset][60]=150
+                for b in bars:api.api.real_time_candles[asset][60][b['from']]=dict(b)
+                # A função start_candles_stream bloqueia aguardando dados. Assinar diretamente
+                # mantém o receptor da biblioteca ativo sem bloquear a janela seguinte.
+                api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
+                stream_assets.add(asset)
+            except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
+        now=api.get_server_timestamp();items=[]
+        for asset in wanted:
+            if asset not in stream_assets:continue
+            # Copiar: o receptor websocket atualiza o dicionário em outra thread.
+            snapshot=list(api.api.real_time_candles[asset][60].copy().values())
+            current=int(now//60)*60
+            if not any(b.get('from')==current for b in snapshot):continue
+            closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
+            items.append({'asset':asset,'candles':closed})
+        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
     if op=='candles':
         now=api.get_server_timestamp()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')

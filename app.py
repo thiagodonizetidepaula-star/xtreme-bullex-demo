@@ -58,26 +58,43 @@ def limits(c):
 
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
-    candidates=[];cursor=0;catalog_at=0
+    candidates=[];cursor=0;catalog_at=0;seen=set()
     try:
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
-            if time.time()-catalog_at>30:
+            if not candidates or (time.time()-catalog_at>30 and time.time()%60>5):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
                 log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
-            c['asset']=candidates[cursor%len(candidates)]['asset'];cursor+=1
-            data=client.call('candles',asset=c['asset'])
-            try:
-                a=analyze_selected(data['candles'],data['now'],c.get('strategy','rejection'))
-            except (ValueError,KeyError,TypeError) as e:
-                log(c['asset']+': dados de velas inválidos ('+str(e)+'). Ativo ignorado; busca continua.')
-                stop.wait(1);continue
+            batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
+            for error in batch.get('errors',[]):log(error)
+            selected=None
+            for item in batch['items']:
+                try:
+                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'))
+                except (ValueError,KeyError,TypeError) as e:
+                    invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
+                    if invalid_key not in seen:
+                        seen.add(invalid_key);log(item['asset']+': dados inválidos; ativo ignorado ('+str(e)+').')
+                    continue
+                key=(item['asset'],analysis.get('candle'))
+                if key not in seen:
+                    seen.add(key);state['analyzed_count']+=1
+                    log(item['asset']+' · '+analysis['reason'])
+                if selected is None or (analysis.get('direction') and not selected[1].get('direction')):
+                    selected=(item,analysis)
+            state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
+            if selected is None:
+                state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
+                stop.wait(.15);continue
+            item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
+            # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
+            if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
             state['analysis']=a;state['candles']=data['candles'][-50:]
             if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
-                evaluated=(c['asset'],a['candle']);state['analyzed_count']+=1
+                evaluated=(c['asset'],a['candle'])
                 checks=a.get('checks',{})
                 closed=datetime.fromtimestamp(a['candle']+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
                 log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
@@ -103,7 +120,7 @@ def loop(c):
                     trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
                     trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
                     state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status'])
-            stop.wait(1)
+            stop.wait(.15)
     except Exception as e:
         log(str(e));state['connected']=False
         if client:client.close()

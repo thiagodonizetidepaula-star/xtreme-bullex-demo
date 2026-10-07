@@ -54,9 +54,8 @@ class Core(unittest.TestCase):
         calls=[]
         def rpc(op,**kwargs):
             if op=='market':return {'assets':[{'asset':'BAD-OTC'},{'asset':'GOOD-OTC'}]}
-            calls.append(kwargs['asset'])
-            if len(calls)==2:module.stop.set()
-            return {'candles':[],'now':6000}
+            calls.extend(kwargs['assets']);module.stop.set()
+            return {'items':[{'asset':x,'candles':[]} for x in kwargs['assets']],'now':6000,'ready':2,'total':2}
         client.call.side_effect=rpc
         with patch.object(module,'client',client),patch.object(module,'analyze_selected',side_effect=[ValueError('Histórico M1 com lacunas'),{'direction':None,'reason':'Sem sinal'}]),patch.object(module.stop,'wait',return_value=None):
             module.loop(dict(module.state['config']))

@@ -51,7 +51,7 @@ class FlowTests(unittest.TestCase):
         c={**app.state['config'],'strategy':'repetition'};client=MagicMock();app.stop.clear()
         def call(op,**kwargs):
             if op=='market':return {'assets':[{'asset':'EURUSD-OTC','payout':80}]}
-            if op=='candles':return {'candles':[],'now':6001}
+            if op=='snapshot':return {'items':[{'asset':'EURUSD-OTC','candles':[]}],'now':6001,'ready':1,'total':1}
             if op=='order':return {'sent':True,'id':123,'payout':80,'sent_at':6001}
             if op=='result':app.stop.set();return {'profit':1.6,'balance':101.6}
         client.call.side_effect=call
