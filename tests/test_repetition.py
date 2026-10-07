@@ -44,7 +44,7 @@ class RepetitionTests(unittest.TestCase):
     def test_comparison_confirmed_results_only(self):
         ts=[{'strategy_key':'repetition','status':'WIN','profit':1.6,'payout':80},{'strategy_key':'repetition','status':'LOSS','profit':-2,'payout':85},{'strategy_key':'repetition','status':'ABERTA','profit':99},{'strategy_key':'rejection','status':'EMPATE','profit':0,'payout':90}]
         with patch.dict(app.state,{'trades':ts}):
-            old,new,_=app.comparison();self.assertEqual((new['operations'],new['wins'],new['losses'],new['profit'],new['payout_mean']),(2,1,1,-.4,82.5));self.assertEqual(old['ties'],1)
+            old,new,*_=app.comparison();self.assertEqual((new['operations'],new['wins'],new['losses'],new['profit'],new['payout_mean']),(2,1,1,-.4,82.5));self.assertEqual(old['ties'],1)
 
 class FlowTests(unittest.TestCase):
     def test_server_flow_result_and_strategy_history(self):
@@ -72,7 +72,9 @@ class RepetitionOrderTests(unittest.TestCase):
         self.api.buy_by_raw_expirations.return_value=(True,123)
         self.c={'op':'order','asset':'EURUSD-OTC','stake':2,'payout':80,'direction':'call','candle':5940,'strategy':'repetition'}
     def dispatch(self):
-        with patch.object(worker.time,'time',return_value=self.now):return worker.dispatch(self.c)
+        with patch.object(worker.time,'time',return_value=self.now):
+            worker.market(force=True);worker.balance_cache=100;worker.balance_at=self.now
+            return worker.dispatch(self.c)
     def test_m1_raw_expiry_and_exact_minimum_payout(self):
         r=self.dispatch();self.assertTrue(r['sent']);self.assertEqual(r['payout'],80)
         self.api.buy_by_raw_expirations.assert_called_once_with(2,'EURUSD-OTC','call','turbo',6060)

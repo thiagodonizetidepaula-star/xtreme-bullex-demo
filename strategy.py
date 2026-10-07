@@ -64,7 +64,7 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
-STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1'}
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência'}
 
 def repetition(candles, now):
     bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
@@ -130,7 +130,35 @@ def resumption(candles, now):
     result.update(direction=direction,reason='Tendência EMA20/50 + recuo + rejeição confirmada; ATR aprovado.')
     return result
 
-def analyze_selected(candles, now, strategy='rejection'):
+PRICE_SOURCES=('close','open','high','low','hl2','hlc3','ohlc4')
+
+def sniper_buffers(bars, source='hl2'):
+    if source not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')
+    values=[]
+    for b in bars:
+        o,c,h,l=[float(b[k]) for k in ('open','close','max','min')]
+        if not all(math.isfinite(v) and v>0 for v in (o,c,h,l)) or not l<=min(o,c)<=max(o,c)<=h:raise ValueError('OHLC inválido')
+        values.append({'open':o,'close':c,'high':h,'low':l,'hl2':(h+l)/2,'hlc3':(h+l+c)/3,'ohlc4':(o+h+l+c)/4}[source])
+    # SMA1 - SMA34, seguido de WMA5 (maior peso na amostra mais recente).
+    buffer=[values[i]-sum(values[i-33:i+1])/34 for i in range(33,len(values))]
+    smooth=[sum((j+1)*x for j,x in enumerate(buffer[i-4:i+1]))/15 for i in range(4,len(buffer))]
+    return buffer[4:],smooth
+
+def sniper(candles,now,source='hl2'):
+    bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
+    if len(bars)<80:return {'direction':None,'signal':None,'reason':'Aguardando 80 velas M1 fechadas para Sniper/Tendência.'}
+    if len({b['from'] for b in bars})!=len(bars) or any(b['from']-a['from']!=60 for a,b in zip(bars,bars[1:])):raise ValueError('Histórico M1 inválido ou com lacunas')
+    fast,slow=sniper_buffers(bars,source)
+    position,trail=xtreme_trend(bars,18,2)
+    raw='call' if fast[-1]>slow[-1] and fast[-2]<slow[-2] else 'put' if fast[-1]<slow[-1] and fast[-2]>slow[-2] else None
+    direction=raw if (raw=='call' and position==1) or (raw=='put' and position==-1) else None
+    result={'direction':direction,'signal':raw,'candle':bars[-1]['from'],'strategy':STRATEGIES['sniper'],'source':source,'buffer1':fast[-1],'buffer2':slow[-1],'atr_stop':trail,'checks':{'tendência':'alta' if position==1 else 'baixa' if position==-1 else 'indefinida'},'age':now-bars[-1]['from']-60}
+    result['reason']='Cruzamento Sniper confirmado na direção do Xtreme Tendência.' if direction else 'Sniper contrário à tendência: descartado.' if raw else 'Sem novo cruzamento Xtreme Sniper na vela fechada.'
+    if not 0<=result['age']<=2:result.update(direction=None,reason='Sinal descartado: janela de dois segundos encerrada.' if direction else result['reason'])
+    return result
+
+def analyze_selected(candles, now, strategy='rejection', source='hl2'):
+    if strategy=='sniper':return sniper(candles,now,source)
     if strategy=='repetition':return repetition(candles,now)
     if strategy=='resumption':return resumption(candles,now)
     if strategy!='rejection':raise ValueError('Estratégia inválida')
@@ -147,6 +175,7 @@ def validate_config(c):
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
     for flag in ['stop_win_enabled','stop_loss_enabled']:
         if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
+    if c.get('sniper_source','hl2') not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')
     if c.get('strategy','rejection') not in STRATEGIES:raise ValueError('Estratégia inválida')
     if c['stake']<=0 or c['stop_win']<=0 or c['stop_loss']<c['stake']: raise ValueError('Entrada e stops inválidos. Stop loss deve cobrir uma entrada.')
     if not 0<=c['payout']<=100 or int(c['limit'])!=c['limit'] or not 1<=c['limit']<=100: raise ValueError('Payout ou limite inválido')

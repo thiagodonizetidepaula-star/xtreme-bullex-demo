@@ -44,7 +44,7 @@ class ResumptionTests(unittest.TestCase):
         self.assertEqual(analyze_selected(self.bars(),4801,'resumption')['strategy'],'Retomada de Tendência M1')
         from unittest.mock import patch
         with patch.dict(app.state,{'trades':[{'strategy_key':'resumption','status':'WIN','profit':1.6,'payout':80}]}):
-            result=app.comparison()[-1];self.assertEqual((result['operations'],result['profit']),(1,1.6))
+            result=app.comparison()[2];self.assertEqual((result['operations'],result['profit']),(1,1.6))
 
 class ResumptionOrderTests(test_repetition.RepetitionOrderTests):
     def setUp(self):

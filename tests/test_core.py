@@ -94,6 +94,9 @@ class Core(unittest.TestCase):
 if __name__=='__main__':unittest.main()
 
 class OrderGuards(unittest.TestCase):
+    def order(self):
+        self.worker.market(force=True);self.worker.balance_cache=100;self.worker.balance_at=time.time()
+        return self.worker.dispatch(self.c)
     def setUp(self):
         import worker
         from unittest.mock import MagicMock
@@ -109,11 +112,11 @@ class OrderGuards(unittest.TestCase):
         self.c={'op':'order','asset':'EURUSD','stake':2,'payout':80,'direction':'call','candle':time.time()-61}
     def test_real_is_blocked(self):
         self.api.get_balance_mode.return_value='REAL'
-        with self.assertRaises(RuntimeError):self.worker.dispatch(self.c)
+        with self.assertRaises(RuntimeError):self.order()
         self.api.buy.assert_not_called()
     def test_low_payout_is_blocked(self):
         self.api.get_all_init_v2.return_value['turbo']['actives']['1']['option']['profit']['commission']=30
-        self.assertFalse(self.worker.dispatch(self.c)['sent']);self.api.buy.assert_not_called()
+        self.assertFalse(self.order()['sent']);self.api.buy.assert_not_called()
     def test_scanner_includes_otc_and_excludes_exact_80_and_closed(self):
         import copy
         base=self.api.get_all_init_v2.return_value['turbo']['actives']['1']
@@ -125,13 +128,13 @@ class OrderGuards(unittest.TestCase):
         self.assertEqual({a['asset'] for a in assets},{'EURUSD','EURUSD-OTC'})
     def test_exact_80_is_blocked_at_order(self):
         self.api.get_all_init_v2.return_value['turbo']['actives']['1']['option']['profit']['commission']=20
-        self.assertFalse(self.worker.dispatch(self.c)['sent']);self.api.buy.assert_not_called()
+        self.assertFalse(self.order()['sent']);self.api.buy.assert_not_called()
     def test_late_order_is_blocked(self):
         self.c['candle']=time.time()-80
-        self.assertFalse(self.worker.dispatch(self.c)['sent']);self.api.buy.assert_not_called()
+        self.assertFalse(self.order()['sent']);self.api.buy.assert_not_called()
     def test_demo_order_sent_once(self):
-        r=self.worker.dispatch(self.c);self.assertTrue(r['sent']);self.api.buy.assert_called_once_with(2,'EURUSD','call',1)
+        r=self.order();self.assertTrue(r['sent']);self.api.buy.assert_called_once_with(2,'EURUSD','call',1)
     def test_uncertain_response_not_retried(self):
         self.api.buy.return_value=(False,None)
-        with self.assertRaises(RuntimeError):self.worker.dispatch(self.c)
+        with self.assertRaises(RuntimeError):self.order()
         self.api.buy.assert_called_once()
