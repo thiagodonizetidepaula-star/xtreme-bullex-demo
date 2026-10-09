@@ -65,7 +65,7 @@ def loop(c):
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper') else 'acima de '+str(max(80,c['payout'])))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
@@ -152,7 +152,7 @@ def access():
     return jsonify(csrf=session['csrf'])
 @app.get('/api/state')
 def status():
-    with lock:return jsonify(**state,management=management(),comparison=comparison(),csrf=session['csrf'])
+    with lock:return jsonify(**state,management=management(),comparison=comparison(),server_now=time.time(),csrf=session['csrf'])
 @app.post('/api/connect')
 def connect():
     global client

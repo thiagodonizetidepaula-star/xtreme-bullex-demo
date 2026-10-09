@@ -64,7 +64,7 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
-STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência'}
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência','retest':'Xtreme Reteste M1'}
 
 def repetition(candles, now):
     bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
@@ -157,7 +157,41 @@ def sniper(candles,now,source='hl2'):
     if not 0<=result['age']<=2:result.update(direction=None,reason='Sinal descartado: janela de dois segundos encerrada.' if direction else result['reason'])
     return result
 
+def retest(candles, now):
+    """Experimental: breakout of prior 10 bars, retest within 1..3 bars."""
+    bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
+    result={'direction':None,'signal':None,'strategy':STRATEGIES['retest'],'reason':'Aguardando 80 velas fechadas.'}
+    if len(bars)<80:return result
+    if len({b['from'] for b in bars})!=len(bars) or any(b['from']-a['from']!=60 for a,b in zip(bars,bars[1:])):raise ValueError('Histórico M1 inválido ou com lacunas')
+    sniper_buffers(bars)  # validates all OHLC before calculations
+    b=bars[-1];result.update(candle=b['from'],age=now-b['from']-60)
+    pos,_=xtreme_trend(bars)
+    recent=bars[-6:-1];older=bars[-11:-6]
+    up=pos==1 and max(x['max'] for x in recent)>max(x['max'] for x in older) and min(x['min'] for x in recent)>min(x['min'] for x in older)
+    down=pos==-1 and max(x['max'] for x in recent)<max(x['max'] for x in older) and min(x['min'] for x in recent)<min(x['min'] for x in older)
+    if not (up or down):result['reason']='Reteste: estrutura de máximas/mínimas sem tendência confirmada.';return result
+    tr=[max(x['max']-x['min'],abs(x['max']-bars[i-1]['close']),abs(x['min']-bars[i-1]['close'])) for i,x in enumerate(bars[:-1]) if i]
+    atr=sum(tr[:14])/14
+    for v in tr[14:]:atr=(atr*13+v)/14
+    span=b['max']-b['min'];result['atr14Reference']=atr
+    if atr<=0 or span<=0 or span>2*atr:result['reason']='Reteste: confirmação com amplitude zero ou acima de 2 × ATR14 anterior.';return result
+    result['reason']='Aguardando rompimento e primeiro reteste fechado em até três velas.'
+    for distance in (1,2,3):
+        j=len(bars)-1-distance;breakout=bars[j];prior=bars[j-10:j]
+        level=max(x['max'] for x in prior) if up else min(x['min'] for x in prior)
+        broken=breakout['close']>level and breakout['open']<=level if up else breakout['close']<level and breakout['open']>=level
+        # A previous touch consumes this setup; do not reuse the same breakout.
+        clean=all(x['min']>level if up else x['max']<level for x in bars[j+1:-1])
+        confirmed=b['min']<=level<b['close'] and b['close']>b['open'] if up else b['max']>=level>b['close'] and b['close']<b['open']
+        if broken and clean and confirmed:
+            result.update(signal='call' if up else 'put',level=level,breakout_candle=breakout['from'])
+            if 0<=result['age']<=2:result.update(direction=result['signal'],reason='Rompimento + primeiro reteste fechado na tendência; ATR aprovado.')
+            else:result['reason']='Reteste descartado: janela de dois segundos encerrada.'
+            break
+    return result
+
 def analyze_selected(candles, now, strategy='rejection', source='hl2'):
+    if strategy=='retest':return retest(candles,now)
     if strategy=='sniper':return sniper(candles,now,source)
     if strategy=='repetition':return repetition(candles,now)
     if strategy=='resumption':return resumption(candles,now)

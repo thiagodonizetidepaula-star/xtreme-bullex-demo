@@ -85,7 +85,7 @@ def dispatch(c):
     demo()
     if op=='market':
         available=market(force=True)
-        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper') else v['payout']>max(80,c['payout']))]}
+        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest') else v['payout']>max(80,c['payout']))]}
     if op=='snapshot':
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.
@@ -129,21 +129,21 @@ def dispatch(c):
         return {'candles':bars,'now':now}
     if op=='order':
         started=broker_now()
-        window=2 if c.get('strategy') in ('repetition','resumption','sniper') else 5
+        window=2 if c.get('strategy') in ('repetition','resumption','sniper','retest') else 5
         if not 0<=started-c['candle']-60<=window:return {'sent':False,'reason':'Janela de entrada encerrada antes da validação.'}
         if not market_cache or not 0<=time.time()-market_at<=2:return {'sent':False,'reason':'Payout/disponibilidade sem verificação recente (máximo 2 s). Ordem não enviada.'}
         details=market_cache.get(c['asset'],{})
         payout=details.get('payout')
         if not details.get('open'):return {'sent':False,'reason':'Ativo M1 fechado ou indisponível.'}
-        if payout is None or (payout<c['payout'] if c.get('strategy') in ('repetition','resumption','sniper') else payout<=max(80,c['payout'])):return {'sent':False,'reason':'Payout não está acima do mínimo.'}
+        if payout is None or (payout<c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest') else payout<=max(80,c['payout'])):return {'sent':False,'reason':'Payout não está acima do mínimo.'}
         demo()
         now=broker_now()
-        if abs(time.time()-now)>10 or now-c['candle']-60<0 or now-c['candle']-60>(2 if c.get('strategy') in ('repetition','resumption','sniper') else 5): return {'sent':False,'reason':'Janela de entrada encerrada.'}
+        if abs(time.time()-now)>10 or now-c['candle']-60<0 or now-c['candle']-60>(2 if c.get('strategy') in ('repetition','resumption','sniper','retest') else 5): return {'sent':False,'reason':'Janela de entrada encerrada.'}
         if not isinstance(balance_cache,(int,float)) or not math.isfinite(balance_cache) or not 0<=time.time()-balance_at<=5:return {'sent':False,'reason':'Saldo sem verificação recente. Ordem não enviada.'}
         if balance_cache<c['stake']:return {'sent':False,'reason':'Saldo demo insuficiente.'}
         demo()
         sent_at=None;send_catalog_age=time.time()-market_at
-        if c.get('strategy') in ('repetition','resumption','sniper'):
+        if c.get('strategy') in ('repetition','resumption','sniper','retest'):
             if not callable(getattr(api,'buy_by_raw_expirations',None)):return {'sent':False,'reason':'Integração sem expiração explícita M1.'}
             now=broker_now()
             if not 0<=time.time()-market_at<=2:return {'sent':False,'reason':'Payout/disponibilidade expirou antes do envio.'}
@@ -168,7 +168,7 @@ def dispatch(c):
             ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],1)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
         balance_cache-=c['stake']
-        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),'catalog_age':round(send_catalog_age,3),'send_delay':round((sent_at or broker_now())-c['candle']-60,3),'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper') else api.get_server_timestamp()}
+        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),'catalog_age':round(send_catalog_age,3),'send_delay':round((sent_at or broker_now())-c['candle']-60,3),'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest') else api.get_server_timestamp()}
     if op=='result':
         result,profit=api.check_win_v4(c['id'])
         if not math.isfinite(float(profit)): raise RuntimeError('Resultado inválido')
