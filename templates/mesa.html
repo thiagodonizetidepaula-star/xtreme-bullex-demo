@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090f1f">
+<title>Mesa de Traders · Bullex DEMO</title>
+<style>
+:root{color-scheme:dark;--bg:#090f1f;--panel:#121d31;--panel2:#172840;--line:#2b3a58;--fg:#eaf2ff;--muted:#93a6c5;--green:#40e0a5;--red:#ff7078;--yellow:#ffcf73;--blue:#6baaff}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse 70% 30% at 45% 0%,#20375b 0%,transparent 88%),var(--bg);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--fg);font-size:14px}
+header{padding:17px max(18px,calc((100% - 1420px)/2));display:flex;justify-content:space-between;align-items:center;gap:15px;border-bottom:1px solid var(--line);background:#090f1fde;flex-wrap:wrap;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:12px}.orb{background:linear-gradient(145deg,#37d9a5,#4f89ff);width:40px;height:40px;border-radius:14px;display:grid;place-items:center;color:#091a25;font-weight:950;font-size:23px;box-shadow:0 0 35px #32dfaa32}
+h1,h2,h3,p{margin-top:0}.logo h1{font-size:20px;margin:0;line-height:1.15}.small,.muted{color:var(--muted)}.small{font-size:12px}.tag{font-size:11px;letter-spacing:.08em;color:#172c32;background:var(--green);padding:5px 9px;border-radius:30px;font-weight:900}
+main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 16px}
+.headline h2{font-size:20px;margin:0 0 5px}.headside{display:flex;align-items:center;gap:11px}.indicator{height:10px;width:10px;border-radius:50%;background:#70809a;box-shadow:0 0 0 4px #70809a22}.indicator.active{background:var(--green);box-shadow:0 0 16px #40e0a580}.indicator.warn{background:var(--yellow)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.stat,.panel,.agent,.console{background:linear-gradient(155deg,#192741,#111c30);border:1px solid var(--line);border-radius:18px}.stat{padding:16px}.stat .value{font-size:26px;font-weight:850;letter-spacing:-.05em;font-variant-numeric:tabular-nums;margin:5px 0}.stat .sub{font-size:12px;color:var(--muted)}
+.floor{padding:18px 15px 19px;background:linear-gradient(160deg,#14223a,#111b30 60%,#172740);border:1px solid #3b4a63;border-radius:22px;overflow:hidden;position:relative}.floor:before{content:"";position:absolute;left:12%;right:12%;top:-150px;height:230px;background:#39669b33;filter:blur(58px);pointer-events:none}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 4px 15px;position:relative}.section-title h2{font-size:19px;margin:0}.desk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;position:relative}
+.agent{padding:13px;min-width:0;position:relative;transition:border-color .2s,box-shadow .2s}.agent.call{border-color:#39cba288;box-shadow:inset 0 0 22px #40e0a510}.agent.put{border-color:#ff707888;box-shadow:inset 0 0 22px #ff70780b}
+.agent-heading{display:flex;align-items:center;justify-content:space-between;gap:5px}.agent-heading b{font-size:15px}.agent-heading span{color:var(--muted);font-size:10px}
+.station{height:166px;position:relative;display:grid;place-items:center;overflow:hidden}.screen{height:65px;width:90%;position:absolute;top:3px;z-index:2;border:5px solid #253b5b;border-bottom-width:8px;background:#071327;border-radius:7px;box-shadow:0 5px 0 #0b1727}.screen svg{width:100%;height:100%}.screen:after{content:"";position:absolute;width:18px;height:14px;background:#435e7b;top:100%;left:calc(50% - 9px);border-radius:0 0 3px 3px}
+.avatar{height:115px;position:absolute;bottom:8px;width:120px;z-index:1;overflow:visible;filter:drop-shadow(0 5px 7px #0006)}.avatar .hand{transform-origin:center;animation:type .5s infinite alternate}.avatar .head{animation:bob 2s ease-in-out infinite}
+.tabletop{height:14px;border-radius:9px;background:linear-gradient(#ae865c,#674c39);position:absolute;bottom:0;left:0;right:0;box-shadow:0 6px 14px #0004;z-index:3}.agent .status{display:inline-block;padding:4px 7px;border-radius:7px;background:#293954;color:var(--muted);font-size:11px;font-weight:800;margin-bottom:7px}
+.agent.call .status{color:var(--green);background:#40e0a519}.agent.put .status{color:var(--red);background:#ff707819}.reason{line-height:1.4;min-height:38px;font-size:11px;color:#b9cce7}
+@keyframes type{to{transform:translateY(3px) rotate(5deg)}}@keyframes bob{50%{transform:translateY(-2px)}}
+.two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:14px;margin-top:16px}.panel{padding:17px;min-width:0}.panel h2{font-size:17px;margin-bottom:9px}.panel h3{font-size:14px;margin:0 0 10px}#chart{display:block;width:100%;height:275px;border-radius:13px;background:#0b1426}.empty{font-size:12px;color:var(--muted)}
+.consensus{display:flex;align-items:center;gap:14px;margin:17px 0}.circle{flex:0 0 98px;width:98px;height:98px;border-radius:50%;border:9px solid #36506d;background:#101b30;display:grid;place-items:center;font-size:23px;font-weight:900}.circle.call{border-color:var(--green);color:var(--green)}.circle.put{border-color:var(--red);color:var(--red)}#decision{font-weight:850;font-size:20px;letter-spacing:-.02em}.vote-track{height:10px;display:flex;border-radius:10px;overflow:hidden;background:#35445e;margin:9px 0}.vote-track div{height:100%;transition:width .3s}.vote-track .call{background:var(--green)}.vote-track .put{background:var(--red)}.pair{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}.notice{font-size:12px;color:var(--yellow);margin-top:11px}
+.actions{display:flex;gap:9px;flex-wrap:wrap}.btn{appearance:none;background:linear-gradient(135deg,#49dcb2,#1aa27e);color:#041922;font-weight:850;border:0;border-radius:11px;padding:11px 17px;cursor:pointer;font:inherit;font-weight:800}.btn:hover{filter:brightness(1.1)}.btn:disabled{opacity:.4;cursor:default}.btn.secondary{background:#263b5b;color:var(--fg);border:1px solid #405779}.btn.stop{background:#8e3545;color:#fff}.btn.full{width:100%}input,select{background:#0b172b;color:#fff;border:1px solid #3c5575;border-radius:9px;padding:10px;width:100%;font:inherit}label{display:block;font-size:12px;color:#bbcbe4;margin-bottom:5px}input:focus,select:focus{outline:2px solid var(--blue)}.fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.controls{display:grid;grid-template-columns:1fr;gap:12px}.controlbox{padding:12px;background:#101d32;border:1px solid var(--line);border-radius:13px}.switches{display:flex;gap:20px;align-items:center;flex-wrap:wrap;margin:6px 0}.switches label{display:flex;gap:5px;align-items:center;margin:0}.switches input{width:auto}.orderlist{max-height:330px;overflow:auto}.item{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #2a3b58}.item b{font-size:13px}.item small{display:block;color:var(--muted);margin-top:4px}.good{color:var(--green)}.bad{color:var(--red)}.feed{max-height:210px;overflow:auto;color:#bacde7;font-size:12px}.feed div{padding:7px 0;border-bottom:1px solid #253650}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.overlay{position:fixed;inset:0;background:#020817dc;display:grid;place-items:center;z-index:40;padding:20px}.login{width:min(420px,100%);padding:24px;background:#15223a;border-radius:20px;border:1px solid #425676}.login h2{margin-bottom:8px}.login p{font-size:13px;line-height:1.5;color:var(--muted)}.hidden{display:none!important}.error{color:var(--red);font-size:12px;min-height:19px}.foot{line-height:1.65;color:var(--muted);font-size:12px;margin-top:20px}
+@media(max-width:1120px){.desk{grid-template-columns:repeat(3,minmax(0,1fr))}.two{grid-template-columns:1fr 1fr}}@media(max-width:760px){.desk{grid-template-columns:repeat(2,minmax(0,1fr))}.two,.bottom{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{position:static}.stat .value{font-size:23px}}
+@media(max-width:420px){.desk{grid-template-columns:1fr 1fr;gap:8px}.agent{padding:9px}.avatar{height:99px}.station{height:150px}.agent-heading span{font-size:9px}.floor{padding:12px 9px}.fields{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">5 especialistas virtuais · Bullex PRACTICE · M1</div></div></div>
+<div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" id="logout">Sair</button></div></header>
+<main>
+<div class="headline"><div><h2>Central de operações</h2><div class="small">Somente preços recebidos da corretora · votação de 3/5 · sem gale</div></div><span class="tag" id="modeLabel">CONTA PRACTICE</span></div>
+<div class="stats">
+ <div class="stat"><div class="small">Saldo DEMO na corretora</div><div class="value" id="balance">—</div><div class="sub" id="currency">Aguardando login na PRACTICE</div></div>
+ <div class="stat"><div class="small">Lucro / prejuízo da sessão</div><div class="value" id="profit">—</div><div class="sub">Resultado confirmado pela corretora</div></div>
+ <div class="stat"><div class="small">Taxa de acerto</div><div class="value" id="winrate">—</div><div class="sub" id="record">Sem ordens encerradas</div></div>
+ <div class="stat"><div class="small">Operações hoje</div><div class="value" id="trades">0/5</div><div class="sub" id="status">Aguardando conexão</div></div>
+</div>
+<section class="floor" aria-label="Mesa de agentes">
+ <div class="section-title"><h2>Os cinco traders na mesa</h2><span class="small">Análise independente em candles fechados</span></div>
+ <div class="desk" id="agents"></div>
+</section>
+<div class="two">
+<section class="panel"><h2>Gráfico de velas da Bullex · M1</h2><p class="empty" id="marketInfo">Conecte sua conta PRACTICE para receber candles reais.</p><canvas id="chart" width="900" height="400" aria-label="Gráfico de candles reais"></canvas></section>
+<section class="panel"><h2>Votação e decisão</h2><div class="consensus"><div class="circle" id="score">0/5</div><div><div id="decision">Aguardando mercado</div><p class="small" id="decisionWhy">O robô só entra após 3 votos no mesmo sentido.</p></div></div><div class="pair"><span>CALL: <b id="calls">0</b></span><span>NEUTROS: <b id="neutrals">5</b></span><span>PUT: <b id="puts">0</b></span></div><div class="vote-track"><div class="call" id="callbar"></div><div class="put" id="putbar"></div></div>
+<div class="notice" id="riskNotice">Conta demo obrigatória. Uma posição por vez, limite diário e paradas por perda/ganho.</div></section>
+</div>
+<div class="two">
+<section class="panel"><h2>Conexão e gerenciamento</h2>
+<div class="controls">
+ <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao próprio backend; nunca gravadas no navegador nem no GitHub.</div></div>
+ <div class="controlbox"><h3>2 · Limites para operações automáticas</h3>
+ <div class="fields">
+  <div><label for="asset">Ativo</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
+  <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
+  <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
+  <div><label for="limit">Máximo de entradas por dia</label><input id="limit" type="number" min="1" max="100" value="5"></div>
+  <div><label for="stopwin">Stop win</label><input id="stopwin" type="number" min=".01" step=".01" value="20"></div>
+  <div><label for="stoploss">Stop loss</label><input id="stoploss" type="number" min="2" step=".01" value="10"></div>
+ </div>
+ <div class="switches"><label><input type="checkbox" id="usewin" checked> Ativar stop win</label><label><input type="checkbox" id="useloss" checked> Ativar stop loss</label></div>
+ <div class="actions"><button class="btn secondary" id="save">Salvar limites</button><button class="btn" id="start" disabled>▶ Iniciar robô DEMO</button><button class="btn stop" id="stop" disabled>■ Parar</button></div></div>
+ <div class="small" id="feedback" role="status">Aguardando.</div>
+</div></section>
+<section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">O histórico desta versão fica em memória. Reinícios do Render podem apagá-lo.</p><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
+</div>
+<div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Os cinco especialistas avaliam o mesmo ativo com RSI, EMAs, Bollinger, MACD e Price Action. O robô exige 3 votos convergentes, dados M1 íntegros, candle fechado, janela de 2 segundos, ativo habilitado, payout atualizado e conta PRACTICE validada. Ordem incerta interrompe as operações. A estratégia é experimental: os votos não são estimativas de probabilidade de acerto.</p></section></div>
+<p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
+</main>
+<div class="overlay" id="loginLayer"><form class="login" id="loginForm"><h2>Entrar na Mesa de Traders</h2><p>Informe a chave privada do painel Render. Esta não é a senha da Bullex.</p><label for="key">Chave de acesso ao aplicativo</label><input type="password" id="key" autocomplete="off" required minlength="16"><div class="error" id="loginError"></div><button class="btn full" type="submit">Abrir painel</button></form></div>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const safe=x=>String(x==null?"":x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const names=[["Ana","RSI 14","#e8a188","#1c365d"],["Bruno","EMAs 9/21","#d4a87f","#202b48"],["Carla","Bollinger","#f0c09b","#813f6b"],["Diego","MACD","#9d6b54","#203d63"],["Elisa","Price Action","#c88764","#477f75"]];
+let csrf="", connected=false, running=false, ready=false, syncing=false, first=true, busy=false, lastAssets="", lastState=null;
+const cash=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
+function drawAgents(){
+ $("agents").innerHTML=names.map((a,i)=>{
+  const dots= i%2===0?"M8 36L28 22L45 30L62 15L84 25L104 7":"M8 28L27 34L45 18L60 26L78 12L104 22";
+  return '<article class="agent" id="agent'+i+'"><div class="agent-heading"><b>'+a[0]+'</b><span>'+a[1]+'</span></div>'+
+  '<div class="station"><div class="screen"><svg viewBox="0 0 112 44" aria-hidden="true"><path d="'+dots+'" fill="none" stroke="#40e0a5" stroke-width="2"/><path d="M0 42H112M0 21H112" stroke="#253a59" stroke-width="1"/></svg></div>'+
+  '<svg viewBox="0 0 120 125" class="avatar" aria-label="Personagem de '+a[0]+' operando computador">'+
+  '<rect x="23" y="59" width="74" height="65" rx="19" fill="#26394f"/><path d="M25 125Q23 80 48 76H75Q99 87 94 125" fill="'+a[3]+'"/>'+
+  '<g class="head"><ellipse cx="60" cy="47" rx="23" ry="26" fill="'+a[2]+'"/><path d="M37 43Q32 15 52 13Q74 6 83 29Q67 19 53 26Q44 34 37 43" fill="'+(i%2?"#27272f":"#382534")+'"/>'+
+  '<circle cx="52" cy="48" r="2.3" fill="#202938"/><circle cx="68" cy="48" r="2.3" fill="#202938"/><path d="M54 60Q60 64 66 60" fill="none" stroke="#8b473e" stroke-width="2" stroke-linecap="round"/></g>'+
+  '<path class="hand" d="M30 95Q40 89 52 105" fill="none" stroke="'+a[2]+'" stroke-width="11" stroke-linecap="round"/>'+
+  '<path class="hand" d="M89 95Q78 88 69 105" fill="none" stroke="'+a[2]+'" stroke-width="11" stroke-linecap="round"/>'+
+  '</svg><div class="tabletop"></div></div><div class="status" id="signal'+i+'">AGUARDANDO</div><div class="reason" id="reason'+i+'">Sem dados da corretora.</div></article>';
+ }).join("");
+}
+function feedback(x,error=false){$("feedback").textContent=x;$("feedback").style.color=error?"var(--red)":"var(--muted)";}
+async function api(url,data){const opts={credentials:"same-origin",cache:"no-store"};if(data!==undefined){opts.method="POST";opts.headers={"Content-Type":"application/json","X-CSRF-Token":csrf};opts.body=JSON.stringify(data);}const res=await fetch(url,opts);const r=await res.json().catch(()=>({error:"Resposta inválida do servidor"}));if(!res.ok)throw Error(r.error||"Falha "+res.status);return r;}
+async function login(key){const r=await api("/api/access",{key});csrf=r.csrf;$("key").value="";$("loginLayer").classList.add("hidden");await poll();}
+async function poll(){
+ if(syncing)return;syncing=true;
+ try{const s=await api("/api/state");csrf=s.csrf||csrf;lastState=s;render(s);$("loginLayer").classList.add("hidden");}
+ catch(e){if(String(e.message).includes("Entre com a chave")){$("loginLayer").classList.remove("hidden");}else feedback(e.message,true);}
+ finally{syncing=false;}
+}
+function setConfig(c){
+ $("stake").value=c.stake;$("payout").value=c.payout;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
+ $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
+}
+function assets(s){
+ const opts=(s.assets||[]).slice(0,400);
+ const signature=opts.join("|");
+ if(signature===lastAssets)return;
+ lastAssets=signature;
+ let selected=$("asset").value||s.config.asset||"EURUSD";
+ if(!opts.length)opts.push(selected);
+ $("asset").innerHTML=opts.map(x=>'<option value="'+safe(x)+'">'+safe(x)+'</option>').join("");
+ $("asset").value=opts.includes(selected)?selected:(opts.includes(s.config.asset)?s.config.asset:opts[0]);
+}
+function render(s){
+ connected=!!s.connected;running=!!s.running;assets(s);
+ if(first){setConfig(s.config);first=false;}
+ const mg=s.management||{},a=s.analysis||{},v=a.votes||{};
+ $("led").className="indicator"+(running?" active":connected?" warn":"");
+ $("connection").textContent=running?"ROBÔ AUTOMÁTICO ATIVO":connected?"PRACTICE conectada":"Corretora desconectada";
+ $("balance").textContent=cash(s.balance);$("currency").textContent=connected?(s.currency||"Saldo PRACTICE"):"Aguardando conexão";
+ const p=mg.profit||0;$("profit").textContent=(p>0?"+":"")+cash(p);$("profit").className="value "+(p>=0?"good":"bad");
+ const closed=(mg.wins||0)+(mg.losses||0);
+ $("winrate").textContent=closed?(100*(mg.wins||0)/closed).toFixed(1)+"%":"—";
+ $("record").textContent=(mg.wins||0)+" WIN · "+(mg.losses||0)+" LOSS · "+(mg.ties||0)+" EMPATE";
+ $("trades").textContent=String(mg.used||0)+"/"+String(s.config.limit||5);
+ $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected?"Pronto para iniciar":"Aguardando conexão";
+ $("connect").disabled=running;$("start").disabled=!connected||running||s.uncertain||mg.can_trade===false;$("stop").disabled=!running;
+ ["asset","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ $("score").textContent=Math.max(v.call||0,v.put||0)+"/5";
+ $("score").className="circle"+(a.direction==="call"?" call":a.direction==="put"?" put":"");
+ $("calls").textContent=v.call||0;$("puts").textContent=v.put||0;$("neutrals").textContent=v.neutral==null?5:v.neutral;
+ $("callbar").style.width=((v.call||0)*20)+"%";$("putbar").style.width=((v.put||0)*20)+"%";
+ $("decision").textContent=a.direction?(a.direction==="call"?"CALL · ENTRADA ELEGÍVEL":"PUT · ENTRADA ELEGÍVEL"):(a.reason?"AGUARDANDO CONSENSO":"SEM CONEXÃO");
+ $("decision").style.color=a.direction==="call"?"var(--green)":a.direction==="put"?"var(--red)":"var(--fg)";
+ $("decisionWhy").textContent=a.reason||s.message||"Aguardando dados";
+ $("marketInfo").textContent=connected?(s.config.asset+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
+ (a.agents||[]).forEach((v,i)=>{if(i>4)return;const p=$("agent"+i),side=v.direction;p.className="agent"+(side==="call"?" call":side==="put"?" put":"");$("signal"+i).textContent=side?side.toUpperCase():"NEUTRO";$("reason"+i).textContent=v.reason||"Sem análise";});
+ if(!a.agents){for(let i=0;i<5;i++){$("agent"+i).className="agent";$("signal"+i).textContent="AGUARDANDO";$("reason"+i).textContent="Esperando candles M1";}}
+ $("riskNotice").textContent=s.uncertain?"Ordem incerta: confira a conta DEMO antes de reconectar.":s.message||"Somente PRACTICE.";
+ $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
+ '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small></div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
+ $("feed").innerHTML=(s.logs||[]).slice().reverse().slice(0,25).map(e=>'<div>'+safe((e.time||"").slice(11,19))+" · "+safe(e.text||"")+'</div>').join("")||"Sem registros.";
+ drawCandles(s.candles||[]);
+}
+function drawCandles(bars){
+ const canvas=$("chart"),ctx=canvas.getContext("2d"),w=canvas.width=900,h=canvas.height=400;
+ ctx.clearRect(0,0,w,h);ctx.fillStyle="#0b1426";ctx.fillRect(0,0,w,h);
+ const data=bars.slice(-42);if(data.length<2){ctx.textAlign="center";ctx.fillStyle="#7893b5";ctx.font="17px system-ui";ctx.fillText("Aguardando candles reais M1 da Bullex",w/2,h/2);return;}
+ const lo=Math.min(...data.map(x=>Number(x.min))),hi=Math.max(...data.map(x=>Number(x.max)));if(!Number.isFinite(lo)||!Number.isFinite(hi))return;
+ const delta=hi-lo||hi*.001;const low=lo-delta*.08,high=hi+delta*.08,plotH=h-42;
+ const yy=p=>16+(high-p)/(high-low)*(plotH-25),cw=(w-90)/data.length;
+ ctx.strokeStyle="#253651";ctx.lineWidth=1;ctx.fillStyle="#849ab7";ctx.font="12px system-ui";
+ for(let i=0;i<5;i++){const y=20+i*(plotH-30)/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w-65,y);ctx.stroke();ctx.fillText((high-(high-low)*i/4).toFixed(high>100?2:5),w-62,y+4);}
+ data.forEach((b,i)=>{const x=8+i*cw+cw/2,o=yy(Number(b.open)),c=yy(Number(b.close)),hiY=yy(Number(b.max)),loY=yy(Number(b.min)),up=Number(b.close)>=Number(b.open);ctx.strokeStyle=ctx.fillStyle=up?"#40e0a5":"#ff7078";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,hiY);ctx.lineTo(x,loY);ctx.stroke();ctx.fillRect(x-Math.max(2,cw*.28),Math.min(o,c),Math.max(4,cw*.56),Math.max(2,Math.abs(c-o)));});
+ ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
+}
+async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:"mesa",sniper_source:"hl2"};}
+$("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
+$("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}await act("/api/connect",{email,password},"Conexão DEMO solicitada");$("password").value="";};
+$("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
+$("start").onclick=async()=>{if(busy)return;const cfg=config();await act("/api/config",cfg,"Limites atualizados.");if(lastState && !running && connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
+$("stop").onclick=()=>act("/api/stop",{},"Parada solicitada. Ordens abertas serão acompanhadas.");
+$("logout").onclick=()=>act("/api/logout",{},"Sessão encerrada").then(()=>{location.reload();});
+drawAgents();drawCandles([]);poll();setInterval(poll,2500);
+})();
+</script></body></html>
