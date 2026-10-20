@@ -11,7 +11,14 @@ class MobileSessionTests(unittest.TestCase):
             response=client.post("/api/access",json={"key":ACCESS})
             self.assertEqual(response.status_code,200)
             cookie=response.headers.get("Set-Cookie","")
-            self.assertIn("Max-Age=2592000",cookie)
+            # Flask marca sessões permanentes com Expires, sem Max-Age.
+            self.assertIn("Expires=",cookie)
+            from email.utils import parsedate_to_datetime
+            from datetime import datetime,timezone,timedelta
+            until=parsedate_to_datetime(cookie.split("Expires=",1)[1].split(";",1)[0])
+            ttl=until-datetime.now(timezone.utc)
+            self.assertGreater(ttl,timedelta(days=29))
+            self.assertLess(ttl,timedelta(days=31))
             self.assertIn("HttpOnly",cookie)
             self.assertIn("SameSite=Lax",cookie)
             if os.environ.get("RENDER")=="true":
