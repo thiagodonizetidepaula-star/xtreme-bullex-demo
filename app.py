@@ -5,7 +5,7 @@ from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
-app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',SESSION_COOKIE_SECURE=os.environ.get('RENDER')=='true')
+app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Lax',PERMANENT_SESSION_LIFETIME=timedelta(days=30),SESSION_REFRESH_EACH_REQUEST=False,SESSION_COOKIE_SECURE=os.environ.get('RENDER')=='true')
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
@@ -142,6 +142,7 @@ def loop(c):
 def auth():
     if request.path in ['/','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
+    if not session.permanent:session.permanent=True
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
 
 @app.after_request
@@ -160,7 +161,7 @@ def health():return jsonify(status='ok')
 def access():
     data=request.get_json(silent=True) or {}
     if not secrets.compare_digest(str(data.get('key','')),ACCESS):return jsonify(error='Chave inválida.'),401
-    session.clear();session['owner']=True;session['csrf']=secrets.token_hex(24)
+    session.clear();session.permanent=True;session['owner']=True;session['csrf']=secrets.token_hex(24)
     return jsonify(csrf=session['csrf'])
 @app.get('/api/state')
 def status():
