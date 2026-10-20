@@ -30,11 +30,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 @media(max-width:420px){.desk{grid-template-columns:1fr 1fr;gap:8px}.agent{padding:9px}.avatar{height:99px}.station{height:150px}.agent-heading span{font-size:9px}.floor{padding:12px 9px}.fields{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
-<link rel="stylesheet" href="/static/globo-radar.css?v=20261020fx1">
-<script src="/static/globo-radar.js?v=20261020fx1" defer></script>
+<link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
+<script src="/static/globo-radar.js?v=20261020trend6" defer></script>
 </head>
 <body>
-<header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">5 especialistas virtuais · Bullex PRACTICE · M1</div></div></div>
+<header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout">Sair</button></div></header>
 <main>
 <div id="radarMount"></div>
@@ -69,7 +69,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </div></section>
 <section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">O histórico desta versão fica em memória. Reinícios do Render podem apagá-lo.</p><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
 </div>
-<div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Os cinco especialistas avaliam o mesmo ativo com RSI, EMAs, Bollinger, MACD e Price Action. O robô exige 3 votos convergentes, dados M1 íntegros, candle fechado, janela de 2 segundos, ativo habilitado, payout atualizado e conta PRACTICE validada. Ordem incerta interrompe as operações. A estratégia é experimental: os votos não são estimativas de probabilidade de acerto.</p></section></div>
+<div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Seis filtros internos analisam os pares: EMA20/50/100 em M1, alinhamento M5, força ADX/DI, momentum MACD, RSI direcional e recuo com vela de retomada. Exige 5 de 6 confirmações e o alinhamento obrigatório da tendência M1/M5, ADX e entrada técnica; limita reentradas por par por três velas. Mantém janela de dois segundos, verificação de payout, ativo habilitado, stops e conta PRACTICE. Os votos não representam probabilidade de acerto.</p></section></div>
 <p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
 </section>
 </main>
