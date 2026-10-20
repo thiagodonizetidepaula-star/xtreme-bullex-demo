@@ -34,4 +34,4 @@ print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout
 # Impedir publicação de estratégia quebrada: testes offline sem login e sem rede.
 import subprocess,sys
 print('Validando as seis confirmações de tendência e controles de risco...')
-subprocess.run([sys.executable,'-m','unittest','discover','-s','tests','-p','test_mesa_strategy.py','-v'],cwd=ROOT,check=True,timeout=45)
+subprocess.run([sys.executable,'-m','unittest','discover','-s','tests','-p','test_*.py','-v'],cwd=ROOT,check=True,timeout=45)
