@@ -30,3 +30,8 @@ tree=Patch().visit(tree);ast.fix_missing_locations(tree);p.write_text(ast.unpars
 p=ROOT/'vendor/bullexapi/stable_api.py';tree=Patch().visit(ast.parse(p.read_text()));ast.fix_missing_locations(tree);p.write_text(ast.unparse(tree))
 assert 'CERT_NONE' not in (ROOT/'vendor/bullexapi/api.py').read_text()
 print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout.')
+
+# Impedir publicação de estratégia quebrada: testes offline sem login e sem rede.
+import subprocess,sys
+print('Validando as seis confirmações de tendência e controles de risco...')
+subprocess.run([sys.executable,'-m','unittest','discover','-s','tests','-p','test_mesa_strategy.py','-v'],cwd=ROOT,check=True,timeout=45)
