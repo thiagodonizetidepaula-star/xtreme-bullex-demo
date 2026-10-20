@@ -34,10 +34,12 @@
 .radar-orbit.o3{--size:82%;--height:30%;--angle:-43deg;--speed:17s}
 .radar-orbit.o4{--size:59%;--height:43%;--angle:60deg;--speed:12s}
 .radar-orbit.o5{--size:88%;--height:21%;--angle:9deg;--speed:20s}
+.radar-orbit.o6{--size:77%;--height:46%;--angle:-69deg;--speed:15s}
 .radar-orbit.o2 .probe-route{animation-direction:reverse;animation-delay:-4s}
 .radar-orbit.o3 .probe-route{animation-delay:-8s}
 .radar-orbit.o4 .probe-route{animation-direction:reverse;animation-delay:-2s}
 .radar-orbit.o5 .probe-route{animation-delay:-12s}
+.radar-orbit.o6 .probe-route{animation-direction:reverse;animation-delay:-6s}
 .radar-eye{position:absolute;top:47%;left:50%;width:clamp(110px,13vw,170px);height:auto;transform:translate(-50%,-50%);z-index:8;opacity:0;pointer-events:none;transition:opacity .22s,filter .22s;--eye-color:#42ff91;filter:drop-shadow(0 0 16px var(--eye-color)) drop-shadow(0 0 28px var(--eye-color))}
 .radar-eye *{fill:none;stroke:var(--eye-color);stroke-width:5;stroke-linecap:round;stroke-linejoin:round}
 .radar-eye .pupil{fill:var(--eye-color);stroke:none;transform-origin:100px 60px;animation:eye-pulse 1.4s infinite}
@@ -187,3 +189,5 @@
  .result-fx *,.confetti-bit{animation:none!important}
  .confetti-bit{display:none}
 }
+
+@media(max-width:540px){.radar-orbit.o6{--size:98%;--height:48%}}
