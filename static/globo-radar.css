@@ -73,3 +73,43 @@
 
 /* O layout de personagens permanece preservado no código antigo, mas não é exibido. */
 .floor{display:none!important}
+
+
+/* Mesa compacta · controles reais conectados às ações PRACTICE existentes */
+[hidden]{display:none!important}
+#radarMount{max-width:1180px;margin:0 auto}
+#settingsToggle{border-color:#ae8240;color:#ffe0a0;background:#19150e}
+.settings-drawer{max-width:1150px;margin:24px auto 0;padding:20px;border:1px solid #9b783e73;border-radius:18px;background:#10182acc}
+.settings-drawer .two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.settings-drawer .two>section:only-child{grid-column:1/-1}
+.settings-drawer .bottom{margin-top:16px}
+.scanner-floor{border-color:#ba8a36;box-shadow:0 0 48px #b67a191c,inset 0 0 100px #0009}
+.scanner-header{padding-top:18px}
+.scanner-controls{position:relative;z-index:12;padding:17px clamp(12px,3.5vw,28px) 20px;background:linear-gradient(180deg,#171007f5,#0d0a08);border-top:1px solid #e9ab4e8f}
+.scanner-control-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.scanner-control-fields label{display:block;color:#f5dca7;font-size:13px;font-weight:730;margin:0}
+.scanner-control-fields input,.scanner-control-fields select{display:block;width:100%;margin-top:8px;height:49px;border-radius:10px;background:#0c0c0c;color:#f6e6bb;border:1px solid #a47f43;font-size:17px;font-weight:710;padding:10px 12px}
+.scanner-control-fields input:focus,.scanner-control-fields select:focus{outline:2px solid #edc06e;outline-offset:1px}
+.scanner-control-actions{display:grid;grid-template-columns:1fr 1.7fr;gap:12px;margin-top:15px}
+.scanner-button{min-width:0;min-height:51px;border-radius:11px;font-size:15px;font-weight:860;cursor:pointer;letter-spacing:.01em;border:1px solid #bf9956;transition:filter .18s,transform .18s}
+.scanner-button:hover:not(:disabled){filter:brightness(1.1)}.scanner-button:active:not(:disabled){transform:scale(.99)}
+.scanner-button:disabled{opacity:.45;cursor:not-allowed}
+.scanner-button.save{color:#ffdfaa;background:#272012}
+.scanner-button.start{color:#031b12;background:linear-gradient(135deg,#70fbb3,#24c78b);border-color:#43d99b}
+.scanner-button.stop{color:#fff1f1;background:linear-gradient(135deg,#9f3142,#be3949);border-color:#d95c69;grid-column:2}
+.scanner-control-help{margin:12px 0 0;color:#c1a979;font-size:11px;line-height:1.5}
+.scanner-feedback{min-height:17px;margin:8px 0 0;font-size:12px;color:#f0d59b;overflow-wrap:anywhere}
+.scanner-feedback.error{color:#ff8585}
+@media(max-width:760px){
+  .settings-drawer{margin:16px 4px 0;padding:12px}
+  .settings-drawer .two,.settings-drawer .bottom{display:block}
+  .settings-drawer .panel{margin:0 0 13px}
+  .scanner-control-fields{gap:10px}
+}
+@media(max-width:420px){
+  .scanner-control-actions{grid-template-columns:1fr 1.5fr;gap:8px}
+  .scanner-control-fields input,.scanner-control-fields select{font-size:15px}
+  .scanner-button{font-size:13px}
+  .scanner-header h2{font-size:15px}
+  #settingsToggle{padding:9px 11px}
+}
