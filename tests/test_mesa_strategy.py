@@ -67,6 +67,42 @@ class TrendSixTests(unittest.TestCase):
         ok,_=entry_allowed(t,"GBPUSD",1760000220,"mesa")
         self.assertTrue(ok)
 
+
+    def test_valid_trend_reentry_is_reachable_without_future_prices(self):
+        # Testa apenas alcançabilidade da regra em série sintética, NÃO win rate.
+        import math
+        hits=[]
+        for drift in (.025,.03,.035,.04,.05):
+            for amplitude in (.05,.08,.11,.14):
+                for phase in range(12):
+                    close=100.
+                    data=[]
+                    start=1760000100-(1760000100%300)
+                    for i in range(160):
+                        if i in (156,157,158):
+                            change=-.14
+                        elif i==159:
+                            change=.16
+                        else:
+                            change=drift+amplitude*math.sin((i+phase)*math.tau/11)
+                        opened=close
+                        close+=change
+                        hi=max(opened,close)+(.018 if i==159 else .05)
+                        lo=min(opened,close)-(.04 if i==159 else .05)
+                        data.append({"from":start+60*i,"open":opened,"close":close,
+                                     "min":lo,"max":hi})
+                    r=analyze_mesa(data,data[-1]["from"]+60+1)
+                    if r["direction"]=="call":
+                        hits.append((data,r))
+                        break
+                if hits:break
+            if hits:break
+        self.assertTrue(hits,"Os seis filtros nunca liberam uma retomada de alta sintética")
+        sample,_=hits[0]
+        # Sinal gerado apenas no fechamento atual; a entrada não pode ser antecipada.
+        early=analyze_mesa(sample,sample[-1]["from"]+59)
+        self.assertIsNone(early["direction"])
+
     def test_no_martingale_and_signal_structure(self):
         s=bars()
         r=analyze_mesa(s,s[-1]["from"]+61)
