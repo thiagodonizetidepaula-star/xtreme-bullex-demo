@@ -219,3 +219,13 @@ def validate_config(c):
 
 def risk_ok(config, profit, count):
     return (not config.get('stop_win_enabled',True) or profit<config['stop_win']) and (not config.get('stop_loss_enabled',True) or profit-config['stake']>=-config['stop_loss']) and count<config['limit']
+
+
+# Mesa: estratégia adicional isolada, preservando os métodos anteriores.
+from mesa_strategy import analyze_mesa
+STRATEGIES['mesa'] = 'Mesa de Traders · cinco votos'
+_analyze_selected_original = analyze_selected
+def analyze_selected(candles, now, strategy='rejection', source='hl2'):
+    if strategy == 'mesa':
+        return analyze_mesa(candles, now)
+    return _analyze_selected_original(candles, now, strategy, source)
