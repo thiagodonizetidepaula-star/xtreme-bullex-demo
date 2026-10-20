@@ -49,7 +49,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 <div class="two">
 <section class="panel"><h2>Gráfico de velas da Bullex · M1</h2><p class="empty" id="marketInfo">Conecte sua conta PRACTICE para receber candles reais.</p><canvas id="chart" width="900" height="400" aria-label="Gráfico de candles reais"></canvas></section>
 <section class="panel"><h2>Votação e decisão</h2><div class="consensus"><div class="circle" id="score">0/5</div><div><div id="decision">Aguardando mercado</div><p class="small" id="decisionWhy">O robô só entra após 3 votos no mesmo sentido.</p></div></div><div class="pair"><span>CALL: <b id="calls">0</b></span><span>NEUTROS: <b id="neutrals">5</b></span><span>PUT: <b id="puts">0</b></span></div><div class="vote-track"><div class="call" id="callbar"></div><div class="put" id="putbar"></div></div>
-<div class="notice" id="riskNotice">Conta demo obrigatória. Uma posição por vez, limite diário e paradas por perda/ganho.</div></section>
+<div class="notice" id="riskNotice">Conta demo obrigatória. Uma posição por vez, limite diário, 3 perdas seguidas e stops.</div></section>
 </div>
 <div class="two">
 <section class="panel"><h2>Conexão e gerenciamento</h2>
@@ -57,7 +57,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao próprio backend; nunca gravadas no navegador nem no GitHub.</div></div>
  <div class="controlbox"><h3>2 · Limites para operações automáticas</h3>
  <div class="fields">
-  <div><label for="asset">Ativo</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
+  <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
   <div><label for="limit">Máximo de entradas por dia</label><input id="limit" type="number" min="1" max="100" value="5"></div>
@@ -141,7 +141,7 @@ function render(s){
  $("decision").textContent=a.direction?(a.direction==="call"?"CALL · ENTRADA ELEGÍVEL":"PUT · ENTRADA ELEGÍVEL"):(a.reason?"AGUARDANDO CONSENSO":"SEM CONEXÃO");
  $("decision").style.color=a.direction==="call"?"var(--green)":a.direction==="put"?"var(--red)":"var(--fg)";
  $("decisionWhy").textContent=a.reason||s.message||"Aguardando dados";
- $("marketInfo").textContent=connected?(s.config.asset+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
+ $("marketInfo").textContent=connected?((s.analysis_asset||s.config.asset)+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
  (a.agents||[]).forEach((v,i)=>{if(i>4)return;const p=$("agent"+i),side=v.direction;p.className="agent"+(side==="call"?" call":side==="put"?" put":"");$("signal"+i).textContent=side?side.toUpperCase():"NEUTRO";$("reason"+i).textContent=v.reason||"Sem análise";});
  if(!a.agents){for(let i=0;i<5;i++){$("agent"+i).className="agent";$("signal"+i).textContent="AGUARDANDO";$("reason"+i).textContent="Esperando candles M1";}}
  $("riskNotice").textContent=s.uncertain?"Ordem incerta: confira a conta DEMO antes de reconectar.":s.message||"Somente PRACTICE.";
