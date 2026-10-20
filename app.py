@@ -62,19 +62,20 @@ def limits(c):
 
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
-    candidates=[];cursor=0;catalog_at=0;seen=set()
+    candidates=[];catalog_at=0;seen=set()
     try:
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
             for error in batch.get('errors',[]):log(error)
-            selected=None
+            selected=None;selected_score=None
+            payouts={x['asset']:float(x.get('payout',0)) for x in candidates}
             for item in batch['items']:
                 try:
                     analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
@@ -87,8 +88,12 @@ def loop(c):
                 if key not in seen:
                     seen.add(key);state['analyzed_count']+=1
                     log(item['asset']+' · '+analysis['reason'])
-                if selected is None or (analysis.get('direction') and not selected[1].get('direction')):
-                    selected=(item,analysis)
+                # Escolher entre os sinais válidos pelo quórum, regime ADX e payout;
+                # nunca fingir que pontuação equivale a chance de WIN.
+                score=(int(bool(analysis.get('direction'))),int(analysis.get('quality',0)),
+                       min(float(analysis.get('adx14',0)),35.0),payouts.get(item['asset'],0.0))
+                if selected_score is None or score>selected_score:
+                    selected=(item,analysis);selected_score=score
             state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
             if selected is None:
                 state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
