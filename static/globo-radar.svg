@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" role="img" aria-label="Globo dourado digital girando">
+<defs>
+ <radialGradient id="sphere" cx=".33" cy=".24" r=".79"><stop offset="0" stop-color="#ffe49c"/><stop offset=".2" stop-color="#dca73c"/><stop offset=".56" stop-color="#6b410c"/><stop offset=".88" stop-color="#241606"/><stop offset="1" stop-color="#100b05"/></radialGradient>
+ <radialGradient id="rim" cx=".44" cy=".45" r=".6"><stop offset=".44" stop-color="#fff3b0" stop-opacity="0"/><stop offset=".83" stop-color="#ffc45a" stop-opacity=".25"/><stop offset=".98" stop-color="#ffdf83" stop-opacity=".8"/><stop offset="1" stop-color="#fff0c4"/></radialGradient>
+ <radialGradient id="lit" cx=".29" cy=".2" r=".72"><stop offset="0" stop-color="#fff7be" stop-opacity=".64"/><stop offset=".4" stop-color="#f3bd46" stop-opacity=".09"/><stop offset=".83" stop-color="#030101" stop-opacity=".6"/><stop offset="1" stop-color="#000" stop-opacity=".92"/></radialGradient>
+ <pattern id="dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#f9cb68" opacity=".62"/></pattern>
+ <filter id="outerglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"/></filter>
+ <clipPath id="clip"><circle cx="300" cy="300" r="244"/></clipPath>
+ <g id="world" fill="#ffc966" fill-opacity=".56" stroke="#ffe7a2" stroke-width="1.6" stroke-opacity=".8">
+  <path d="M57 169 L91 133 138 111 175 123 205 148 196 182 178 194 156 206 135 237 120 243 108 275 94 269 90 233 74 214 51 197Z"/>
+  <path d="M159 255 L189 247 211 268 235 293 225 330 211 358 200 401 176 449 162 474 151 444 159 413 145 375 144 346 127 313 131 288Z"/>
+  <path d="M222 175 L254 154 279 166 296 190 282 207 245 205Z"/>
+  <path d="M292 134 L336 122 378 137 410 129 445 143 490 136 540 161 557 185 531 212 510 226 483 215 447 242 428 233 399 253 372 241 355 213 335 205 311 193 289 174Z"/>
+  <path d="M358 247 L397 241 425 259 443 291 432 326 407 365 395 404 371 439 346 416 342 376 321 331 332 291Z"/>
+  <path d="M478 312 L503 298 526 328 552 350 532 371 492 372 469 340Z"/>
+  <path d="M224 204 l15 15 -9 25 -21 -10Z M316 227 l15 10 -8 14 -16 -8Z"/>
+  <path d="M500 254 l9 13 -9 14 -12 -10Z M428 402 l6 22 -12 15 -9 -23Z"/>
+ </g>
+</defs>
+<style>
+ #drift{animation:terrain 24s linear infinite}
+ @keyframes terrain{from{transform:translateX(0px)}to{transform:translateX(-600px)}}
+ @media(prefers-reduced-motion:reduce){#drift{animation:none}}
+</style>
+<circle cx="300" cy="300" r="254" fill="none" stroke="#fac05c" stroke-width="13" opacity=".65" filter="url(#outerglow)"/>
+<circle cx="300" cy="300" r="246" fill="url(#sphere)" stroke="#ffda88" stroke-width="2"/>
+<g clip-path="url(#clip)">
+ <g id="drift"><use href="#world" x="0"/><use href="#world" x="600"/><use href="#world" x="1200"/></g>
+ <g fill="none" stroke="#f4c66d" stroke-width="1" opacity=".35">
+  <ellipse cx="300" cy="300" rx="244" ry="70"/><ellipse cx="300" cy="300" rx="244" ry="144"/>
+  <ellipse cx="300" cy="300" rx="103" ry="244"/><ellipse cx="300" cy="300" rx="194" ry="244"/>
+  <path d="M56 300H544 M300 56V544"/>
+ </g>
+ <circle cx="300" cy="300" r="246" fill="url(#dots)" opacity=".55"/>
+ <circle cx="300" cy="300" r="246" fill="url(#lit)"/>
+</g>
+<circle cx="300" cy="300" r="245" fill="url(#rim)"/>
+<circle cx="300" cy="300" r="246" stroke="#ffc15b" fill="none" stroke-width="1.6"/>
+<path d="M103 143 Q300 -5 478 150" fill="none" stroke="#fff4b8" stroke-width="3" opacity=".5"/>
+<circle cx="137" cy="124" r="3" fill="#fff5bd"/><circle cx="443" cy="462" r="3" fill="#fff5bd"/>
+</svg>
