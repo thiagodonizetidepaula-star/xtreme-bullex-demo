@@ -167,7 +167,7 @@ function config(){const num=id=>Number($(id).value);return{asset:$("asset").valu
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}await act("/api/connect",{email,password},"Conexão DEMO solicitada");$("password").value="";};
 $("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
-$("start").onclick=async()=>{if(busy)return;const cfg=config();await act("/api/config",cfg,"Limites atualizados.");if(lastState && !running && connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
+$("start").onclick=async()=>{if(busy)return;const cfg=config();const saved=await act("/api/config",cfg,"Limites atualizados.");if(saved&&lastState&&!running&&connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
 $("stop").onclick=()=>act("/api/stop",{},"Parada solicitada. Ordens abertas serão acompanhadas.");
 $("logout").onclick=()=>act("/api/logout",{},"Sessão encerrada").then(()=>{location.reload();});
 drawAgents();drawCandles([]);poll();setInterval(poll,2500);
