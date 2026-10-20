@@ -113,3 +113,77 @@
   .scanner-header h2{font-size:15px}
   #settingsToggle{padding:9px 11px}
 }
+
+
+/* Resultado da ordem PRACTICE: contagem do vencimento e celebração WIN / tristeza LOSS. */
+.trade-countdown{
+ position:absolute;left:50%;bottom:24%;z-index:14;transform:translateX(-50%);
+ min-width:200px;max-width:90%;padding:12px 22px;border:1px solid #e5bb64;
+ border-radius:14px;text-align:center;pointer-events:none;
+ background:linear-gradient(125deg,#161107f0,#050708f4);
+ box-shadow:0 0 28px #d5a24b5a,inset 0 0 22px #cfa4481e;
+ font-variant-numeric:tabular-nums;
+}
+.trade-countdown .countdown-title{
+ font-size:11px;font-weight:800;letter-spacing:.11em;color:#e9c67e;
+}
+.trade-countdown .countdown-clock{
+ font-size:clamp(35px,5vw,55px);font-weight:930;letter-spacing:.055em;
+ line-height:1.15;margin:4px 0;color:#fff0bd;text-shadow:0 0 19px #ffd379aa;
+}
+.trade-countdown .countdown-sub{
+ font-size:11px;font-weight:520;color:#e7d0a6;
+}
+.result-fx{
+ position:absolute;inset:0;z-index:25;display:flex;flex-direction:column;
+ align-items:center;justify-content:center;gap:16px;
+ pointer-events:none;overflow:hidden;
+ background:radial-gradient(ellipse at center,#08110b72,transparent 72%);
+}
+.result-fx.is-loss{background:radial-gradient(ellipse at center,#2d090b9e,transparent 65%)}
+.result-symbol{
+ position:relative;z-index:2;display:grid;place-items:center;font-size:clamp(70px,11vw,112px);
+ filter:drop-shadow(0 0 22px #ffc868);animation:resultPop .48s cubic-bezier(.16,1.2,.38,1.12) both;
+}
+.result-fx.is-loss .result-symbol{filter:drop-shadow(0 0 18px #ff505888);animation:resultPop .48s ease both,lossFloat 2s ease-in-out .48s infinite}
+.result-label{
+ position:relative;z-index:2;color:#76ffaf;border:1px solid #45e589;
+ border-radius:12px;background:#05120edb;padding:13px 22px;
+ font-weight:950;letter-spacing:.06em;text-align:center;font-size:clamp(17px,2.8vw,27px);
+ text-shadow:0 0 16px #26fc75aa;box-shadow:0 0 24px #20ef7455;
+ animation:resultPop .48s ease both;
+}
+.result-fx.is-loss .result-label{
+ color:#ff9ca3;border-color:#fc5364;background:#250b10ef;
+ text-shadow:0 0 13px #ee404999;box-shadow:0 0 22px #fa345355;
+}
+.confetti-wrap{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.confetti-bit{
+ display:block;position:absolute;top:-30px;left:var(--x);width:10px;height:21px;
+ opacity:.98;background:var(--hue);border-radius:2px;
+ box-shadow:0 0 8px var(--hue);
+ animation:winConfetti var(--duration) ease-in var(--delay) forwards;
+}
+.confetti-bit:nth-child(4n){width:7px;height:13px;border-radius:50%}
+.confetti-bit:nth-child(6n){width:15px;height:6px}
+@keyframes winConfetti{
+ 0%{transform:translate3d(0,-30px,0) rotate(0deg);opacity:0}
+ 8%{opacity:1}
+ 100%{transform:translate3d(var(--drift),640px,0) rotate(var(--rotation));opacity:0}
+}
+@keyframes resultPop{
+ from{transform:scale(.4) translateY(12px);opacity:0}
+ to{transform:scale(1) translateY(0);opacity:1}
+}
+@keyframes lossFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(9px)}}
+@media(max-width:540px){
+ .trade-countdown{bottom:23%;min-width:180px;padding:10px 13px}
+ .trade-countdown .countdown-title{font-size:9px}
+ .trade-countdown .countdown-sub{font-size:10px}
+ .result-fx{gap:10px}
+ .result-label{max-width:92%;padding:10px 14px}
+}
+@media(prefers-reduced-motion:reduce){
+ .result-fx *,.confetti-bit{animation:none!important}
+ .confetti-bit{display:none}
+}
