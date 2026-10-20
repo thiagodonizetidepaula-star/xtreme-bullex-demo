@@ -44,7 +44,11 @@ def management():
     done=[t for t in ts if t['status'] in ('WIN','LOSS','EMPATE')]
     profit=round(sum(t.get('profit',0) for t in done),2)
     c=state['config'];wins=sum(t['status']=='WIN' for t in done);losses=sum(t['status']=='LOSS' for t in done)
-    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'can_trade':risk_ok(c,profit,len(ts))}
+    consecutive_losses=0
+    for t in reversed(done):
+        if t['status']=='LOSS':consecutive_losses+=1
+        else:break
+    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'consecutive_losses':consecutive_losses,'can_trade':risk_ok(c,profit,len(ts)) and consecutive_losses<3}
 def comparison():
     out=[]
     for key,name in STRATEGIES.items():
@@ -54,7 +58,7 @@ def comparison():
     return out
 def limits(c):
     m=management()
-    return risk_ok(c,m['profit'],m['used'])
+    return m['can_trade']
 
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
@@ -92,7 +96,7 @@ def loop(c):
             item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
-            state['analysis']=a;state['candles']=data['candles'][-50:]
+            state['analysis']=a;state['analysis_asset']=item['asset'];state['candles']=data['candles'][-50:]
             if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
                 evaluated=(c['asset'],a['candle'])
                 checks=a.get('checks',{})
