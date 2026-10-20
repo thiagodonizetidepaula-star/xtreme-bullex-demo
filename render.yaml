@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: xtreme-bullex-demo
+    name: mesa-traders-bullex-demo
     runtime: python
     plan: free
+    branch: mesa-traders-demo
     buildCommand: pip install -r requirements.txt && python bootstrap.py
     startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 180 --bind 0.0.0.0:$PORT
     healthCheckPath: /health
