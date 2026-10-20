@@ -202,6 +202,8 @@ def entry_allowed(trades, asset, candle, strategy):
     previous=[t for t in trades if t.get('asset')==asset and t.get('candle') is not None]
     if any(t['candle']==candle for t in previous):return False,'Sinal duplicado para ativo e candle.'
     if strategy=='repetition' and any(t.get('strategy_key')=='repetition' and t.get('status')!='IGNORADA' and candle<t['candle']+180 for t in previous):return False,'Aguardando três novas velas sem reutilizar a sequência anterior.'
+    if strategy=='mesa' and any(t.get('strategy_key')=='mesa' and t.get('status') not in ('IGNORADA',) and t.get('candle') is not None and 0<=candle-t['candle']<180 for t in previous):
+        return False,'Aguardando três velas M1 entre operações do mesmo ativo.'
     return True,''
 
 def validate_config(c):
@@ -223,7 +225,7 @@ def risk_ok(config, profit, count):
 
 # Mesa: estratégia adicional isolada, preservando os métodos anteriores.
 from mesa_strategy import analyze_mesa
-STRATEGIES['mesa'] = 'Mesa de Traders · cinco votos'
+STRATEGIES['mesa'] = 'Mesa Tendência 6 · M1/M5'
 _analyze_selected_original = analyze_selected
 def analyze_selected(candles, now, strategy='rejection', source='hl2'):
     if strategy == 'mesa':
