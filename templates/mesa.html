@@ -35,9 +35,10 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
-<div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout">Sair</button></div></header>
+<div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
 <main>
 <div id="radarMount"></div>
+<p class="small" style="max-width:1180px;margin:10px auto 0;line-height:1.5">O celular pode fechar a página sem tocar em Sair: enquanto o servidor estiver ativo, o robô continua nele. No Render gratuito, a execução não é contínua: o serviço pode hibernar após 15 minutos sem acesso.</p>
 <section class="settings-drawer" id="advancedSettings" hidden aria-label="Configurações avançadas do robô">
 <div class="headline"><div><h2>Central de operações</h2><div class="small">Gerenciamento, gráficos e histórico · somente PRACTICE</div></div><span class="tag" id="modeLabel">CONTA PRACTICE</span></div>
 <div class="stats">
@@ -73,7 +74,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 <p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
 </section>
 </main>
-<div class="overlay" id="loginLayer"><form class="login" id="loginForm"><h2>Entrar na Mesa de Traders</h2><p>Informe a chave privada do painel Render. Esta não é a senha da Bullex.</p><label for="key">Chave de acesso ao aplicativo</label><input type="password" id="key" autocomplete="off" required minlength="16"><div class="error" id="loginError"></div><button class="btn full" type="submit">Abrir painel</button></form></div>
+<div class="overlay" id="loginLayer"><form class="login" id="loginForm"><h2>Entrar na Mesa de Traders</h2><p>Informe a chave privada do painel. Ela não é a senha da Bullex. Após entrar, o acesso fica salvo por até 30 dias neste navegador; apenas fechar o Chrome não encerra a sessão.</p><label for="key">Chave de acesso ao aplicativo</label><input type="password" id="key" autocomplete="off" required minlength="16"><div class="error" id="loginError"></div><button class="btn full" type="submit">Abrir painel</button></form></div>
 <script>
 (function(){
 "use strict";
@@ -146,7 +147,7 @@ $("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("p
 $("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
 $("start").onclick=async()=>{if(busy)return;const cfg=config();const saved=await act("/api/config",cfg,"Limites atualizados.");if(saved&&lastState&&!running&&connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
 $("stop").onclick=()=>act("/api/stop",{},"Parada solicitada. Ordens abertas serão acompanhadas.");
-$("logout").onclick=()=>act("/api/logout",{},"Sessão encerrada").then(()=>{location.reload();});
+$("logout").onclick=async()=>{if(!window.confirm("Quer encerrar a sessão neste celular? Para sair e voltar sem fazer login, apenas feche a aba. Este botão faz logout."))return;const result=await act("/api/logout",{},"Acesso encerrado");if(result)location.reload();};
 $("settingsToggle").onclick=()=>{const drawer=$("advancedSettings");drawer.hidden=!drawer.hidden;$("settingsToggle").setAttribute("aria-expanded",String(!drawer.hidden));$("settingsToggle").textContent=drawer.hidden?"⚙ Configurações":"✕ Fechar configurações";if(!drawer.hidden)drawer.scrollIntoView({behavior:"smooth",block:"start"});};
 drawCandles([]);poll();setInterval(poll,2500);
 })();
