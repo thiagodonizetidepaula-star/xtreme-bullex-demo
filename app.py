@@ -700,7 +700,14 @@ def connect():
             # The optional chart history must NEVER fail an otherwise valid
             # authenticated PRACTICE connection.
             try:initial=client.call('candles',asset=state['config']['asset'],timeout=18)
-            except (RuntimeError,ValueError,KeyError):
+            except RuntimeError as exc:
+                # A chart-data error may be optional, but an IPC timeout kills
+                # the Bullex worker; never report a disconnected session as online.
+                if 'Sem resposta da corretora' in str(exc) or client.p.poll() is not None:
+                    raise
+                initial={'candles':[]}
+                log('PRACTICE conectada. Gráfico aguardando novo candle M1.')
+            except (ValueError,KeyError):
                 initial={'candles':[]}
                 log('PRACTICE conectada. Gráfico aguardando novo candle M1.')
             # Seed the visible graph immediately after PRACTICE connection,
