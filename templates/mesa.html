@@ -54,7 +54,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 <div class="two">
 <section class="panel"><h2>Conexão e gerenciamento</h2>
 <div class="controls">
- <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao próprio backend; nunca gravadas no navegador nem no GitHub.</div></div>
+ <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao backend; não armazenadas no navegador nem no GitHub. Se o servidor reiniciar, a Bullex precisará ser reconectada.</div>
+<div class="small" style="margin-top:12px">
+ <label><input id="reviewedOrders" type="checkbox" style="width:auto;margin-right:6px">Conferi operações incertas no histórico da Bullex DEMO.</label>
+ <button type="button" class="btn secondary" id="reviewOrders">Confirmar revisão</button>
+</div></div>
  <div class="controlbox"><h3>2 · Limites para operações automáticas</h3>
  <div class="fields">
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
@@ -68,7 +72,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  <div class="actions"><button class="btn secondary" id="save">Salvar limites</button><button class="btn" id="start" disabled>▶ Iniciar robô DEMO</button><button class="btn stop" id="stop" disabled>■ Parar</button></div></div>
  <div class="small" id="feedback" role="status">Aguardando.</div>
 </div></section>
-<section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">O histórico desta versão fica em memória. Reinícios do Render podem apagá-lo.</p><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
+<section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">Operações são recuperadas do Supabase mesmo após reinício do Render. Registros anteriores à integração podem não estar disponíveis.</p><div class="small" id="historyStatus" role="status" style="margin-bottom:10px">Carregando histórico...</div><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
 </div>
 <div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Seis filtros internos analisam os pares: EMA20/50/100 em M1, alinhamento M5, força ADX/DI, momentum MACD, RSI direcional e recuo com vela de retomada. Exige 5 de 6 confirmações e o alinhamento obrigatório da tendência M1/M5, ADX e entrada técnica; limita reentradas por par por três velas. Mantém janela de dois segundos, verificação de payout, ativo habilitado, stops e conta PRACTICE. Os votos não representam probabilidade de acerto.</p></section></div>
 <p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
@@ -81,14 +85,21 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 const $=id=>document.getElementById(id);
 const safe=x=>String(x==null?"":x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-let csrf="", connected=false, running=false, ready=false, syncing=false, first=true, busy=false, lastAssets="", lastState=null;
+let csrf="", connected=false, running=false, ready=false, syncing=false, historyLoading=false, first=true, busy=false, lastAssets="", lastState=null;
 const cash=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
 function feedback(x,error=false){$("feedback").textContent=x;$("feedback").style.color=error?"var(--red)":"var(--muted)";const quick=$("quickFeedback");if(quick){quick.textContent=x;quick.classList.toggle("error",!!error);}}
 async function api(url,data){const opts={credentials:"same-origin",cache:"no-store"};if(data!==undefined){opts.method="POST";opts.headers={"Content-Type":"application/json","X-CSRF-Token":csrf};opts.body=JSON.stringify(data);}const res=await fetch(url,opts);const r=await res.json().catch(()=>({error:"Resposta inválida do servidor"}));if(!res.ok)throw Error(r.error||"Falha "+res.status);return r;}
 async function login(key){const r=await api("/api/access",{key});csrf=r.csrf;$("key").value="";$("loginLayer").classList.add("hidden");await poll();}
 async function poll(){
  if(syncing)return;syncing=true;
- try{const s=await api("/api/state");csrf=s.csrf||csrf;lastState=s;render(s);$("loginLayer").classList.add("hidden");}
+ try{let s=await api("/api/state");csrf=s.csrf||csrf;
+ if(!s.history_ready && !historyLoading){
+  historyLoading=true;
+  try{const hist=await api("/api/history");s={...s,trades:hist.trades,history_ready:hist.history_ready,uncertain:hist.uncertain};}
+  catch(err){s.history_error=err.message;}
+  finally{historyLoading=false;}
+ }
+ lastState=s;render(s);$("loginLayer").classList.add("hidden");}
  catch(e){if(String(e.message).includes("Entre com a chave")){$("loginLayer").classList.remove("hidden");}else feedback(e.message,true);}
  finally{syncing=false;}
 }
@@ -110,6 +121,7 @@ function render(s){
  connected=!!s.connected;running=!!s.running;assets(s);
  if(first){setConfig(s.config);first=false;}
  const mg=s.management||{};
+ const hs=$("historyStatus");if(hs)hs.textContent=s.history_ready?"Histórico permanente conectado ao Supabase":(s.history_error||"Carregando histórico permanente...");
  $("led").className="indicator"+(running?" active":connected?" warn":"");
  $("connection").textContent=running?"ROBÔ AUTOMÁTICO ATIVO":connected?"PRACTICE conectada":"Corretora desconectada";
  $("balance").textContent=cash(s.balance);$("currency").textContent=connected?(s.currency||"Saldo PRACTICE"):"Aguardando conexão";
@@ -123,7 +135,7 @@ function render(s){
  ["asset","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("marketInfo").textContent=connected?((s.analysis_asset||s.config.asset)+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
  $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
- '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small></div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
+ '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small>'+(t.reason?'<small>'+safe(t.reason)+'</small>':'')+'</div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
  $("feed").innerHTML=(s.logs||[]).slice().reverse().slice(0,25).map(e=>'<div>'+safe((e.time||"").slice(11,19))+" · "+safe(e.text||"")+'</div>').join("")||"Sem registros.";
  drawCandles(s.candles||[]);
  if(window.updateGlobeRadar)window.updateGlobeRadar(s);
@@ -143,6 +155,7 @@ function drawCandles(bars){
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
 function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:"mesa",sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
+$("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}await act("/api/connect",{email,password},"Conexão DEMO solicitada");$("password").value="";};
 $("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
 $("start").onclick=async()=>{if(busy)return;const cfg=config();const saved=await act("/api/config",cfg,"Limites atualizados.");if(saved&&lastState&&!running&&connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
