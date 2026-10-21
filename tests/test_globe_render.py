@@ -27,7 +27,7 @@ class GlobeRadarJavaScriptTests(unittest.TestCase):
             self.assertEqual(result.returncode,0,result.stderr)
     def test_browser_uses_fixed_js_asset_version(self):
         page=(ROOT/'templates/mesa.html').read_text(encoding='utf-8')
-        self.assertIn('/static/globo-radar.js?v=expiry-globe-fix2',page)
+        self.assertIn('/static/globo-radar.js?v=feed-recovery-20261021',page)
         self.assertIn('id="radarMount"',page)
 
 if __name__=='__main__':
