@@ -303,7 +303,7 @@ def loop(c):
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];trade['catalog_age']=order.get('catalog_age');trade['catalog_latency']=order.get('catalog_latency');state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
                 else:
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],expiration=order['expiration'],expiry_minutes=c.get('expiry_minutes',1),source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'),catalog_latency=order.get('catalog_latency'));state['last_signal']['status']='confirmed';
+                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],expiration=order.get('expiration',trade['expiration']),expiry_minutes=c.get('expiry_minutes',1),source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'),catalog_latency=order.get('catalog_latency'));state['last_signal']['status']='confirmed';
                     if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
                     log('Ordem confirmada na DEMO. Aguardando resultado.');save_trade(trade)
                     result=client.call('result',timeout=120+60*c.get('expiry_minutes',1),id=order['id'])
