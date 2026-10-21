@@ -3,6 +3,7 @@ from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 from mesa_history import TradeHistory,HistoryError
+from mesa_quant import snapshot,metrics,grouped,risk_decision,breakeven,DEFAULT_FILTERS,check_filters
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -105,6 +106,13 @@ def comparison():
     return out
 def limits(c):
     m=management()
+    if not c.get('stop_win_enabled',True) or not c.get('stop_loss_enabled',True):return False
+    recent=[t for t in state['trades'] if t.get('status') in ('WIN','LOSS')]
+    if len(recent)>=50:
+        last=recent[-50:]
+        payouts=[t.get('payout') for t in last]
+        if not all(isinstance(p,(int,float)) and p>0 for p in payouts):return False
+        if sum(t['status']=='WIN' for t in last)/50 < breakeven(sum(payouts)/50):return False
     return m['can_trade']
 
 def loop(c):
@@ -164,8 +172,39 @@ def loop(c):
                 with lock:
                     if stop.is_set():break
                     trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
+                    # Indicadores congelados da vela fechada (nunca reestimados depois da ordem).
+                    sorted_candles=sorted(data['candles'],key=lambda b:float(b['from']))
+                    features=snapshot(c['asset'],a,sorted_candles[-1],
+                                      a['candle']+60,payouts.get(c['asset']),c['stake'])
+                    shadow={}
+                    for filter_name in DEFAULT_FILTERS:
+                        if filter_name=='bad_segments':
+                            shadow[filter_name]={'passed':None,'reason':'Exige 300 operações anteriores por par/horário'}
+                            continue
+                        assessment=check_filters(a,sorted_candles,a['candle']+60,
+                                         c['asset'],switches={filter_name:True},events=None)
+                        shadow[filter_name]={'passed':assessment['checks'].get(filter_name),
+                                             'details':assessment.get('meta') or {}}
+                    features['shadow_filters']=shadow
+                    trade.update(features=features,
+                                 timestamp_utc=features['timestamp_utc'],
+                                 timestamp_brasilia=features['timestamp_brasilia'],
+                                 timeframe='M1/M5',payout=payouts.get(c['asset']))
                     state['trades'].append(trade)
                     state['uncertain']=True
+                allowed_risk,why_risk=risk_decision(
+                    [t for t in state['trades'] if t is not trade],
+                    state.get('balance') if isinstance(state.get('balance'),(int,float)) else float('nan'),
+                    c['stake'],payouts.get(c['asset'],0),c['stop_win'],c['stop_loss'],
+                    c['limit'],c['asset'],a['candle'],c['payout'])
+                if not allowed_risk:
+                    trade['status']='IGNORADA'
+                    trade['reason']='Gestão de risco: '+why_risk
+                    state['uncertain']=False
+                    state['last_signal']['status']='ignored'
+                    save_trade(trade)
+                    stop.wait(.1)
+                    continue
                 order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
@@ -219,6 +258,18 @@ def get_history():
         return jsonify(error=state['history_error'],history_ready=False),503
     with lock:return jsonify(trades=state['trades'],history_ready=True,uncertain=state['uncertain'])
 
+@app.get('/api/performance')
+def performance():
+    if not restore_history():return jsonify(error=state['history_error']),503
+    with lock:
+        settled=list(state['trades'])
+    return jsonify(total=metrics(settled),by_pair=grouped(settled,'asset'),
+                   by_hour=grouped(settled,'hour'),
+                   by_confirmations=grouped(settled,'votes'),
+                   by_filters=grouped(settled,'filter'),
+                   filter_activation={name:'research_only' for name in DEFAULT_FILTERS},
+                   disclaimer='Somente DEMO. Histórico pequeno não prova vantagem ou ganhos.')
+
 @app.post('/api/review')
 def review():
     data=request.get_json(silent=True) or {}
@@ -255,7 +306,12 @@ def connect():
 def config():
     with lock:
         if state['running']:return jsonify(error='Pare o robô para editar.'),409
-        try:state['config']=validate_config(request.get_json());return jsonify(ok=True)
+        try:
+            cfg=validate_config(request.get_json())
+            if not cfg.get('stop_win_enabled',True) or not cfg.get('stop_loss_enabled',True):
+                return jsonify(error='Stop win e stop loss são obrigatórios.'),400
+            state['config']=cfg
+            return jsonify(ok=True)
         except Exception as e:return jsonify(error=str(e)),400
 @app.post('/api/start')
 def start():
@@ -268,7 +324,10 @@ def start():
         if state['uncertain']:return jsonify(error='Uma operação anterior ficou sem resultado confirmado. Confira na Bullex PRACTICE e confirme a revisão em Configurações.'),409
         c=dict(state['config'])
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
-        if not limits(c):return jsonify(error='Limites do dia atingidos.'),409
+        if not limits(c):return jsonify(error='Stop, limite ou pausa de 50 operações atingido.'),409
+        balance=state.get('balance')
+        if not isinstance(balance,(int,float)) or not math.isfinite(balance) or not 0<c['stake']<=balance*.02:
+            return jsonify(error='Entrada fixa deve ser no máximo 2% do saldo DEMO.'),409
         stop.clear();state['running']=True;bot=threading.Thread(target=loop,args=(c,),daemon=True);bot.start()
         return jsonify(ok=True)
 @app.post('/api/stop')

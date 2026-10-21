@@ -32,7 +32,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
 <script src="/static/globo-radar.js?v=20261020trend6" defer></script>
-</head>
+<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
@@ -68,12 +68,35 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
   <div><label for="stopwin">Stop win</label><input id="stopwin" type="number" min=".01" step=".01" value="20"></div>
   <div><label for="stoploss">Stop loss</label><input id="stoploss" type="number" min="2" step=".01" value="10"></div>
  </div>
- <div class="switches"><label><input type="checkbox" id="usewin" checked> Ativar stop win</label><label><input type="checkbox" id="useloss" checked> Ativar stop loss</label></div>
+ <div class="switches"><label><input type="checkbox" id="usewin" disabled checked> Ativar stop win</label><label><input type="checkbox" id="useloss" disabled checked> Ativar stop loss</label></div>
  <div class="actions"><button class="btn secondary" id="save">Salvar limites</button><button class="btn" id="start" disabled>▶ Iniciar robô DEMO</button><button class="btn stop" id="stop" disabled>■ Parar</button></div></div>
  <div class="small" id="feedback" role="status">Aguardando.</div>
 </div></section>
 <section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">Operações são recuperadas do Supabase mesmo após reinício do Render. Registros anteriores à integração podem não estar disponíveis.</p><div class="small" id="historyStatus" role="status" style="margin-bottom:10px">Carregando histórico...</div><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
 </div>
+<section class="performance-panel" aria-label="Painel de desempenho estatístico" id="performancePanel">
+ <div class="performance-header"><div><h2>Desempenho · evidência mensurável</h2>
+ <p class="small">Resultados reais DEMO, sem otimização na amostra de teste. Exige 300 operações e limite inferior IC95% acima do equilíbrio.</p></div>
+ <button class="btn secondary" type="button" id="loadPerformance">Atualizar desempenho</button></div>
+ <p class="small" id="performanceStatus" role="status">Clique para consultar o histórico no Supabase.</p>
+ <div class="performance-grid">
+  <div class="cell"><span>Operações concluídas</span><strong id="performanceN">—</strong></div>
+  <div class="cell"><span>Taxa de acerto</span><strong id="performanceWinRate">—</strong></div>
+  <div class="cell"><span>Equilíbrio pelo payout</span><strong id="performanceBreakEven">—</strong></div>
+  <div class="cell"><span>IC 95% inferior</span><strong id="performanceCI">—</strong></div>
+  <div class="cell"><span>Expectativa por unidade apostada</span><strong id="performanceExpectancy">—</strong></div>
+  <div class="cell"><span>Drawdown máximo em moeda demo</span><strong id="performanceDrawdown">—</strong></div>
+ </div>
+ <p id="performanceVerdict" class="small">Sem aprovação estatística.</p>
+ <canvas id="performanceEquity" class="performance-chart" width="800" height="230" aria-label="Curva do saldo de operações DEMO"></canvas>
+ <div class="performance-tables">
+  <details><summary>Acerto por par</summary><div class="performance-table-wrap" id="performanceByPair"></div></details>
+  <details><summary>Acerto por horário UTC</summary><div class="performance-table-wrap" id="performanceByHour"></div></details>
+  <details><summary>Acerto por 4/6, 5/6 e 6/6</summary><div class="performance-table-wrap" id="performanceByVotes"></div></details>
+  <details><summary>Filtros experimentais: passou ou bloquearia</summary><div class="performance-table-wrap" id="performanceByFilter"></div></details>
+ </div>
+ <p class="small">AVISO: SOMENTE DEMO. Resultados passados não garantem ganhos. Os filtros experimentais não executam ordens automaticamente.</p>
+</section>
 <div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Seis filtros internos analisam os pares: EMA20/50/100 em M1, alinhamento M5, força ADX/DI, momentum MACD, RSI direcional e recuo com vela de retomada. Exige 5 de 6 confirmações e o alinhamento obrigatório da tendência M1/M5, ADX e entrada técnica; limita reentradas por par por três velas. Mantém janela de dois segundos, verificação de payout, ativo habilitado, stops e conta PRACTICE. Os votos não representam probabilidade de acerto.</p></section></div>
 <p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
 </section>
