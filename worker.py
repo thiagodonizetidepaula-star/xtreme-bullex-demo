@@ -3,6 +3,7 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
 from mesa_chart import WATCH_FILE,LIVE_FILE,valid_bar
+from mesa_market_capture import capture_snapshot,capture_payout,CAPTURE_STATS
 # A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
 # Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
 from bullexapi.ws.objects.timesync import TimeSync
@@ -105,6 +106,7 @@ def market(force=False):
         fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
     market_cache=fresh;market_at=received_at
+    capture_payout(fresh,received_at)
     return fresh
 
 def dispatch(c):
@@ -170,7 +172,8 @@ def dispatch(c):
             if not any(b.get('from')==current for b in snapshot):continue
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
             items.append({'asset':asset,'candles':closed})
-        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
+        capture_snapshot(items,now)
+        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors,'capture':dict(CAPTURE_STATS)}
     if op=='candles':
         now=broker_now()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
