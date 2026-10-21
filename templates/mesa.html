@@ -92,6 +92,15 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
    <option value="mesa">Mesa Tendência 6 (estratégia anterior)</option>
   </select>
   <div class="small" style="margin-top:5px">Só entra após fechamento de nova seta do Sniper na direção do Xtreme Tendência. Sem martingale; controle de risco mantido.</div></div>
+  <div style="grid-column:1/-1;border:1px solid #bc8d40;border-radius:12px;padding:12px;background:#1d170e">
+    <label for="demoUnlimited" style="display:flex;align-items:center;gap:10px;font-weight:800">
+      <input id="demoUnlimited" type="checkbox" checked style="width:auto;accent-color:#26dda0">
+      DEMO CONTÍNUA · sem stops e sem limite diário
+    </label>
+    <div id="demoModeLabel" class="small" style="margin-top:7px;line-height:1.5">
+      Exclusivamente PRACTICE. Permite continuar após LOSS, sem stop win/loss nem pausa por 50 operações. Entrada fixa até 2% da banca, payout mínimo, ordens únicas e segurança de dados permanecem.
+    </div>
+  </div>
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
@@ -162,10 +171,20 @@ async function poll(){
  catch(e){if(String(e.message).includes("Entre com a chave")){$("loginLayer").classList.remove("hidden");}else feedback(e.message,true);}
  finally{syncing=false;}
 }
+function updateDemoModeLabel(){
+ const enabled=$("demoUnlimited").checked;
+ const label=$("demoModeLabel");
+ label.textContent=enabled?
+  "Somente Bullex PRACTICE. Sem stop win, stop loss, limite diário ou pausa por perdas; mantidos payout mínimo, até 2% da banca por entrada, proteção contra ordem duplicada e 1 ordem aberta.":
+  "Modo protegido: aplica stop win/loss, limite de operações e pausas após perdas.";
+ for(const id of ["limit","stopwin","stoploss"])
+    $(id).disabled=enabled||running;
+}
 function setConfig(c){
  $("stake").value=c.stake;$("payout").value=c.payout;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
  $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
+ $("demoUnlimited").checked=c.demo_unlimited===true;updateDemoModeLabel();
 }
 function assets(s){
  const opts=(s.assets||[]).slice(0,400);
@@ -214,15 +233,16 @@ function render(s){
  const closed=(mg.wins||0)+(mg.losses||0);
  $("winrate").textContent=closed?(100*(mg.wins||0)/closed).toFixed(1)+"%":"—";
  $("record").textContent=(mg.wins||0)+" WIN · "+(mg.losses||0)+" LOSS · "+(mg.ties||0)+" EMPATE";
- $("trades").textContent=String(mg.used||0)+"/"+String(s.config.limit||5);
+ $("trades").textContent=s.config.demo_unlimited===true?String(mg.used||0)+" · DEMO SEM LIMITE":String(mg.used||0)+"/"+String(s.config.limit||5);
  $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected&&mg.can_trade===false?(mg.block_reason||"Pausa por limite de risco"):connected?"Pronto para iniciar":"Aguardando conexão";
  const blockReason=startBlockReason(s);
  $("start").disabled=running||!!blockReason;
  $("start").title=blockReason||"Robô DEMO pronto para iniciar";
- $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||"✓ Tudo pronto: conta PRACTICE validada. Pode iniciar o robô DEMO.";
+ $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||(s.config.demo_unlimited===true?"✓ Modo DEMO CONTÍNUO: PRACTICE verificada; sem pausa diária por LOSS.":"✓ Conta PRACTICE pronta para iniciar no modo protegido.");
  $("startBlockReason").className="start-guidance"+(running||!blockReason?" ready":"");
  $("stop").disabled=!running;
- ["asset","strategy","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ ["asset","strategy","stake","payout","usewin","useloss","save","demoUnlimited"].forEach(id=>$(id).disabled=running);
+ updateDemoModeLabel();
  $("marketInfo").textContent=connected?((s.analysis_asset||s.config.asset)+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
  $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
  '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small>'+(t.reason?'<small>'+safe(t.reason)+'</small>':'')+'</div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
@@ -243,7 +263,7 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("switchBullex").onclick=()=>{wantChangeAccount=!wantChangeAccount;$("bullexConnectFields").hidden=!wantChangeAccount;$("switchBullex").textContent=wantChangeAccount?"Cancelar troca de conta":"Trocar ou reconectar conta";};
@@ -254,6 +274,7 @@ $("connect").onclick=async()=>{
  $("password").value="";
  if(result&&result.ok){wantChangeAccount=false;feedback("✓ Bullex PRACTICE conectada. Confira os limites e inicie o robô DEMO.");await poll();}
 };
+$("demoUnlimited").addEventListener("change",updateDemoModeLabel);
 $("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
 $("start").onclick=async()=>{if(busy)return;const cfg=config();const saved=await act("/api/config",cfg,"Limites atualizados.");if(saved&&lastState&&!running&&connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
 $("stop").onclick=()=>act("/api/stop",{},"Parada solicitada. Ordens abertas serão acompanhadas.");
