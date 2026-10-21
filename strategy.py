@@ -209,7 +209,7 @@ def entry_allowed(trades, asset, candle, strategy):
 def validate_config(c):
     for k in ['stake','stop_win','stop_loss','payout','limit']:
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
-    for flag in ['stop_win_enabled','stop_loss_enabled','demo_unlimited']:
+    for flag in ['stop_win_enabled','stop_loss_enabled','demo_unlimited','pattern_only']:
         if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
     if c.get('sniper_source','hl2') not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')
     if c.get('strategy','rejection') not in STRATEGIES:raise ValueError('Estratégia inválida')
