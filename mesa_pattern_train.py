@@ -24,6 +24,24 @@ def get_all(gateway,kind,since,until,maxrows=1800000):
  if offset>=maxrows:raise RuntimeError("Dataset exceeds validated memory/row budget")
  return out
 
+def count_m5_feature_rows(candles):
+ """Compute indicator vectors for every available closed M5 after warmup;
+ current trade approval uses only M1 vectors to ensure live-feature parity."""
+ by_asset=collections.defaultdict(list)
+ for b in candles:
+  if b.get("timeframe")!=5:continue
+  try:
+   by_asset[b["asset"]].append({"from":stamp(b["candle_time"]),
+      "o":float(b["o"]),"h":float(b["h"]),"l":float(b["l"]),"c":float(b["c"])})
+  except (KeyError,ValueError,TypeError):continue
+ calculated=0
+ for asset,rows in by_asset.items():
+  rows.sort(key=lambda x:x["from"])
+  for i in range(109,len(rows)):
+   if features_for_closed(rows[max(0,i-125):i+1],timeframe=5) is not None:
+    calculated+=1
+ return calculated
+
 def last_payout(lookup,asset,when):
  obs=lookup.get(asset,[])
  if not obs:return None
@@ -199,7 +217,7 @@ def main():
  pay=get_all(gateway,"payouts",start,end)
  samples=prepare(rows,pay,args.expiration)
  approved,report=week_validate(samples,args.train_days,args.expiration)
- report.update({"collected_candles":len(rows),"quotes":len(pay),"expiry_m1":args.expiration,
+ report.update({"collected_candles":len(rows),"m5_feature_rows_computed":count_m5_feature_rows(rows),"quotes":len(pay),"expiry_m1":args.expiration,
    "approved_patterns":approved,"generated_utc":utc(end),
    "data_window":{"from":utc(start),"to":utc(end)}})
  with open(args.report,"w",encoding="utf-8") as f:json.dump(report,f,ensure_ascii=False,indent=2)
