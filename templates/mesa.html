@@ -52,13 +52,32 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 .open-slot .remaining{font-weight:800;color:#e7c67d;font-variant-numeric:tabular-nums;font-size:1.35rem}
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=three-open-20261021">
+<link rel="stylesheet" href="/static/mesa-voice.css?v=voice1">
 <script src="/static/globo-radar.js?v=three-open-20261021" defer></script>
+<script src="/static/mesa-voice.js?v=voice1" defer></script>
 <link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive4-confluence"><script src="/static/xtreme-live-chart.js?v=xtlive4-confluence" defer></script><link rel="stylesheet" href="/static/mesa-pattern-dashboard.css?v=learn1"><script src="/static/mesa-pattern-dashboard.js?v=learn1" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small" id="currentStrategyLabel">Xtreme Sniper + Tendência · Bullex PRACTICE · M1</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small connection-pill" role="status" aria-live="polite">Corretora desconectada</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Sair encerra a conexão PRACTICE e o login deste navegador">Sair da conta</button></div></header>
 <main>
 <div id="radarMount"></div>
+<section class="mesa-voice" aria-label="Assistente de voz da Mesa Trader">
+  <div class="mesa-voice-head">
+    <h2 class="mesa-voice-heading">🎙 Assistente de voz · PRACTICE</h2>
+    <div class="mesa-voice-buttons">
+      <button type="button" id="mesaVoiceToggle" aria-pressed="false">🔈 Ativar voz</button>
+      <button type="button" id="mesaVoiceTest">▶ Testar voz</button>
+    </div>
+  </div>
+  <div class="mesa-voice-bottom">
+    <label for="mesaVoiceVolume">Volume
+      <input id="mesaVoiceVolume" type="range" min="0" max="100" step="5" value="80" />
+      <span id="mesaVoiceVolumeValue">80%</span>
+    </label>
+    <div id="mesaVoiceStatus" class="mesa-voice-status" role="status" aria-live="polite">Toque em Ativar voz para anunciar novas entradas e resultados WIN/LOSS confirmados.</div>
+  </div>
+  <div class="mesa-voice-foot">Voz gratuita do Android em português. Mantenha a página aberta para ouvir; o navegador pode silenciar quando estiver em segundo plano.</div>
+</section>
 <p class="small" style="max-width:1180px;margin:10px auto 0;line-height:1.5">O celular pode fechar a página sem tocar em Sair: enquanto o servidor estiver ativo, o robô continua nele. No Render gratuito, a execução não é contínua: o serviço pode hibernar após 15 minutos sem acesso.</p>
 <section class="chart-on-home" id="chartHome" aria-label="Gráfico de candles ao vivo">
 <section class="panel">
@@ -344,6 +363,7 @@ function render(s){
  $("feed").innerHTML=(s.logs||[]).slice().reverse().slice(0,25).map(e=>'<div>'+safe((e.time||"").slice(11,19))+" · "+safe(e.text||"")+'</div>').join("")||"Sem registros.";
  if(window.XtremeChart)window.XtremeChart.update(s);else drawCandles(s.candles||[]);
  if(window.updateGlobeRadar)window.updateGlobeRadar(s);
+ if(window.MesaVoice)window.MesaVoice.update(s);
 }
 function drawCandles(bars){
  const canvas=$("chart"),ctx=canvas.getContext("2d"),w=canvas.width=900,h=canvas.height=400;
