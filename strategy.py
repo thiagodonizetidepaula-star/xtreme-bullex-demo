@@ -209,6 +209,9 @@ def entry_allowed(trades, asset, candle, strategy):
 def validate_config(c):
     # Candle/indicators stay M1; broker expiration may span 1, 2, 3 or 5 M1 bars.
     # Explicit whitelist avoids untested durations and boolean-as-number values.
+    concurrent=c.get('max_open_trades',1)
+    if type(concurrent) is not int or concurrent not in (1,2,3):
+        raise ValueError('Operações simultâneas permitidas: 1, 2 ou 3.')
     expiry=c.get('expiry_minutes',1)
     if type(expiry) is not int or expiry not in (1,2,3,5):
         raise ValueError('Expiração permitida: 1, 2, 3 ou 5 minutos.')
