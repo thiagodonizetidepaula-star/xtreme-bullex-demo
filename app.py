@@ -233,7 +233,14 @@ def loop(c):
             for error in batch.get('errors',[]):log(error)
             selected=None;selected_score=None
             payouts={x['asset']:float(x.get('payout',0)) for x in candidates}
-            for item in batch['items']:
+            # The Sniper ranks valid crosses only by payout (quality/ADX are
+            # absent on its signals). Inspect higher payout first and stop at
+            # the first valid aligned cross instead of burning the 2s entry
+            # window checking 80+ additional symbols.
+            scan_items=(sorted(batch['items'],
+                        key=lambda it:payouts.get(it['asset'],0),reverse=True)
+                        if c.get('strategy')=='sniper' else batch['items'])
+            for item in scan_items:
                 if stop.is_set():break
                 try:
                     analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
@@ -252,6 +259,10 @@ def loop(c):
                        min(float(analysis.get('adx14',0)),35.0),payouts.get(item['asset'],0.0))
                 if selected_score is None or score>selected_score:
                     selected=(item,analysis);selected_score=score
+                if c.get('strategy')=='sniper' and analysis.get('direction'):
+                    # Same choice as full Sniper score ranking: highest payout
+                    # confirmed signal. Still passes every order/risk check.
+                    break
             if stop.is_set():break
             state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
             if selected is None:
