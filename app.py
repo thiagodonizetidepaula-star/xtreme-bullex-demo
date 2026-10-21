@@ -541,7 +541,7 @@ def auth():
     # Os assets da página de login precisam funcionar ANTES da autenticação.
     # Apenas arquivos estáticos públicos GET/HEAD; API e dados seguem protegidos.
     if request.endpoint=='static' and request.method in ('GET','HEAD'):return
-    if request.path in ['/','/health','/api/access']:return
+    if request.path in ['/','/avancado','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     if not session.permanent:session.permanent=True
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
