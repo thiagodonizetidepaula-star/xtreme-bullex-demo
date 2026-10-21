@@ -366,9 +366,15 @@ def loop(c):
                 else:pattern_id=None
                 allowed,reason=entry_allowed(state['trades'],asset,candle,c.get('strategy','sniper'))
                 if not allowed:continue
+                available=state.get('balance')
+                reserved=sum(float(t['stake']) for t in _live_trades())
+                equity=available+reserved if isinstance(available,(int,float)) else float('nan')
+                if not isinstance(available,(int,float)) or available<c['stake']:
+                    state['message']='Saldo livre insuficiente para mais uma entrada PRACTICE.'
+                    continue
                 allowed_risk,why_risk=risk_decision(
                     state['trades'],
-                    state.get('balance') if isinstance(state.get('balance'),(int,float)) else float('nan'),
+                    equity,
                     c['stake'],payouts.get(asset,0),c['stop_win'],c['stop_loss'],
                     c['limit'],asset,candle,c['payout'],
                     demo_unlimited=c.get('demo_unlimited') is True,
@@ -515,6 +521,11 @@ def status():
         # Keep mobile polling lightweight; full permanent history remains /api/history.
         payload['trades']=state['trades'][-35:]
         payload['logs']=state['logs'][-25:]
+        payload['open_trades']=[{'asset':t['asset'],'direction':t['direction'],
+                                 'status':t['status'],'expiration':t.get('expiration'),
+                                 'stake':t['stake'],'event_key':t['event_key']}
+                                for t in _live_trades()]
+        payload['open_count']=len(payload['open_trades'])
     # Leitura local do último candle parcial validado, sem bloquear o motor.
     payload['chart_live']=published_candle(asset) if connected and asset else None
     payload['pattern_learning']={"enabled":pattern_gateway.enabled,
