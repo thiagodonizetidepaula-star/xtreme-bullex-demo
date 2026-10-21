@@ -5,6 +5,8 @@ from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_
 from mesa_history import TradeHistory,HistoryError
 from mesa_chart import studies,watch,published_candle
 from mesa_quant import snapshot,metrics,grouped,risk_decision,breakeven,DEFAULT_FILTERS,check_filters
+from mesa_pattern_client import PatternGateway
+from mesa_pattern_features import features_for_closed,normalized,matching_patterns
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -13,7 +15,58 @@ ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
 history_lock=threading.Lock();history=TradeHistory()
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+pattern_gateway=PatternGateway()
+pattern_stop=threading.Event()
+pattern_uploader=None;pattern_scanner=None
+pattern_cache={"active":[],"checked_at":0.0,"error":"Padrões ainda não consultados."}
+def approved_patterns(refresh=False):
+    # Fail closed: cached approvals expire; pattern may be disabled by last-50 guard.
+    if not pattern_gateway.enabled:
+        pattern_cache.update(active=[],error="Gateway de aprendizagem não conectado.",checked_at=time.monotonic())
+        return []
+    if refresh or time.monotonic()-pattern_cache["checked_at"]>60:
+        try:
+            active=pattern_gateway.patterns()
+            pattern_cache.update(active=active,checked_at=time.monotonic(),error="")
+        except Exception:
+            pattern_cache.update(active=[],checked_at=time.monotonic(),
+                                 error="Não foi possível confirmar padrões no Supabase.")
+    return pattern_cache["active"]
+
+def _pattern_passive_scanner():
+    """Leitura de dados durante pausa, SEM enviar ordens e SEM competir com operação ativa."""
+    assets=[];catalog_at=0.0
+    while not pattern_stop.wait(2):
+        if not state.get("connected") or client is None or state.get("running"):continue
+        try:
+            if not assets or time.monotonic()-catalog_at>45:
+                details=client.call("market",payout=state["config"]["payout"],
+                                    strategy=state["config"]["strategy"],timeout=22)
+                assets=[x["asset"] for x in details.get("assets",[])]
+                catalog_at=time.monotonic()
+            if assets:
+                # Worker saves every closed candle and hourly payout to its spool.
+                client.call("snapshot",assets=assets,timeout=24)
+        except Exception as e:
+            pattern_gateway.status["error"]="Scanner: "+str(e)[:120]
+            pattern_stop.wait(5)
+
+def start_pattern_collectors():
+    global pattern_uploader,pattern_scanner
+    if not pattern_gateway.enabled:
+        pattern_gateway.status["error"]="Supabase não configurado: coleta desativada."
+        return
+    pattern_stop.clear()
+    if pattern_uploader is None or not pattern_uploader.is_alive():
+        pattern_uploader=threading.Thread(target=pattern_gateway.run_upload,
+                     args=(pattern_stop,),daemon=True,name="mesa_closed_market_uploader")
+        pattern_uploader.start()
+    if pattern_scanner is None or not pattern_scanner.is_alive():
+        pattern_scanner=threading.Thread(target=_pattern_passive_scanner,
+                     daemon=True,name="mesa_passive_market_reader")
+        pattern_scanner.start()
+
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':False,'pattern_only':True,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -183,6 +236,15 @@ def loop(c):
                 log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
             state['message']=a['reason']
             if (c['asset'],a.get('candle'))!=last and a.get('direction'):
+                pattern_id=None
+                if c.get('pattern_only') is True:
+                    live_features=features_for_closed(normalized(item['candles']))
+                    matches=matching_patterns(approved_patterns(),a['direction'],live_features,expiry=1)
+                    if not matches:
+                        state['message']='Sem padrão aprovado para este sinal; coletando dados.'
+                        stop.wait(.1)
+                        continue
+                    pattern_id=matches[0]['pattern_id']
                 allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'],c.get('strategy','rejection'))
                 if not allowed:
                     log(c['asset']+': '+reason);stop.wait(.2);continue
@@ -205,7 +267,7 @@ def loop(c):
                         shadow[filter_name]={'passed':assessment['checks'].get(filter_name),
                                              'details':assessment.get('meta') or {}}
                     features['shadow_filters']=shadow
-                    trade.update(features=features,
+                    trade.update(features=features,pattern_id=pattern_id,
                                  timestamp_utc=features['timestamp_utc'],
                                  timestamp_brasilia=features['timestamp_brasilia'],
                                  timeframe='M1/M5',payout=payouts.get(c['asset']))
@@ -235,6 +297,10 @@ def loop(c):
                     trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
                     trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
                     state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status']);save_trade(trade)
+                    if pattern_id and pattern_gateway.enabled:
+                        try:pattern_gateway._request("POST","guard",json={})
+                        except Exception:pass
+                        approved_patterns(refresh=True)
             stop.wait(.15)
     except Exception as e:
         log(str(e));state['connected']=False
@@ -280,7 +346,27 @@ def status():
                  'server_now':time.time(),'csrf':session['csrf']}
     # Leitura local do último candle parcial validado, sem bloquear o motor.
     payload['chart_live']=published_candle(asset) if connected and asset else None
+    payload['pattern_learning']={"enabled":pattern_gateway.enabled,
+      "collection":dict(pattern_gateway.status),
+      "active_count":len(pattern_cache['active']),
+      "error":pattern_cache['error']}
     return jsonify(payload)
+@app.get('/api/patterns')
+def learned_patterns():
+    active=approved_patterns(refresh=True)
+    with lock:
+        trades=[t for t in state["trades"] if t.get("status") in ("WIN","LOSS")]
+    group=[]
+    for p in active:
+        subset=[t for t in trades if t.get("pattern_id")==p["pattern_id"]]
+        group.append({"pattern":p,"live":metrics(subset)})
+    return jsonify(active=group,warning=pattern_cache["error"] or
+      ("AMOSTRA INSUFICIENTE: nenhum padrão aprovado; nenhuma ordem de padrão será enviada." if not group
+       else "Padrões aprovados em backtest não garantem resultados futuros."),
+      collection=dict(pattern_gateway.status),
+      pattern_mode=state["config"].get("pattern_only",False),
+      disclaimer="Somente conta DEMO PRACTICE; sem martingale. Payout registrado por hora.")
+
 @app.get('/api/history')
 def get_history():
     if not restore_history():
@@ -328,7 +414,8 @@ def connect():
             client=Client();r=client.call('connect',timeout=55,email=data['email'],password=data['password'])
             client.call('candles',asset=state['config']['asset'])
             state.update(connected=True,balance=r['balance'],currency=r['currency'],assets=r['assets'],uncertain=False)
-            log('Conexão e leitura de velas verificadas na conta PRACTICE.');return jsonify(ok=True)
+            start_pattern_collectors()
+            log('PRACTICE conectada; coletor de candles M1/M5 iniciado sem depender de operações.');return jsonify(ok=True)
         except Exception as e:
             client.close();log(str(e));return jsonify(error=str(e)),502
 @app.post('/api/config')
@@ -337,6 +424,8 @@ def config():
         if state['running']:return jsonify(error='Pare o robô para editar.'),409
         try:
             cfg=validate_config(request.get_json())
+            if cfg.get('pattern_only') is True and cfg.get('demo_unlimited') is True:
+                return jsonify(error='Aprendizado só opera com stops e limites diários ativos.'),400
             if cfg.get('demo_unlimited') is not True and (not cfg.get('stop_win_enabled',True) or not cfg.get('stop_loss_enabled',True)):
                 return jsonify(error='Stop win e stop loss são obrigatórios.'),400
             state['config']=cfg
@@ -353,6 +442,9 @@ def start():
         if not restore_history():return jsonify(error=state['history_error']),503
         if state['uncertain']:return jsonify(error='Uma operação anterior ficou sem resultado confirmado. Confira na Bullex PRACTICE e confirme a revisão em Configurações.'),409
         c=dict(state['config'])
+        if c.get('pattern_only') is True and not approved_patterns(refresh=True):
+            return jsonify(error=pattern_cache["error"] or
+                'Amostra insuficiente: nenhum padrão validado. Coleta continua, mas ordens bloqueadas.'),409
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
         if not limits(c):
             m=management()
