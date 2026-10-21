@@ -49,6 +49,32 @@ def capture_due(now, last_slot):
     return 4 <= second < 46 and slot != last_slot
 balance_cache=None;balance_at=0
 live_monitor_started=False
+# Confirmed PRACTICE orders are settled asynchronously, so the main IPC loop
+# keeps answering market/snapshot/order while 1-3 options are open.
+settlement_lock=threading.RLock()
+settlement_pending={}
+settlement_finished={}
+
+def track_confirmed_order(order_id,expiry,stake):
+    key=str(order_id)
+    def settle():
+        try:
+            result,profit=api.check_win_v4(order_id)
+            amount=float(profit)
+            if not math.isfinite(amount):
+                raise RuntimeError('Resultado não numérico fornecido pela corretora.')
+            payload={'id':key,'profit':amount,'result':result,'status':'settled'}
+        except Exception as exc:
+            payload={'id':key,'status':'uncertain',
+                     'reason':'Não foi possível confirmar resultado da ordem: '+str(exc)[:150]}
+        with settlement_lock:
+            settlement_pending.pop(key,None)
+            settlement_finished[key]=payload
+    with settlement_lock:
+        if key in settlement_pending or key in settlement_finished:
+            raise RuntimeError('Ordem repetida na fila de acompanhamento.')
+        settlement_pending[key]={'id':key,'expiration':expiry,'stake':stake}
+    threading.Thread(target=settle,name='demo_result_'+key[:15],daemon=True).start()
 
 def _live_chart_publisher():
     """Purely visual: snapshots the already-subscribed current candle once a second.
@@ -248,10 +274,21 @@ def dispatch(c):
             ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],expiry)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
         balance_cache-=c['stake']
+        track_confirmed_order(order_id,expiration,float(c['stake']))
         return {'sent':True,'id':order_id,'payout':payout,'expiration':expiration,'expiry_minutes':expiry,
                 'catalog_age':round(send_catalog_age,3),'catalog_latency':round(market_duration,3),
                 'send_delay':round((sent_at or broker_now())-c['candle']-60,3),
                 'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else api.get_server_timestamp()}
+    if op=='results':
+        # Acknowledgment removes only results already durably saved in Supabase.
+        ack=c.get('ack',[])
+        if not isinstance(ack,list) or len(ack)>50:
+            raise ValueError('Confirmações de resultados inválidas.')
+        with settlement_lock:
+            for key in ack:
+                if isinstance(key,(int,str)):settlement_finished.pop(str(key),None)
+            return {'finished':list(settlement_finished.values()),
+                    'pending':list(settlement_pending.values())}
     if op=='result':
         result,profit=api.check_win_v4(c['id'])
         if not math.isfinite(float(profit)): raise RuntimeError('Resultado inválido')
