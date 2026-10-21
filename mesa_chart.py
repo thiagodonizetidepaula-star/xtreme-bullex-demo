@@ -4,7 +4,7 @@ Never influences order placement. Every Xtreme Sniper arrow uses *closed*
 candles and the same sniper_buffers + xtreme_trend in strategy.py.
 """
 import json,math,os,pathlib,time
-from strategy import ema,sniper_buffers,xtreme_trend
+from strategy import sniper_buffers,xtreme_trend
 
 WATCH_FILE=pathlib.Path("/tmp/mesa_bullex_watch_asset.txt")
 LIVE_FILE=pathlib.Path("/tmp/mesa_bullex_current_m1.json")
@@ -21,7 +21,7 @@ def valid_bar(raw):
     return {'from':int(ts),'open':o,'max':h,'min':l,'close':c}
 
 def studies(candles,source="hl2"):
-    """Build overlays for up to 50 recent M1 candles with 120-candle warmup.
+    """Build Xtreme Tendência (ATR18 x2) and Sniper on last 50 closed M1 bars.
 
     Signals are at candle close, never calculated from future candles.
     A cross is marked Xtreme RAW; trend aligned = confirmed Xtreme.
@@ -35,12 +35,13 @@ def studies(candles,source="hl2"):
     if len(bars)<2:return {"rows":[],"source":source}
     if len({b['from'] for b in bars})!=len(bars) or any(b['from']-a['from']!=60 for a,b in zip(bars,bars[1:])):
         raise ValueError("Histórico com lacunas/duplicatas para gráfico")
-    closes=[b['close'] for b in bars]
-    overlays=[ema(closes,n) for n in (20,50,100)]
     rows=[]
     for i in range(max(0,len(bars)-50),len(bars)):
         b=bars[i]
         mark=None
+        # Same ATR18 x2 trailing trend as the trading strategy; all bars closed.
+        # This is intentionally computed from prefix-only data to avoid lookahead.
+        trend_pos,trend_stop=xtreme_trend(bars[:i+1],18,2) if i>=17 else (0,None)
         if i>=79:
             raw,smoothed=sniper_buffers(bars[:i+1],source)
             if len(raw)>=2:
@@ -48,13 +49,11 @@ def studies(candles,source="hl2"):
                 sell=raw[-1]<smoothed[-1] and raw[-2]>smoothed[-2]
                 if buy or sell:
                     direction="call" if buy else "put"
-                    trend,_=xtreme_trend(bars[:i+1],18,2)
-                    confirmed=(direction=="call" and trend==1) or (direction=="put" and trend==-1)
+                    confirmed=(direction=="call" and trend_pos==1) or (direction=="put" and trend_pos==-1)
                     mark={"direction":direction,"confirmed":confirmed,"source":"Sniper SMA1−SMA34 / WMA5 + Xtreme Tendência"}
         rows.append({
-            "from":b["from"],"ema20":overlays[0][i] if i>=19 else None,
-            "ema50":overlays[1][i] if i>=49 else None,
-            "ema100":overlays[2][i] if i>=99 else None,
+            "from":b["from"],"trend_position":trend_pos,
+            "trend_stop":trend_stop,
             "sniper":mark
         })
     return {"rows":rows,"source":source,"data_origin":"candles M1 fechados"}
