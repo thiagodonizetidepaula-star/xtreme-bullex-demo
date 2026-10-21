@@ -17,6 +17,9 @@ def quote_book():
 
 class ExpirySelectionTests(unittest.TestCase):
     def setUp(self):
+        with worker.settlement_lock:
+            worker.settlement_pending.clear()
+            worker.settlement_finished.clear()
         self.broker=MagicMock()
         worker.api=self.broker
         self.broker.get_balance_mode.return_value='PRACTICE'
@@ -58,6 +61,9 @@ class ExpirySelectionTests(unittest.TestCase):
                 self.broker.buy_by_raw_expirations.assert_called_with(
                     2,'EURUSD-OTC','call','turbo',expected)
                 self.broker.buy_by_raw_expirations.reset_mock()
+                with worker.settlement_lock:
+                    worker.settlement_pending.clear()
+                    worker.settlement_finished.clear()
     def test_unsupported_expiry_never_calls_broker(self):
         for minutes in (0,4,15,True,'5'):
             with self.subTest(minutes=minutes):
@@ -81,7 +87,9 @@ class ExpirySelectionTests(unittest.TestCase):
         import inspect
         source=inspect.getsource(site.loop)
         self.assertIn("expiry_minutes=c.get('expiry_minutes',1)",source)
-        self.assertIn("timeout=120+60*c.get('expiry_minutes',1)",source)
+        # New design must not block market scanner until each expiry.
+        self.assertIn("client.call('results'",source)
+        self.assertIn("client.call('order'",source)
         self.assertIn("expiration=order.get('expiration',trade['expiration'])",source)
 
 if __name__=='__main__':
