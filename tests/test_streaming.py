@@ -25,10 +25,10 @@ class StreamingTests(unittest.TestCase):
     def test_batch_prioritizes_later_asset_signal(self):
         c={**app.state['config'],'strategy':'resumption'};client=MagicMock();app.stop.clear()
         def rpc(op,**kwargs):
-            if op=='market':return {'assets':[{'asset':'A'},{'asset':'B'}]}
-            if op=='snapshot':return {'items':[{'asset':'A','candles':[]},{'asset':'B','candles':[]}],'now':6001,'ready':2,'total':2}
+            if op=='market':return {'assets':[{'asset':'A','payout':85},{'asset':'B','payout':85}]}
+            if op=='snapshot':return {'items':[{'asset':'A','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]},{'asset':'B','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]}],'now':6001,'ready':2,'total':2}
             if op=='order':app.stop.set();return {'sent':False,'reason':'Teste'}
         client.call.side_effect=rpc
-        with patch.dict(app.state,{'trades':[],'last_candle':None,'config':c}),patch.object(app,'client',client),patch.object(app,'analyze_selected',side_effect=[{'direction':None,'reason':'Sem sinal','candle':5940},{'direction':'call','signal':'call','reason':'Sinal','candle':5940}]):
+        with patch.dict(app.state,{'trades':[],'last_candle':None,'uncertain':False,'balance':1000,'config':c}),patch.object(app,'client',client),patch.object(app,'save_trade',return_value=True),patch.object(app,'analyze_selected',side_effect=[{'direction':None,'reason':'Sem sinal','candle':5940},{'direction':'call','signal':'call','reason':'Sinal','candle':5940}]):
             app.loop(c);order=[x for x in client.call.call_args_list if x.args[0]=='order'][0];self.assertEqual(order.kwargs['asset'],'B')
         app.stop.clear()
