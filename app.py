@@ -66,7 +66,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'feed_retry_count':0,'feed_last_success_at':None,'run_state':'idle','last_stop_reason':'','stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -178,20 +178,57 @@ def limits(c):
         if sum(t['status']=='WIN' for t in last)/50 < breakeven(sum(payouts)/50):return False
     return m['can_trade']
 
+def read_market_with_retry(operation,**kwargs):
+    """Retry only read-only market requests. Never retry orders or results.
+    Preserve a running scanner during a temporary catalog/stream failure.
+    A dead worker (or RPC timeout that killed it) still requires login/review.
+    """
+    if operation not in ('market','snapshot'):
+        raise ValueError('Only read-only market calls can be retried')
+    try:
+        data=client.call(operation,**kwargs)
+    except RuntimeError as exc:
+        worker=getattr(client,'p',None)
+        dead=worker is not None and worker.poll() is not None
+        if dead or 'Sem resposta da corretora' in str(exc) or 'Integração encerrada' in str(exc):
+            raise
+        retries=state.get('feed_retry_count',0)+1
+        state['feed_retry_count']=retries
+        state['run_state']='retrying_feed'
+        state['message']='Feed Bullex instável; tentando recuperar leitura sem enviar ordens ('+str(retries)+').'
+        if retries<=2 or retries%10==0:
+            log('Leitura de '+operation+' falhou: '+str(exc)[:130]+'. Tentando novamente; nenhuma nova entrada neste intervalo.')
+        stop.wait(min(6,1+retries))
+        return None
+    if state.get('feed_retry_count',0):
+        log('Feed da Bullex recuperado; scanner retomou a análise.')
+    state['feed_retry_count']=0
+    state['feed_last_success_at']=time.time()
+    state['run_state']='scanning'
+    return data
+
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
     candidates=[];catalog_at=0;seen=set()
+    stop_reason=''
+    state['run_state']='scanning'
     try:
         while not stop.is_set():
-            if not limits(c):log('Limite diário atingido. Robô parado.');break
+            if not limits(c):
+                stop_reason=management().get('block_reason') or 'Modo protegido: limite de risco atingido.'
+                log(stop_reason)
+                break
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
-                candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
+                market_response=read_market_with_retry('market',payout=c['payout'],strategy=c.get('strategy','rejection'))
+                if market_response is None:continue
+                candidates=market_response['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
                 log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if stop.is_set():break
             if not candidates:
                 stop.wait(2);continue
-            batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
+            batch=read_market_with_retry('snapshot',assets=[x['asset'] for x in candidates])
+            if batch is None:continue
             if stop.is_set():break
             for error in batch.get('errors',[]):log(error)
             selected=None;selected_score=None
@@ -316,13 +353,17 @@ def loop(c):
                         approved_patterns(refresh=True)
             stop.wait(.15)
     except Exception as e:
-        log(str(e));state['connected']=False
+        stop_reason='Falha da sessão Bullex: '+str(e)[:180]+' Reconecte a conta PRACTICE.'
+        log(stop_reason);state['connected']=False
         if client:client.close()
         if state['uncertain']:
             state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.');save_trade(state['trades'][-1])
     finally:
         with lock:
             state['running']=False
+            state['run_state']='stopped'
+            state['feed_retry_count']=0
+            state['last_stop_reason']=stop_reason or ('Parado pelo comando do usuário.' if stop.is_set() else 'Scanner encerrado; reinicie após verificar a conexão.')
             if state.get('stop_requested'):
                 state['stop_completed_at']=time.time()
                 log('Robô parado: nenhuma nova ordem será enviada. Operações previamente enviadas podem já ter vencido.')
@@ -479,6 +520,9 @@ def start():
         if not isinstance(balance,(int,float)) or not math.isfinite(balance) or not 0<c['stake']<=balance*.02:
             return jsonify(error='Entrada fixa deve ser no máximo 2% do saldo DEMO.'),409
         stop.clear()
+        state['run_state']='starting'
+        state['feed_retry_count']=0
+        state['last_stop_reason']=''
         state['stop_requested']=False
         state['stop_requested_at']=None
         state['stop_completed_at']=None

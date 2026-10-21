@@ -272,7 +272,7 @@ function render(s){
  $("winrate").textContent=closed?(100*(mg.wins||0)/closed).toFixed(1)+"%":"—";
  $("record").textContent=(mg.wins||0)+" WIN · "+(mg.losses||0)+" LOSS · "+(mg.ties||0)+" EMPATE";
  $("trades").textContent=s.config.demo_unlimited===true?String(mg.used||0)+" · DEMO SEM LIMITE":String(mg.used||0)+"/"+String(s.config.limit||5);
- $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected&&mg.can_trade===false?(mg.block_reason||"Pausa por limite de risco"):connected?"Pronto para iniciar":"Aguardando conexão";
+ $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running&&s.run_state==="retrying_feed"?"FEED INSTÁVEL · AGUARDANDO RECUPERAÇÃO":running?"Procurando oportunidade":s.last_stop_reason?"Parado: "+s.last_stop_reason:connected&&mg.can_trade===false?(mg.block_reason||"Pausa por limite de risco"):connected?"Pronto para iniciar":"Aguardando conexão";
  const blockReason=startBlockReason(s);
  $("start").disabled=running||!!blockReason;
  $("start").title=blockReason||"Robô DEMO pronto para iniciar";

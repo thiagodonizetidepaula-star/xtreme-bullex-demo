@@ -140,11 +140,16 @@ window.updateGlobeRadar=function(s){
   message=side==="call"?"COMPRA · CALL":"VENDA · PUT";
   detail="Sinal em "+detected.asset+"; envio sujeito às validações da DEMO.";
  } else if(s.running&&s.connected){
-  status="BUSCANDO OPORTUNIDADES";message="PROCURANDO OPORTUNIDADE";
-  detail=s.config&&s.config.strategy==="mesa"?"Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.":"Xtreme Tendência ATR 18 × 2 · aguardando a próxima seta Sniper alinhada no fechamento M1.";
+  if(s.run_state==="retrying_feed"){
+    status="RECUPERANDO FEED DEMO";message="AGUARDANDO DADOS DA BULLEX";
+    detail="Tentativa "+String(s.feed_retry_count||1)+" · scanner permanece ligado; nenhuma ordem com informação vencida.";
+  }else{
+    status="BUSCANDO OPORTUNIDADES";message="PROCURANDO OPORTUNIDADE";
+    detail=s.config&&s.config.strategy==="mesa"?"Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.":"Xtreme Tendência ATR 18 × 2 · aguardando a próxima seta Sniper alinhada no fechamento M1.";
+  }
  } else if(s.connected){
-  status="DEMO CONECTADA · PAUSADO";message="RADAR PRONTO";
-  detail="Clique Iniciar robô DEMO para procurar oportunidades.";
+  status="DEMO CONECTADA · PARADO";message="RADAR PRONTO";
+  detail=s.last_stop_reason||"Clique Iniciar robô DEMO para procurar oportunidades.";
  } else {
   status="DEMO DESCONECTADA";message="RADAR EM ESPERA";
   detail="Conecte a PRACTICE. Não são gerados sinais aleatórios.";
@@ -175,8 +180,12 @@ window.updateGlobeRadar=function(s){
  const quickMessage=$("quickFeedback");
  if(quickMessage&&!s.running&&!s.connected){
    quickMessage.textContent="Conecte a conta PRACTICE em Configurações para ativar o radar.";
- }else if(quickMessage&&!s.running&&reason){
-   quickMessage.textContent=reason;
+ }else if(quickMessage&&!s.running){
+   quickMessage.textContent=reason||s.last_stop_reason||"Radar pronto. Clique Iniciar para buscar sinais.";
+ }else if(quickMessage&&s.run_state==="retrying_feed"){
+   quickMessage.textContent="Aguardando recuperação do feed · tentativa "+String(s.feed_retry_count||1)+". Sem novas ordens durante falhas.";
+ }else if(quickMessage&&s.running){
+   quickMessage.textContent="Scanner ativo · analisando candles M1 e procurando sinais válidos.";
  }
  $("quickStop").hidden=!s.running;
  $("quickStop").disabled=!s.running;
