@@ -66,7 +66,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -245,7 +245,7 @@ def loop(c):
                 pattern_id=None
                 if c.get('pattern_only') is True:
                     live_features=features_for_closed(normalized(item['candles']))
-                    matches=matching_patterns(approved_patterns(),a['direction'],live_features,expiry=1)
+                    matches=matching_patterns(approved_patterns(),a['direction'],live_features,expiry=c.get('expiry_minutes',1))
                     if not matches:
                         state['message']='Sem padrão aprovado para este sinal; coletando dados.'
                         stop.wait(.1)
@@ -258,7 +258,7 @@ def loop(c):
                 state['last_signal']={'side':a['direction'],'asset':c['asset'],'at':time.time(),'status':'detected','votes':a.get('votes',{})}
                 with lock:
                     if stop.is_set():break
-                    trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
+                    trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+60*(c.get('expiry_minutes',1)+1),'expiry_minutes':c.get('expiry_minutes',1)}
                     # Indicadores congelados da vela fechada (nunca reestimados depois da ordem).
                     sorted_candles=sorted(data['candles'],key=lambda b:float(b['from']))
                     features=snapshot(c['asset'],a,sorted_candles[-1],
@@ -299,14 +299,14 @@ def loop(c):
                     state['last_signal']['status']='ignored'
                     save_trade(trade)
                     break
-                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
+                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'),expiry_minutes=c.get('expiry_minutes',1))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];trade['catalog_age']=order.get('catalog_age');trade['catalog_latency']=order.get('catalog_latency');state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
                 else:
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'),catalog_latency=order.get('catalog_latency'));state['last_signal']['status']='confirmed';
+                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],expiration=order['expiration'],expiry_minutes=c.get('expiry_minutes',1),source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'),catalog_latency=order.get('catalog_latency'));state['last_signal']['status']='confirmed';
                     if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
                     log('Ordem confirmada na DEMO. Aguardando resultado.');save_trade(trade)
-                    result=client.call('result',timeout=150,id=order['id'])
+                    result=client.call('result',timeout=120+60*c.get('expiry_minutes',1),id=order['id'])
                     trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
                     trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
                     state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status']);save_trade(trade)
