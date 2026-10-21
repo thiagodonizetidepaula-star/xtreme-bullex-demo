@@ -104,7 +104,8 @@ class ScannerThreePositions(unittest.TestCase):
              patch.object(server,'save_trade',return_value=True),\
              patch.object(server,'watch',return_value=None),\
              patch.object(server,'snapshot',return_value={'timestamp_utc':'t','timestamp_brasilia':'b'}),\
-             patch.object(server,'check_filters',return_value={'checks':{},'meta':{}}):
+             patch.object(server,'check_filters',return_value={'checks':{},'meta':{}}),\
+             patch.object(server,'evaluate_confluence',return_value={'passed':True,'reason':'Confirmação da fixture'}):
             server.loop(cfg)
             self.assertEqual(len(calls),3)
             self.assertEqual(len(set(calls)),3)
