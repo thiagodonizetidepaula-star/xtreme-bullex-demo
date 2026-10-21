@@ -50,8 +50,11 @@ class ConfluenceMathTests(unittest.TestCase):
         with self.assertRaises(ValueError):evaluate_confluence(bars([100]*8),'call')
         with self.assertRaises(ValueError):evaluate_confluence(bars([100]*90),'unknown')
         cfg=dict(app.state['config'])
-        self.assertTrue(validate_config(cfg)['confluence_rsi'])
-        self.assertTrue(validate_config(cfg)['confluence_bollinger'])
+        # Lite defaults to original Sniper+Trend; advanced mode can opt in.
+        self.assertFalse(validate_config(cfg)['confluence_rsi'])
+        self.assertFalse(validate_config(cfg)['confluence_bollinger'])
+        self.assertTrue(validate_config({**cfg,"confluence_rsi":True})["confluence_rsi"])
+        self.assertTrue(validate_config({**cfg,"confluence_bollinger":True})["confluence_bollinger"])
         for key in ['confluence_rsi','confluence_bollinger']:
             with self.assertRaises(ValueError):
                 validate_config({**cfg,key:'true'})
