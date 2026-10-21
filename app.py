@@ -360,10 +360,12 @@ def learned_patterns():
     for p in active:
         subset=[t for t in trades if t.get("pattern_id")==p["pattern_id"]]
         group.append({"pattern":p,"live":metrics(subset)})
+    try:storage=pattern_gateway._request("GET","status") if pattern_gateway.enabled else None
+    except Exception:storage=None
     return jsonify(active=group,warning=pattern_cache["error"] or
       ("AMOSTRA INSUFICIENTE: nenhum padrão aprovado; nenhuma ordem de padrão será enviada." if not group
        else "Padrões aprovados em backtest não garantem resultados futuros."),
-      collection=dict(pattern_gateway.status),
+      storage=storage,collection=dict(pattern_gateway.status),
       pattern_mode=state["config"].get("pattern_only",False),
       disclaimer="Somente conta DEMO PRACTICE; sem martingale. Payout registrado por hora.")
 
