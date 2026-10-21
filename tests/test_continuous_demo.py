@@ -13,7 +13,7 @@ class ContinuousDemoTests(unittest.TestCase):
     def setUp(self):
         self.config={**site.state['config'],"asset":"EURUSD","stake":2,
                      "payout":85,"limit":5,"stop_win":20,"stop_loss":10,
-                     "demo_unlimited":True}
+                     "demo_unlimited":True,"pattern_only":False}
         self.trades=[{"day":site.day(),"status":"LOSS","profit":-2,"payout":85,
                       "asset":"EURUSD","candle":i*60} for i in range(18)]
     def test_full_day_loss_pause_no_longer_blocks_demo(self):
