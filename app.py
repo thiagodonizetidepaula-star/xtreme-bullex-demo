@@ -13,7 +13,7 @@ ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
 history_lock=threading.Lock();history=TradeHistory()
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'mesa','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
