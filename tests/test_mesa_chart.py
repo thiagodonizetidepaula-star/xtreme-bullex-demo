@@ -72,7 +72,7 @@ class ChartTests(unittest.TestCase):
     def test_confirmed_sniper_arrow_only_trades_with_matching_trend(self):
         b=sample(100)
         ts=b[-1]["from"]
-        with patch("strategy.sniper_buffers",return_value=([0,2],[1,1])):
+        with patch("strategy.sniper_buffers",side_effect=lambda bars,source: ([0,2],[1,1]) if len(bars)==100 else ([0,0],[1,1])):
             with patch("strategy.xtreme_trend",return_value=(1,99)):
                 aligned=sniper(b,ts+61,"hl2")
                 self.assertEqual(aligned["direction"],"call")
