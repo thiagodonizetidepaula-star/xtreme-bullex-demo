@@ -97,7 +97,12 @@ def management():
     for t in reversed(done):
         if t['status']=='LOSS':consecutive_losses+=1
         else:break
-    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'consecutive_losses':consecutive_losses,'can_trade':risk_ok(c,profit,len(ts)) and consecutive_losses<3}
+    blockers=[]
+    if consecutive_losses>=3:blockers.append('Pausa de segurança: 3 LOSS consecutivos. Não serão enviadas novas ordens hoje.')
+    if len(ts)>=c['limit']:blockers.append('Limite diário atingido: %d entradas realizadas de %d permitidas.'%(len(ts),c['limit']))
+    if profit>=c['stop_win']:blockers.append('Stop win atingido: resultado do dia %.2f, limite %.2f.'%(profit,c['stop_win']))
+    if profit-c['stake'] < -c['stop_loss']:blockers.append('Stop loss / reserva para próxima entrada: resultado %.2f, stop %.2f.'%(profit,c['stop_loss']))
+    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'consecutive_losses':consecutive_losses,'blocked_reasons':blockers,'block_reason':' '.join(blockers),'can_trade':risk_ok(c,profit,len(ts)) and consecutive_losses<3}
 def comparison():
     out=[]
     for key,name in STRATEGIES.items():
@@ -346,7 +351,12 @@ def start():
         if state['uncertain']:return jsonify(error='Uma operação anterior ficou sem resultado confirmado. Confira na Bullex PRACTICE e confirme a revisão em Configurações.'),409
         c=dict(state['config'])
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
-        if not limits(c):return jsonify(error='Stop, limite ou pausa de 50 operações atingido.'),409
+        if not limits(c):
+            m=management()
+            reason=m.get('block_reason')
+            if not reason and len([t for t in state['trades'] if t.get('status') in ('WIN','LOSS')])>=50:
+                reason='Pausa de segurança: acerto das últimas 50 operações abaixo do equilíbrio ou payout anterior não confirmado.'
+            return jsonify(error=reason or 'Limites de risco da DEMO atingidos; confira stops e histórico.'),409
         balance=state.get('balance')
         if not isinstance(balance,(int,float)) or not math.isfinite(balance) or not 0<c['stake']<=balance*.02:
             return jsonify(error='Entrada fixa deve ser no máximo 2% do saldo DEMO.'),409
