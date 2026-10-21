@@ -48,7 +48,7 @@ class RepetitionTests(unittest.TestCase):
 
 class FlowTests(unittest.TestCase):
     def test_server_flow_result_and_strategy_history(self):
-        c={**app.state['config'],'strategy':'repetition'};client=MagicMock();app.stop.clear()
+        c={**app.state['config'],'pattern_only':False,'strategy':'repetition'};client=MagicMock();app.stop.clear()
         def call(op,**kwargs):
             if op=='market':return {'assets':[{'asset':'EURUSD-OTC','payout':80}]}
             if op=='snapshot':return {'items':[{'asset':'EURUSD-OTC','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]}],'now':6001,'ready':1,'total':1}
