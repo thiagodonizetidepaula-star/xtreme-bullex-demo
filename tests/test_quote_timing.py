@@ -12,6 +12,9 @@ def catalog():
 
 class QuoteTimingTests(unittest.TestCase):
     def setUp(self):
+        with worker.settlement_lock:
+            worker.settlement_pending.clear()
+            worker.settlement_finished.clear()
         self.api=MagicMock()
         worker.api=self.api
         worker.market_cache={};worker.market_at=0
