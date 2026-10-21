@@ -78,7 +78,7 @@ Um RPC transacional impede ativação parcial.
 
 ## Etapa 5 — Execução e risco
 
-Modo `pattern_only=true` é o padrão. Ao iniciar o robô:
+Modo `pattern_only=true` é opcional e exclusivo para validação de padrões. Para medir WIN/LOSS da estratégia Sniper/Tendência, o painel oferece `demo_unlimited=true` e `pattern_only=false` (somente PRACTICE). A coleta continua nos dois modos. No modo aprendizado, ao iniciar o robô:
 - consulta o Supabase; sem padrão aprovado, recusa operação com
   **SEM PADRÃO APROVADO / AMOSTRA INSUFICIENTE**;
 - para cada nova seta Sniper ou sinal Mesa, calcula as MESMAS features
@@ -86,8 +86,11 @@ Modo `pattern_only=true` é o padrão. Ao iniciar o robô:
 - mantém stops diário WIN e LOSS, limite por dia, pausa após 3 LOSS, pausa
   pelo rolling de 50, stake fixa no máximo 2% saldo DEMO, payout mínimo,
   1 ordem por vez, revisão de ordens incertas e trava de duplicidade.
-- `demo_unlimited` fica desativado; não se mistura pesquisa com prática
-  contínua sem stops.
+- `demo_unlimited` e `pattern_only` não podem estar ativos simultaneamente.
+  No teste contínuo, os stops diários são desabilitados de modo explícito;
+  continuam obrigatórios payout, até 2% da banca por entrada, uma única ordem
+  aberta, saldo válido e nenhuma entrada duplicada. Os resultados são salvos
+  no histórico PRACTICE e também ajudam a avaliar a estratégia original.
 - após WIN/LOSS, Supabase reavalia o padrão nas últimas 50 operações.
   Se ficar abaixo do equilíbrio, `active=false`, o próximo refresh bloqueia
   novas entradas desse padrão.

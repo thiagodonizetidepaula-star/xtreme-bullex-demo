@@ -66,7 +66,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':False,'pattern_only':True,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
