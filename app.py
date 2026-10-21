@@ -7,6 +7,7 @@ from mesa_chart import studies,watch,published_candle
 from mesa_quant import snapshot,metrics,grouped,risk_decision,breakeven,DEFAULT_FILTERS,check_filters
 from mesa_pattern_client import PatternGateway
 from mesa_pattern_features import features_for_closed,normalized,matching_patterns
+from mesa_confluence import evaluate_confluence
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -66,7 +67,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'feed_retry_count':0,'feed_last_success_at':None,'run_state':'idle','last_stop_reason':'','stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'max_open_trades':3,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'chart_last_updated':0,'confluence_last':None,'confluence_stats':{'checked':0,'passed':0,'rsi_rejected':0,'bb_rejected':0},'feed_retry_count':0,'feed_last_success_at':None,'run_state':'idle','last_stop_reason':'','stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'max_open_trades':3,'strategy':'sniper','confluence_rsi':True,'confluence_bollinger':True,'demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -225,6 +226,7 @@ def loop(c):
     """
     acked=set()
     seen=set()
+    seen_confluence=set()
     candidates=[];catalog_at=0
     stop_reason=''
     state['analyzed_count']=0
@@ -315,6 +317,20 @@ def loop(c):
             state['stream_ready']=batch.get('ready',0)
             state['stream_total']=batch.get('total',0)
             payouts={x['asset']:float(x.get('payout') or 0) for x in candidates}
+            # The chart must update even without an entry. Work outside the
+            # broker's first 3 seconds after M1 rollover.
+            if batch.get('items') and time.time()%60>3 and time.monotonic()-state.get('chart_last_updated',0)>9:
+                preview=next((x for x in batch['items'] if x['asset']==state.get('analysis_asset')),None) or batch['items'][0]
+                try:
+                    overlays=studies(preview['candles'],c.get('sniper_source','hl2'))
+                    with lock:
+                        state['candles']=preview['candles'][-50:]
+                        state['chart_studies']=overlays
+                        state['analysis_asset']=preview['asset']
+                        state['chart_last_updated']=time.monotonic()
+                    watch(preview['asset'])
+                except (ValueError,TypeError,KeyError,OSError):
+                    pass
             active_assets={t['asset'] for t in _live_trades()}
             scanner=(sorted(batch['items'],key=lambda v:payouts.get(v['asset'],0),reverse=True)
                      if c.get('strategy')=='sniper' else batch['items'])
@@ -338,6 +354,30 @@ def loop(c):
                     state['analyzed_count']+=1
                     log(asset+' · '+analysis['reason'])
                 if not analysis.get('direction'):continue
+                if c.get('strategy')=='sniper':
+                    # Compute only on closed M1 candles, after an aligned
+                    # crossover; count each eligible event once.
+                    try:
+                        conf=evaluate_confluence(
+                            item['candles'],analysis['direction'],
+                            c.get('confluence_rsi',True),
+                            c.get('confluence_bollinger',True))
+                    except (ValueError,KeyError,TypeError) as exc:
+                        conf={'passed':False,'reason':'OHLC/indicadores indisponíveis: '+str(exc)[:100]}
+                    analysis['confluence']=conf
+                    if key not in seen_confluence:
+                        seen_confluence.add(key)
+                        state['confluence_last']={'asset':asset,'direction':analysis['direction'],
+                                                  'candle':analysis['candle'],**conf}
+                        state['confluence_stats']['checked']+=1
+                        if conf['passed']:state['confluence_stats']['passed']+=1
+                        else:
+                            if conf.get('checks',{}).get('rsi14',{}).get('enabled') and not conf['checks']['rsi14'].get('passed'):
+                                state['confluence_stats']['rsi_rejected']+=1
+                            if conf.get('checks',{}).get('bollinger20',{}).get('enabled') and not conf['checks']['bollinger20'].get('passed'):
+                                state['confluence_stats']['bb_rejected']+=1
+                            log(asset+': Xtreme confirmado, confluência rejeitou — '+conf['reason'])
+                    if not conf['passed']:continue
                 if not entry_allowed(state['trades'],asset,analysis['candle'],c.get('strategy','sniper'))[0]:
                     continue
                 score=(int(analysis.get('quality',0)),
@@ -389,7 +429,8 @@ def loop(c):
                        'strategy_key':c.get('strategy','sniper'),
                        'strategy':STRATEGIES[c.get('strategy','sniper')],
                        'expiration':candle+60*(c.get('expiry_minutes',1)+1),
-                       'expiry_minutes':c.get('expiry_minutes',1),'pattern_id':pattern_id}
+                       'expiry_minutes':c.get('expiry_minutes',1),'pattern_id':pattern_id,
+                       'confluence':analysis.get('confluence')}
                 with lock:
                     if stop.is_set():break
                     state['trades'].append(trade)
@@ -431,7 +472,16 @@ def loop(c):
                 state['last_signal']['status']='confirmed'
                 state['last_candle']=(asset,candle)
                 state['analysis']=analysis;state['analysis_asset']=asset
-                state['candles']=item['candles'][-50:]
+                # Keep display overlays synchronized with whichever asset
+                # currently has a confirmed trade, without waiting for timer.
+                try:
+                    display_studies=studies(item['candles'],c.get('sniper_source','hl2'))
+                    state['candles']=item['candles'][-50:]
+                    state['chart_studies']=display_studies
+                    state['chart_last_updated']=time.monotonic()
+                    watch(asset)
+                except (ValueError,TypeError,KeyError,OSError):
+                    state['candles']=item['candles'][-50:]
                 # All heavy features are AFTER sending the time-critical order.
                 try:
                     bars=sorted(item['candles'],key=lambda x:float(x['from']))
