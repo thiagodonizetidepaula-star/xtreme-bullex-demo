@@ -1,0 +1,26 @@
+name: Mesa Pattern research QA
+on:
+  push:
+    branches: [mesa-pattern-learning]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: Syntax check, zero real broker calls
+        run: python -m compileall -q mesa_pattern_client.py mesa_market_capture.py mesa_pattern_features.py mesa_pattern_train.py app.py worker.py
+      - name: Validate offline
+        env:
+          APP_ACCESS_KEY: test-access-key-only
+          SESSION_SECRET: unit_test_flask_secret_64_characters_long_for_cookie_signing
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Frontend JS syntax
+        run: node --check static/mesa-pattern-dashboard.js
