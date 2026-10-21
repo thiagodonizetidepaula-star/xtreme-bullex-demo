@@ -32,7 +32,7 @@ class AllOpenPairs(unittest.TestCase):
         self.assertIn('Xtreme Lite',html)
         self.assertIn('Pares abertos:',html)
         self.assertIn('Com candles M1:',html)
-        self.assertIn('Sinais Xtreme no último ciclo:',html)
+        self.assertIn('Sinais Xtreme nesta M1:',html)
     def test_open_universe_does_not_remove_payout_guard(self):
         import inspect,worker
         src=inspect.getsource(worker.dispatch)

@@ -200,7 +200,7 @@ def dispatch(c):
         # Uma preparação por virada M1, perto do fechamento (sem consulta
         # repetida que deixe a ordem vencer). Não busca catálogo dentro de 'order'.
         minute=int(now//60)
-        if 58<=now%60<60 and preflight_minute!=minute:
+        if 59<=now%60<60 and preflight_minute!=minute:
             preflight_minute=minute
             try:
                 market(force=True)

@@ -44,8 +44,15 @@ class QuoteTimingTests(unittest.TestCase):
     def test_preflight_runs_once_per_minute_not_multiple_times(self):
         self.api.get_server_timestamp.return_value=6058.1
         with patch.object(worker.time,"time",return_value=6058.1):
+            early=worker.dispatch({"op":"snapshot","assets":[]})
+        self.api.get_all_init_v2.assert_not_called()
+        # Refresh closer to the rollover, preserving <=2s payout freshness
+        # for the next M1 entry window.
+        self.api.get_server_timestamp.return_value=6059.1
+        with patch.object(worker.time,"time",return_value=6059.1):
             first=worker.dispatch({"op":"snapshot","assets":[]})
             second=worker.dispatch({"op":"snapshot","assets":[]})
+        self.assertEqual(early["items"],[])
         self.assertEqual(first["items"],[])
         self.assertEqual(second["items"],[])
         self.api.get_all_init_v2.assert_called_once()
