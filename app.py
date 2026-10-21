@@ -646,8 +646,33 @@ def connect():
         if not data.get('email') or not data.get('password'):return jsonify(error='Informe email e senha dentro do app.'),400
         try:
             client=Client();r=client.call('connect',timeout=55,email=data['email'],password=data['password'])
-            client.call('candles',asset=state['config']['asset'])
+            initial=client.call('candles',asset=state['config']['asset'])
             state.update(connected=True,balance=r['balance'],currency=r['currency'],assets=r['assets'],uncertain=False)
+            # Seed the visible graph immediately after PRACTICE connection,
+            # even before the automatic bot/scanner has been started.
+            try:
+                raw=initial.get('candles') or []
+                now=float(initial['now'])
+                clean={}
+                for bar in raw:
+                    ts=float(bar['from'])
+                    if ts+60<=now:clean[int(ts)]=bar
+                ordered=[clean[t] for t in sorted(clean)]
+                # Reject noncontiguous history rather than drawing a fake
+                # line across suspended market periods.
+                contiguous=[]
+                for bar in ordered:
+                    if contiguous and int(bar['from'])-int(contiguous[-1]['from'])!=60:
+                        contiguous=[]
+                    contiguous.append(bar)
+                if len(contiguous)>=80:
+                    state['candles']=contiguous[-50:]
+                    state['chart_studies']=studies(contiguous,state['config'].get('sniper_source','hl2'))
+                    state['analysis_asset']=state['config']['asset']
+                    state['chart_last_updated']=time.monotonic()
+                    watch(state['analysis_asset'])
+            except (TypeError,KeyError,ValueError,OSError):
+                log('Gráfico aguardando histórico M1 contínuo no streaming; conexão PRACTICE confirmada.')
             start_pattern_collectors()
             log('PRACTICE conectada; coletor de candles M1/M5 iniciado sem depender de operações.');return jsonify(ok=True)
         except Exception as e:
