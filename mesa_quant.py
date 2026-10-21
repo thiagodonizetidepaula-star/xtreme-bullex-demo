@@ -163,16 +163,24 @@ def automatic_blacklist(training:list[dict],min_sample:int=300)->set[tuple]:
 def risk_decision(trades:list[dict],balance:float,stake:float,payout:float,
                   stop_win:float,stop_loss:float,limit:int,asset:str,candle:int,
                   min_payout:float=80,max_fraction:float=.02,loss_streak_limit:int=3,
-                  rolling_n:int=50)->tuple[bool,str]:
+                  rolling_n:int=50,demo_unlimited:bool=False)->tuple[bool,str]:
     """Invocar ANTES de ordem. Fail closed; stops obrigatórios e stake fixa."""
     if not all(isinstance(x,(int,float)) and isfinite(x) for x in (balance,stake,payout,stop_win,stop_loss)):
         return False,"Campos de risco inválidos"
     if balance<=0 or stake<=0 or stake>balance*max_fraction or stake<0.01:
         return False,"Valor acima de 2% do saldo demo ou saldo inválido"
     if payout<min_payout:return False,"Payout abaixo do mínimo"
-    if stop_win<=0 or stop_loss<stake or limit<1:return False,"Stop win/loss e limite diário obrigatórios"
+    if not demo_unlimited and (stop_win<=0 or stop_loss<stake or limit<1):return False,"Stop win/loss e limite diário obrigatórios"
     if any(x.get("status") in ("ABERTA","ENVIANDO","INCERTA") and not x.get("reviewed") for x in trades):
         return False,"Existe operação aberta ou incerta"
+    if demo_unlimited:
+        # PRACTICE only: daily stop and streak disabled, NOT per-trade safeguards.
+        if any(t.get("asset")==asset and t.get("candle")==candle for t in trades):
+            return False,"Entrada duplicada na mesma vela"
+        if any(t.get("asset")==asset and t.get("status") not in ("IGNORADA",)
+               and isinstance(t.get("candle"),(int,float)) and 0<=candle-t["candle"]<180 for t in trades):
+            return False,"Reentrada no mesmo par antes de 3 velas"
+        return True,"Contínuo DEMO: sem stops, payout e valor por entrada verificados"
     day=datetime.now(SAO_PAULO).date().isoformat()
     today=[t for t in trades if t.get("day")==day and t.get("status")!="IGNORADA"]
     done=[t for t in today if t.get("status") in ("WIN","LOSS","EMPATE")]
