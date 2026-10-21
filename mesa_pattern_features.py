@@ -59,8 +59,12 @@ def features_for_closed(candles):
  atr,adx,dp,dm=_dmi(rows)
  values.update(atr14=atr,adx14=adx,di_plus=dp,di_minus=dm)
  macdseries=[]
- for i in range(26,len(closes)+1):
-  fast=_ema(closes[:i],12);slow=_ema(closes[:i],26)
+ fast=sum(closes[:12])/12
+ slow=sum(closes[:26])/26
+ for x in closes[12:26]:fast=fast+2/13*(x-fast)
+ macdseries.append(fast-slow)
+ for x in closes[26:]:
+  fast=fast+2/13*(x-fast);slow=slow+2/27*(x-slow)
   macdseries.append(fast-slow)
  macd=macdseries[-1];signal=_ema(macdseries,9)
  values.update(macd=macd,macd_hist=macd-signal if signal is not None else None)
