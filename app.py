@@ -340,6 +340,11 @@ def loop(c):
             eligible=[]
             state['scan_stream_ready']=len(batch['items'])
             state['scan_last_at']=time.time()
+            scan_minute=int(batch['now']//60)
+            if state.get('scan_minute')!=scan_minute:
+                state['scan_minute']=scan_minute
+                state['scan_last_checked']=0
+                state['scan_last_signals']=0
             for item in scanner:
                 if stop.is_set():break
                 asset=item['asset']
@@ -351,7 +356,6 @@ def loop(c):
                 candle_stamp=max(int(b['from']) for b in bars)
                 lookup_key=(asset,candle_stamp)
                 if lookup_key in evaluated:continue
-                evaluated.add(lookup_key)
                 try:
                     analysis=analyze_selected(bars,batch['now'],
                                               c.get('strategy','sniper'),c.get('sniper_source','hl2'))
@@ -361,6 +365,9 @@ def loop(c):
                         seen.add(error_key)
                         log(asset+': dados inválidos ('+str(exc)[:100]+').')
                     continue
+                evaluated.add(lookup_key)
+                state['scan_last_checked']+=1
+                state['scan_total_checks']=state.get('scan_total_checks',0)+1
                 key=(asset,analysis.get('candle'))
                 if key not in seen:
                     seen.add(key)
@@ -399,10 +406,9 @@ def loop(c):
                 score=(int(analysis.get('quality',0)),
                        min(float(analysis.get('adx14',0)),35),payouts.get(asset,0))
                 eligible.append((score,item,analysis))
+                state['scan_last_signals']+=1
                 # Do not break after finding 1-3 signals: all open pairs must
                 # be inspected for each new closed M1, including OTC.
-            state['scan_last_signals']=len(eligible)
-            state['scan_total_checks']=state.get('scan_total_checks',0)+sum(1 for a in scanner if (a.get('asset'),int((a.get('candles') or [{}])[-1].get('from',-1))) in evaluated)
             if not eligible:
                 state['message']='Monitorando pares M1: aguardando seta Xtreme alinhada à tendência.'
                 stop.wait(.12)
@@ -619,6 +625,7 @@ def lite_state():
           stream_total=state.get('stream_total',0),
           scan_open_count=state.get('scan_open_count',0),
           scan_last_signals=state.get('scan_last_signals',0),
+          scan_last_checked=state.get('scan_last_checked',0),
           scan_last_at=state.get('scan_last_at'),
           scan_total_checks=state.get('scan_total_checks',0),
           wins=sum(t['status']=='WIN' for t in results),
