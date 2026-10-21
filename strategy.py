@@ -207,6 +207,11 @@ def entry_allowed(trades, asset, candle, strategy):
     return True,''
 
 def validate_config(c):
+    # Candle/indicators stay M1; broker expiration may span 1, 2, 3 or 5 M1 bars.
+    # Explicit whitelist avoids untested durations and boolean-as-number values.
+    expiry=c.get('expiry_minutes',1)
+    if type(expiry) is not int or expiry not in (1,2,3,5):
+        raise ValueError('Expiração permitida: 1, 2, 3 ou 5 minutos.')
     for k in ['stake','stop_win','stop_loss','payout','limit']:
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
     for flag in ['stop_win_enabled','stop_loss_enabled','demo_unlimited','pattern_only']:
