@@ -163,16 +163,19 @@ def dispatch(c):
                 api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
-        now=broker_now();items=[]
+        now=broker_now();items=[];observed_closed=[]
         for asset in wanted:
             if asset not in stream_assets:continue
-            # Copiar: o receptor websocket atualiza o dicionário em outra thread.
+            # Copiar: o websocket atualiza em outra thread.
             snapshot=list(api.api.real_time_candles[asset][60].copy().values())
             current=int(now//60)*60
-            if not any(b.get('from')==current for b in snapshot):continue
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
+            # Guardar TODOS os candles fechados observados, mesmo que a vela
+            # atual ainda não tenha chegado para permitir uma entrada.
+            if closed:observed_closed.append({'asset':asset,'candles':closed})
+            if not any(b.get('from')==current for b in snapshot):continue
             items.append({'asset':asset,'candles':closed})
-        capture_snapshot(items,now)
+        capture_snapshot(observed_closed,now)
         return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors,'capture':dict(CAPTURE_STATS)}
     if op=='candles':
         now=broker_now()
