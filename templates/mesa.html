@@ -32,7 +32,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
 <script src="/static/globo-radar.js?v=20261020trend6" defer></script>
-<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script></head>
+<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive2"><script src="/static/xtreme-live-chart.js?v=xtlive2" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
@@ -48,7 +48,18 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  <div class="stat"><div class="small">Operações hoje</div><div class="value" id="trades">0/5</div><div class="sub" id="status">Aguardando conexão</div></div>
 </div>
 <div class="two">
-<section class="panel"><h2>Gráfico de velas da Bullex · M1</h2><p class="empty" id="marketInfo">Conecte sua conta PRACTICE para receber candles reais.</p><canvas id="chart" width="900" height="400" aria-label="Gráfico de candles reais"></canvas></section>
+<section class="panel">
+ <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper · M1</h2><span class="small">Somente DEMO</span></div>
+ <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
+ <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
+ <div class="xtreme-legend">
+ <label><input id="xtremeShowEma" type="checkbox" checked> EMAs <span class="xtreme-key" style="background:#ffdc72"></span>20 <span class="xtreme-key" style="background:#70b1ff"></span>50 <span class="xtreme-key" style="background:#bc91ff"></span>100</label>
+ <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT</label>
+ </div>
+ <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
+ <p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
+ <p id="xtremeDescription" class="xtreme-chart-caption">As setas Sniper são confirmadas somente após o fechamento da vela. Dados visuais não enviam ordens.</p>
+ </section>
 
 </div>
 <div class="two">
@@ -160,7 +171,7 @@ function render(s){
  $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
  '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small>'+(t.reason?'<small>'+safe(t.reason)+'</small>':'')+'</div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
  $("feed").innerHTML=(s.logs||[]).slice().reverse().slice(0,25).map(e=>'<div>'+safe((e.time||"").slice(11,19))+" · "+safe(e.text||"")+'</div>').join("")||"Sem registros.";
- drawCandles(s.candles||[]);
+ if(window.XtremeChart)window.XtremeChart.update(s);else drawCandles(s.candles||[]);
  if(window.updateGlobeRadar)window.updateGlobeRadar(s);
 }
 function drawCandles(bars){
