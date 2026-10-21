@@ -36,7 +36,7 @@ function draw(){
    return;
  }
  const overlays=new Map(((state.chart_studies||{}).rows||[]).map(p=>[p.from,p]));
- const emaOn=!("xtremeShowEma" in ({})) && ($("xtremeShowEma")?$("xtremeShowEma").checked:true);
+ const emaOn=$("xtremeShowEma")?$("xtremeShowEma").checked:true;
  const sniperOn=$("xtremeShowSniper")?$("xtremeShowSniper").checked:true;
  const left=30,right=105,top=25,bottom=50,plotW=w-left-right,plotH=h-top-bottom;
  const values=candles.flatMap(b=>[Number(b.min),Number(b.max)]);
