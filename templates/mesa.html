@@ -32,7 +32,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
 <script src="/static/globo-radar.js?v=20261020trend6" defer></script>
-<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive2"><script src="/static/xtreme-live-chart.js?v=xtlive2" defer></script></head>
+<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive3"><script src="/static/xtreme-live-chart.js?v=xtlive3" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
@@ -49,16 +49,16 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </div>
 <div class="two">
 <section class="panel">
- <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper · M1</h2><span class="small">Somente DEMO</span></div>
+ <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
  <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
  <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
  <div class="xtreme-legend">
- <label><input id="xtremeShowEma" type="checkbox" checked> EMAs <span class="xtreme-key" style="background:#ffdc72"></span>20 <span class="xtreme-key" style="background:#70b1ff"></span>50 <span class="xtreme-key" style="background:#bc91ff"></span>100</label>
- <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT</label>
+ <label><input id="xtremeShowTrend" type="checkbox" checked> Xtreme Tendência (ATR 18 × 2) <span class="xtreme-key" style="background:#3ef4a1"></span>Alta <span class="xtreme-key" style="background:#ff657d"></span>Baixa</label>
+ <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT (S = alinhado)</label>
  </div>
  <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
- <p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
- <p id="xtremeDescription" class="xtreme-chart-caption">As setas Sniper são confirmadas somente após o fechamento da vela. Dados visuais não enviam ordens.</p>
+ <p id="xtremeTrendState" class="xtreme-chart-status" style="font-weight:800">SEM TENDÊNCIA CONFIRMADA</p><p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
+ <p id="xtremeDescription" class="xtreme-chart-caption">A seta Sniper é confirmada após o fechamento da vela. A operação pode começar na vela M1 seguinte, somente se estiver alinhada ao Xtreme Tendência e às demais travas DEMO.</p>
  </section>
 
 </div>
@@ -72,6 +72,12 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </div></div>
  <div class="controlbox"><h3>2 · Limites para operações automáticas</h3>
  <div class="fields">
+  <div style="grid-column:1/-1"><label for="strategy">Estratégia automática · somente PRACTICE</label>
+  <select id="strategy">
+   <option value="sniper">Xtreme Sniper + Xtreme Tendência (próxima seta alinhada)</option>
+   <option value="mesa">Mesa Tendência 6 (estratégia anterior)</option>
+  </select>
+  <div class="small" style="margin-top:5px">Só entra após fechamento de nova seta do Sniper na direção do Xtreme Tendência. Sem martingale; controle de risco mantido.</div></div>
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
@@ -140,6 +146,7 @@ async function poll(){
 function setConfig(c){
  $("stake").value=c.stake;$("payout").value=c.payout;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
+ $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
 }
 function assets(s){
  const opts=(s.assets||[]).slice(0,400);
@@ -166,7 +173,7 @@ function render(s){
  $("trades").textContent=String(mg.used||0)+"/"+String(s.config.limit||5);
  $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected?"Pronto para iniciar":"Aguardando conexão";
  $("connect").disabled=running;$("start").disabled=!connected||running||s.uncertain||mg.can_trade===false;$("stop").disabled=!running;
- ["asset","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ ["asset","strategy","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("marketInfo").textContent=connected?((s.analysis_asset||s.config.asset)+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
  $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
  '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small>'+(t.reason?'<small>'+safe(t.reason)+'</small>':'')+'</div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
@@ -187,7 +194,7 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:"mesa",sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}await act("/api/connect",{email,password},"Conexão DEMO solicitada");$("password").value="";};
