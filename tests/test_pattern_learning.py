@@ -58,6 +58,14 @@ class LearningTests(unittest.TestCase):
       "upper_wick_atr","lower_wick_atr","position_in_20","hour_utc","session"):
    self.assertIn(k,first)
   self.assertNotEqual(first["ema20"],features_for_closed(x)["ema20"])
+ def test_bullex_vs_database_ohlc_feature_parity(self):
+  stored=bars(145)
+  broker=[{"from":b["from"],"open":b["o"],"max":b["h"],"min":b["l"],"close":b["c"]} for b in stored]
+  first=features_for_closed(normalized(stored))
+  second=features_for_closed(normalized(broker))
+  self.assertIsNotNone(second)
+  self.assertEqual(first,second)
+
  def test_rule_is_strict_and_directional(self):
   feats=features_for_closed(bars())
   r=[{"feature":"rsi14","op":">","value":0}]
