@@ -40,6 +40,10 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 .start-guidance.ready{border-color:#31b68a;background:#0c3027;color:#a2f8d6}
 #start:not(:disabled),#quickStart:not(:disabled){box-shadow:0 0 14px #1be19b55}
 @media(max-width:760px){.connection-pill{max-width:none}.headside{width:100%;justify-content:space-between;flex-wrap:wrap}}
+.open-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:12px}
+.open-slot{background:#0d192c;border:1px solid #375072;border-radius:12px;padding:12px}
+.open-slot b{font-size:1rem}.open-slot small{display:block;color:#9bb1d1;margin-top:5px}
+.open-slot .remaining{font-weight:800;color:#e7c67d;font-variant-numeric:tabular-nums;font-size:1.35rem}
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
 <script src="/static/globo-radar.js?v=feed-recovery-20261021" defer></script>
@@ -58,6 +62,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  <div class="stat"><div class="small">Taxa de acerto</div><div class="value" id="winrate">—</div><div class="sub" id="record">Sem ordens encerradas</div></div>
  <div class="stat"><div class="small">Operações hoje</div><div class="value" id="trades">0/5</div><div class="sub" id="status">Aguardando conexão</div></div>
 </div>
+<section class="panel" aria-label="Operações simultâneas PRACTICE">
+  <div class="headline"><h2>Operações simultâneas · Xtreme</h2><span id="openCount" class="tag">0/3</span></div>
+  <div class="small">Cada par possui seu próprio vencimento e resultado. No máximo três ordens PRACTICE e nenhuma duplicada.</div>
+  <div id="openSlots" class="open-slots" role="status" aria-live="polite">Nenhuma operação aberta.</div>
+</section>
 <div class="two">
 <section class="panel">
  <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
@@ -113,6 +122,12 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
     <select id="expiryMinutes" title="Candles analisados em M1; vencimento escolhido na Bullex PRACTICE">
       <option value="1">1 minuto</option><option value="2">2 minutos</option>
       <option value="3">3 minutos</option><option value="5">5 minutos</option>
+    </select></div>
+  <div><label for="maxOpenTrades">Operações simultâneas</label>
+    <select id="maxOpenTrades" title="No máximo uma ordem por par, somente PRACTICE">
+      <option value="1">1 operação</option>
+      <option value="2">2 operações</option>
+      <option value="3" selected>3 operações</option>
     </select></div>
   <div><label for="limit">Máximo de entradas por dia</label><input id="limit" type="number" min="1" max="100" value="5"></div>
   <div><label for="stopwin">Stop win</label><input id="stopwin" type="number" min=".01" step=".01" value="20"></div>
@@ -212,7 +227,7 @@ function updateDemoModeLabel(){
     $(id).disabled=unlimited||running;
 }
 function setConfig(c){
- $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
+ $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("maxOpenTrades").value=String(c.max_open_trades||1);$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
  $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
  $("patternOnly").checked=c.pattern_only===true;
@@ -247,14 +262,32 @@ function startBlockReason(s){
  return "";
 }
 window.getDemoStartBlockReason=startBlockReason;
+let openPositionExpiry=[];
+function positionTick(){
+ const now=(Number(lastState&&lastState.server_now)||0)+(Date.now()-positionBaseAt)/1000;
+ document.querySelectorAll("[data-expire-utc]").forEach(el=>{
+   const remain=Math.max(0,Math.ceil(Number(el.dataset.expireUtc)-now));
+   el.textContent=Math.floor(remain/60)+":"+String(remain%60).padStart(2,"0");
+ });
+}
+let positionBaseAt=Date.now();
 function render(s){
  connected=!!s.connected;running=!!s.running;assets(s);
  if(first){setConfig(s.config);first=false;}
  const mg=s.management||{};
+ positionBaseAt=Date.now();
+ const positions=Array.isArray(s.open_trades)?s.open_trades:[];
+ $("openCount").textContent=positions.length+"/"+String(s.config.max_open_trades||1);
+ $("openSlots").innerHTML=positions.length?positions.map(t=>
+  '<div class="open-slot"><b>'+safe(t.asset)+' · '+safe((t.direction||"").toUpperCase())+'</b>'+
+  '<small>'+safe(t.status)+' · Entrada '+cash(t.stake)+' DEMO</small>'+
+  '<small>Vence em</small><div class="remaining" data-expire-utc="'+Number(t.expiration||0)+'">--:--</div></div>'
+ ).join(""):'<div class="small">Nenhuma operação aberta. Scanner aguardando sinais Xtreme válidos.</div>';
+ positionTick();
  $("currentStrategyLabel").textContent=s.config&&s.config.strategy==="mesa"?"Mesa Tendência 6 · Bullex PRACTICE · M1/M5":"Xtreme Sniper + Tendência · Bullex PRACTICE · M1";
  $("execRules").textContent=s.config&&s.config.strategy==="mesa"?
    "Mesa Tendência 6: EMA20/50/100, M1/M5, ADX/DI, MACD, RSI e recuo. Exige 5/6 confirmações mais alinhamentos obrigatórios. Valida payout, janela de até 2 segundos e conta PRACTICE.":
-   "Xtreme Sniper + Tendência: somente o novo cruzamento Sniper confirmado no fechamento M1 e alinhado ao Xtreme Tendência ATR18 × 2. Expiração escolhida: "+String(s.config&&s.config.expiry_minutes||1)+" minuto(s). Mantém payout válido, janela de até 2 segundos, até 2% da banca, ordens únicas, sem martingale; sem stops diários no modo DEMO Contínua.";
+   "Xtreme Sniper + Tendência: até "+String(s.config.max_open_trades||1)+" operações simultâneas em pares distintos, somente após cruzamento Sniper confirmado no fechamento M1 e alinhado ao Xtreme Tendência ATR18 × 2. Expiração escolhida: "+String(s.config&&s.config.expiry_minutes||1)+" minuto(s). Mantém payout válido, janela de até 2 segundos, até 2% da banca, ordens únicas, sem martingale; sem stops diários no modo DEMO Contínua.";
  const hs=$("historyStatus");if(hs)hs.textContent=s.history_ready?"Histórico permanente conectado ao Supabase":(s.history_error||"Carregando histórico permanente...");
  $("led").className="indicator"+(running?" active":connected?" warn":"");
  const connection=$("connection"),connectionStatus=$("bullexConnectionStatus");
@@ -282,7 +315,7 @@ function render(s){
  $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||(s.config.demo_unlimited===true?"✓ Modo DEMO CONTÍNUO: PRACTICE verificada; sem pausa diária por LOSS.":"✓ Conta PRACTICE pronta para iniciar no modo protegido.");
  $("startBlockReason").className="start-guidance"+(running||!blockReason?" ready":"");
  $("stop").disabled=!running;
- ["asset","strategy","stake","payout","expiryMinutes","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ ["asset","strategy","stake","payout","expiryMinutes","maxOpenTrades","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("demoUnlimited").disabled=running;
  $("patternOnly").disabled=running;
  updateDemoModeLabel();
@@ -306,7 +339,7 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),max_open_trades:num("maxOpenTrades"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("switchBullex").onclick=()=>{wantChangeAccount=!wantChangeAccount;$("bullexConnectFields").hidden=!wantChangeAccount;$("switchBullex").textContent=wantChangeAccount?"Cancelar troca de conta":"Trocar ou reconectar conta";};
@@ -334,6 +367,6 @@ $("logout").onclick=async()=>{
  if(result)window.location.replace("/");
 };
 $("settingsToggle").onclick=()=>{const drawer=$("advancedSettings");drawer.hidden=!drawer.hidden;$("settingsToggle").setAttribute("aria-expanded",String(!drawer.hidden));$("settingsToggle").textContent=drawer.hidden?"⚙ Configurações":"✕ Fechar configurações";if(!drawer.hidden)drawer.scrollIntoView({behavior:"smooth",block:"start"});};
-drawCandles([]);poll();setInterval(poll,2500);
+drawCandles([]);poll();setInterval(poll,2500);setInterval(positionTick,500);
 })();
 </script></body></html>
