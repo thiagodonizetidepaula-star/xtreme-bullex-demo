@@ -59,11 +59,14 @@ def candidate_events(by_asset):
                 continue
             now=signal["from"]+60+1
             a=analyze_mesa(prior,now)
-            if not a.get("direction"):continue
+            side=a.get("direction") or a.get("candidate_direction")
+            votes=a.get("votes") or {}
+            if not side or max(votes.get("call",0),votes.get("put",0))<4:continue
             # DATA ALIGNMENT: entry bar's payout must have been recorded at entry
             # time; never substitute payout observed after entry or at settlement.
             ts=entry["from"]
-            side=a["direction"]
+            # Counterfactual 4/6 is SHADOW ONLY; live bot stays at >=5/6.
+            a={**a,"direction":side}
             pnl=entry["payout"]/100 if (entry["close"]>entry["open"] and side=="call") or (entry["close"]<entry["open"] and side=="put") else -1 if entry["close"]!=entry["open"] else 0
             f=snapshot(asset,a,signal,ts,entry["payout"],1)
             evt={"asset":asset,"time":ts,"signal_time":now,"direction":side,
@@ -75,7 +78,7 @@ def candidate_events(by_asset):
 
 def evaluate(events,config="baseline",adx_min=25,news=None,blacklist=None):
     """Exactly ONE optional filter versus baseline. One global trade per minute."""
-    if config=="baseline":enabled={}
+    if config in ("baseline","votes_4","votes_5","votes_6"):enabled={}
     elif config.startswith("adx_"):
         enabled={"adx":True}
         adx_min=int(config.split("_")[1])
@@ -83,6 +86,8 @@ def evaluate(events,config="baseline",adx_min=25,news=None,blacklist=None):
     taken=[];busy_until=-1
     for e in events:
         if e["time"]<busy_until:continue
+        required=4 if config=="votes_4" else 6 if config=="votes_6" else 5
+        if e["features"]["confirmed_filters"]<required:continue
         checks=check_filters(e["_analysis"],e["_bars"],e["time"],e["asset"],
                switches=enabled,adx_min=adx_min,events=news,bad_segments=blacklist)
         if not checks["allowed"]:continue
@@ -94,7 +99,7 @@ def evaluate(events,config="baseline",adx_min=25,news=None,blacklist=None):
         busy_until=e["time"]+60
     return taken
 
-CONFIGS=["baseline","sessions","volatility","adx_20","adx_25","adx_30",
+CONFIGS=["baseline","votes_4","votes_5","votes_6","sessions","volatility","adx_20","adx_25","adx_30",
          "support_resistance","candle","news","bad_segments"]
 
 def walk_forward(by_asset,news=None):
