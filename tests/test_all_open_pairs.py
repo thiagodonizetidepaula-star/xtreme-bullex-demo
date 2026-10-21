@@ -23,8 +23,8 @@ class AllOpenPairs(unittest.TestCase):
         self.assertIn('for item in scanner:',s)
         self.assertIn('if lookup_key in evaluated:continue',s)
         self.assertNotIn("if c.get('strategy')=='sniper' and len(eligible)>=slots:",s)
-        self.assertIn('max_open=c[\\'max_open_trades\\']',s)
-        self.assertIn('client.call(\\'order\\'',s)
+        self.assertIn("max_open=c['max_open_trades']",s)
+        self.assertIn("client.call('order'",s)
         self.assertIn('risk_decision(',s)
         self.assertIn('entry_allowed(',s)
     def test_lite_layout_preserved_and_status_truthful(self):

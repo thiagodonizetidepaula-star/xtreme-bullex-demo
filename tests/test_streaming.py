@@ -13,7 +13,7 @@ class StreamingTests(unittest.TestCase):
     def test_batch_ignores_open_and_stale_assets(self):
         worker.stream_assets.update(['A','B']);self.api.api.real_time_candles['A'][60].update({5940:{'from':5940},6000:{'from':6000}})
         self.api.api.real_time_candles['B'][60][5940]={'from':5940}
-        r=self.snapshot();self.assertEqual(r['ready'],1);self.assertEqual(r['items'][0]['candles'],[{'from':5940}]);self.api.get_candles.assert_not_called()
+        r=self.snapshot();self.assertEqual(r['ready'],2);self.assertTrue(all(item['candles']==[{'from':5940}] for item in r['items']));self.api.get_candles.assert_not_called()
     def test_no_bootstrap_request_during_entry_window(self):
         self.assertEqual(self.snapshot()['items'],[]);self.api.get_candles.assert_not_called();self.api.api.subscribe.assert_not_called()
     def test_bootstrap_one_subscription_outside_entry_window(self):

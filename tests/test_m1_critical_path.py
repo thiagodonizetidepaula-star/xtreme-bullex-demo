@@ -21,7 +21,7 @@ class M1CriticalPath(unittest.TestCase):
         source=inspect.getsource(server.loop)
         self.assertIn("scanner=(sorted(batch['items']",source)
         self.assertIn("if c.get('strategy')=='sniper' else batch['items']",source)
-        self.assertIn("if c.get('strategy')=='sniper' and len(eligible)>=slots:",source)
+        self.assertNotIn("if c.get('strategy')=='sniper' and len(eligible)>=slots:",source)
         self.assertIn("if not allowed_risk:",source)
         self.assertIn("if stop.is_set():",source)
         self.assertIn("client.call('order'",source)
