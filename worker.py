@@ -30,7 +30,7 @@ def broker_now():
     return max(now,time.time())
 
 api=None
-market_cache={};market_at=0
+market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None
 stream_assets=set();stream_retry={};stream_seed_at=0
 balance_cache=None;balance_at=0
 live_monitor_started=False
@@ -82,12 +82,20 @@ def demo():
     if api.get_balance_mode()!='PRACTICE': raise RuntimeError('Conta não é demo. Operação bloqueada.')
 
 def market(force=False):
-    global market_cache,market_at
+    global market_cache,market_at,market_requested_at,market_duration
     if not force and time.time()-market_at<15:return market_cache
     requested_at=time.time()
     with stage('catálogo de opções binárias M1',10):
         info=api.get_all_init_v2()
+    received_at=time.time()
+    latency=max(0,received_at-requested_at)
+    market_requested_at=requested_at;market_duration=latency
     if not isinstance(info,dict):raise RuntimeError('Catálogo M1 indisponível.')
+    # A verificação ocorreu quando a resposta chegou, não antes do pedido.
+    # Requisições muito lentas não permitem afirmar que o payout ainda é atual.
+    if latency>2.0:
+        market_cache={};market_at=0
+        raise RuntimeError('Consulta de payout demorou %.2f s; não é seguro usar essa cotação.'%latency)
     fresh={}
     for asset_id,a in info.get('turbo',{}).get('actives',{}).items():
         name=str(a.get('name','')).split('.',1)[-1]
@@ -96,14 +104,16 @@ def market(force=False):
         payout=100-float(commission)
         fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
-    market_cache=fresh;market_at=requested_at
+    market_cache=fresh;market_at=received_at
     return fresh
 
 def dispatch(c):
-    global api,stream_seed_at,balance_cache,balance_at
+    global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute
     op=c['op']
     if op=='connect':
         stream_assets.clear();stream_retry.clear();stream_seed_at=0
+        market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None
+        balance_cache=None;balance_at=0
         api=Bullex(c['email'],c['password'])
         with stage('autenticação e abertura da sessão',35):
             ok,reason=api.connect()
@@ -123,12 +133,20 @@ def dispatch(c):
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.
         wanted=c['assets'];errors=[]
-        # Pré-validar antes da virada; a ordem não espera catálogo HTTP/RPC.
-        if 57<=now%60<60 and time.time()-market_at>1:
+        # Uma preparação por virada M1, perto do fechamento (sem consulta
+        # repetida que deixe a ordem vencer). Não busca catálogo dentro de 'order'.
+        minute=int(now//60)
+        if 58<=now%60<60 and preflight_minute!=minute:
+            preflight_minute=minute
             try:
-                with stage('saldo antes da virada',3):balance_cache=api.get_balance();balance_at=time.time()
                 market(force=True)
-            except RuntimeError:errors.append('Payout não atualizado antes da virada; sinais serão bloqueados.')
+                with stage('saldo antes da virada',3):
+                    fresh_balance=api.get_balance()
+                if not isinstance(fresh_balance,(int,float)) or not math.isfinite(fresh_balance):
+                    raise RuntimeError('Saldo DEMO inválido.')
+                balance_cache=fresh_balance;balance_at=time.time()
+            except RuntimeError as exc:
+                errors.append('Preparação M1 falhou: '+str(exc)+' Nenhuma ordem será enviada sem dados atuais.')
         # Nunca inicializar histórico durante a janela de entrada; uma assinatura por vez.
         pending=[a for a in wanted if a not in stream_assets and time.time()-stream_retry.get(a,0)>60]
         if pending and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
@@ -164,7 +182,9 @@ def dispatch(c):
         started=broker_now()
         window=2 if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 5
         if not 0<=started-c['candle']-60<=window:return {'sent':False,'reason':'Janela de entrada encerrada antes da validação.'}
-        if not market_cache or not 0<=time.time()-market_at<=2:return {'sent':False,'reason':'Payout/disponibilidade sem verificação recente (máximo 2 s). Ordem não enviada.'}
+        catalog_age=time.time()-market_at
+        if not market_cache or not 0<=catalog_age<=2:
+            return {'sent':False,'reason':'Payout/disponibilidade sem verificação recente (máximo 2 s). Ordem não enviada.','catalog_age':round(catalog_age,3) if market_at else None,'catalog_latency':round(market_duration,3)}
         details=market_cache.get(c['asset'],{})
         payout=details.get('payout')
         if not details.get('open'):return {'sent':False,'reason':'Ativo M1 fechado ou indisponível.'}
@@ -201,7 +221,10 @@ def dispatch(c):
             ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],1)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
         balance_cache-=c['stake']
-        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),'catalog_age':round(send_catalog_age,3),'send_delay':round((sent_at or broker_now())-c['candle']-60,3),'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else api.get_server_timestamp()}
+        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),
+                'catalog_age':round(send_catalog_age,3),'catalog_latency':round(market_duration,3),
+                'send_delay':round((sent_at or broker_now())-c['candle']-60,3),
+                'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else api.get_server_timestamp()}
     if op=='result':
         result,profit=api.check_win_v4(c['id'])
         if not math.isfinite(float(profit)): raise RuntimeError('Resultado inválido')
