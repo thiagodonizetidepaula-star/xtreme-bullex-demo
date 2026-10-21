@@ -20,7 +20,7 @@ class UserModeSelectorTests(unittest.TestCase):
             self.assertEqual(site.management()["blocked_reasons"],[])
     def test_html_wires_actual_checkbox_modes_and_allows_setting(self):
         with site.app.test_client() as client:
-            body=client.get("/").get_data(as_text=True)
+            body=client.get("/avancado").get_data(as_text=True)
             self.assertIn('pattern_only:$("patternOnly").checked',body)
             self.assertIn('demo_unlimited:$("demoUnlimited").checked',body)
             self.assertIn('$("demoUnlimited").disabled=running',body)

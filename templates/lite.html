@@ -28,7 +28,7 @@ canvas{display:block;width:100%;height:210px;border-radius:9px;background:#07142
 @media(max-width:580px){main{padding:11px}.controls{grid-template-columns:repeat(2,1fr)}.stats{gap:6px}.stat{padding:10px 4px}.stat strong{font-size:21px}.openrow{grid-template-columns:1fr}.actions>button{min-width:45%}section{padding:13px}}
 </style></head>
 <body><main>
-<header><div><h1>◉ Xtreme Lite</h1><div class="sub">Mesa de Traders · somente Bullex PRACTICE · sem martingale</div></div><span id="connected" class="tag warn">DESCONectado</span></header>
+<header><div><h1>◉ Xtreme Lite</h1><div class="sub">Mesa de Traders · somente Bullex PRACTICE · sem martingale</div></div><span id="connected" class="tag warn">DESCONECTADO</span></header>
 <section class="hero">
 <div id="orbit" class="orb"><span>◎</span></div>
 <div id="headline">Aguardando conexão</div>
@@ -66,7 +66,7 @@ canvas{display:block;width:100%;height:210px;border-radius:9px;background:#07142
 const $=id=>document.getElementById(id);
 let csrf="",current=null,initializedVoice=false,speechEnabled=false,lastTradeStatus=new Map(),clockAt=Date.now(),busy=false;
 const money=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
-const safe=s=>String(s??"").replace(/[<>&"'\\u0000-\\u001f]/g,"").slice(0,90);
+const safe=s=>String(s??"").replace(/[<>&"'\u0000-\u001f]/g,"").slice(0,90);
 function note(t,error=false){$("toast").textContent=t;$("toast").className=error?"error":"";}
 async function api(path,data,opts={}){
  const response=await fetch(path,{method:data===undefined?"GET":"POST",credentials:"same-origin",cache:"no-store",signal:opts.signal,
@@ -80,7 +80,7 @@ async function api(path,data,opts={}){
 function disable(){
  const running=!!current?.running,connected=!!current?.connected,uncertain=!!current?.uncertain;
  for(const id of ["stake","expiry","maxOpen","payout","saveBtn"])$(id).disabled=running||busy;
- $("startBtn").disabled=busy||running||!connected||uncertain||!current?.history_ready;
+ $("startBtn").disabled=busy||running||!connected||uncertain;
  $("stopBtn").disabled=!running;
  $("connectBtn").disabled=busy||running;
 }

@@ -76,7 +76,7 @@ class ExpirySelectionTests(unittest.TestCase):
                 self.broker.buy_by_raw_expirations.assert_not_called()
     def test_app_contains_dropdown_and_dynamic_broker_timeout(self):
         with site.app.test_client() as client:
-            body=client.get('/').get_data(as_text=True)
+            body=client.get('/avancado').get_data(as_text=True)
         self.assertIn('id="expiryMinutes"',body)
         self.assertIn('expiry_minutes:num("expiryMinutes")',body)
         from pathlib import Path

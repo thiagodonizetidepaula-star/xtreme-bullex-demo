@@ -37,7 +37,7 @@ class DashboardLoginAssets(unittest.TestCase):
                 self.assertEqual(client.get(path).status_code,200,path+" after logout")
     def test_html_shows_explicit_broker_connection_and_block_reason(self):
         with app.test_client() as client:
-            res=client.get("/")
+            res=client.get("/avancado")
             self.assertEqual(res.status_code,200)
             text=res.get_data(as_text=True)
             for key in ('id="bullexConnectionStatus"','id="startBlockReason"',
