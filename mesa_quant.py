@@ -163,7 +163,7 @@ def automatic_blacklist(training:list[dict],min_sample:int=300)->set[tuple]:
 def risk_decision(trades:list[dict],balance:float,stake:float,payout:float,
                   stop_win:float,stop_loss:float,limit:int,asset:str,candle:int,
                   min_payout:float=80,max_fraction:float=.02,loss_streak_limit:int=3,
-                  rolling_n:int=50,demo_unlimited:bool=False)->tuple[bool,str]:
+                  rolling_n:int=50,demo_unlimited:bool=False,max_open:int=1)->tuple[bool,str]:
     """Invocar ANTES de ordem. Fail closed; stops obrigatórios e stake fixa."""
     if not all(isinstance(x,(int,float)) and isfinite(x) for x in (balance,stake,payout,stop_win,stop_loss)):
         return False,"Campos de risco inválidos"
@@ -171,8 +171,14 @@ def risk_decision(trades:list[dict],balance:float,stake:float,payout:float,
         return False,"Valor acima de 2% do saldo demo ou saldo inválido"
     if payout<min_payout:return False,"Payout abaixo do mínimo"
     if not demo_unlimited and (stop_win<=0 or stop_loss<stake or limit<1):return False,"Stop win/loss e limite diário obrigatórios"
-    if any(x.get("status") in ("ABERTA","ENVIANDO","INCERTA") and not x.get("reviewed") for x in trades):
-        return False,"Existe operação aberta ou incerta"
+    if type(max_open) is not int or not 1<=max_open<=3:
+        return False,"Máximo simultâneo deve ser entre 1 e 3"
+    if any(t.get("status")=="INCERTA" and not t.get("reviewed") for t in trades):
+        return False,"Existe operação INCERTA: revise a corretora antes de entrar"
+    opened=[t for t in trades if t.get("status") in ("ABERTA","ENVIANDO") and not t.get("reviewed")]
+    if len(opened)>=max_open:return False,"Limite de operações simultâneas atingido"
+    if any(t.get("asset")==asset for t in opened):
+        return False,"Já existe operação ativa neste par"
     if demo_unlimited:
         # PRACTICE only: daily stop and streak disabled, NOT per-trade safeguards.
         if any(t.get("asset")==asset and t.get("candle")==candle for t in trades):
