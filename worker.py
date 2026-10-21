@@ -31,8 +31,22 @@ def broker_now():
     return max(now,time.time())
 
 api=None
-market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None
+market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None;_capture_slot=None
 stream_assets=set();stream_retry={};stream_seed_at=0
+# Keep expensive research spool serialization away from the first two
+# seconds after a candle closes. All closed bars stay in the streaming buffer.
+_capture_slot=None
+
+def capture_due(now, last_slot):
+    """Collect research samples off the M1 trading critical path.
+
+    Every 10 seconds, only between seconds 4 and 45 of the broker minute.
+    This keeps recording M1/M5 throughout the day, including when not trading,
+    without synchronously serializing 80+ pairs during the entry window.
+    """
+    second=float(now)%60
+    slot=int(float(now)//10)
+    return 4 <= second < 46 and slot != last_slot
 balance_cache=None;balance_at=0
 live_monitor_started=False
 
@@ -110,7 +124,7 @@ def market(force=False):
     return fresh
 
 def dispatch(c):
-    global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute
+    global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute,_capture_slot
     op=c['op']
     if op=='connect':
         stream_assets.clear();stream_retry.clear();stream_seed_at=0
@@ -164,6 +178,7 @@ def dispatch(c):
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
         now=broker_now();items=[];observed_closed=[]
+        do_capture=capture_due(now,_capture_slot)
         for asset in wanted:
             if asset not in stream_assets:continue
             # Copiar: o websocket atualiza em outra thread.
@@ -172,10 +187,12 @@ def dispatch(c):
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
             # Guardar TODOS os candles fechados observados, mesmo que a vela
             # atual ainda não tenha chegado para permitir uma entrada.
-            if closed:observed_closed.append({'asset':asset,'candles':closed})
+            if do_capture and closed:observed_closed.append({'asset':asset,'candles':closed})
             if not any(b.get('from')==current for b in snapshot):continue
             items.append({'asset':asset,'candles':closed})
-        capture_snapshot(observed_closed,now)
+        if do_capture:
+            _capture_slot=int(now//10)
+            capture_snapshot(observed_closed,now)
         return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors,'capture':dict(CAPTURE_STATS)}
     if op=='candles':
         now=broker_now()
