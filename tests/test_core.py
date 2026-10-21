@@ -125,7 +125,9 @@ class OrderGuards(unittest.TestCase):
         closed=copy.deepcopy(base);closed['name']='front.USDJPY';closed['is_suspended']=True
         self.api.get_all_init_v2.return_value['turbo']['actives'].update({'2':otc,'3':exact,'4':closed})
         assets=self.worker.dispatch({'op':'market','payout':80})['assets']
-        self.assertEqual({a['asset'] for a in assets},{'EURUSD','EURUSD-OTC'})
+        # Discover every opened turbo pair; the actual order still validates
+        # payout, balance, expiry and PRACTICE immediately before sending.
+        self.assertEqual({a['asset'] for a in assets},{'EURUSD','EURUSD-OTC','GBPUSD'})
     def test_exact_80_is_blocked_at_order(self):
         self.api.get_all_init_v2.return_value['turbo']['actives']['1']['option']['profit']['commission']=20
         self.assertFalse(self.order()['sent']);self.api.buy.assert_not_called()

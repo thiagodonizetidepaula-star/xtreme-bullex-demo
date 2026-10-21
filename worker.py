@@ -149,6 +149,24 @@ def market(force=False):
     capture_payout(fresh,received_at)
     return fresh
 
+def closed_m1_at_boundary(snapshot,current):
+    """Return only broker-received closed M1 candles; reject a stale stream.
+
+    A fresh M1 opening tick is not required, but the last observed closed
+    candle must end EXACTLY on this minute boundary. Never fabricate data.
+    """
+    if not isinstance(snapshot,list):return []
+    closed=[]
+    for candle in snapshot:
+        try:
+            if not isinstance(candle,dict):continue
+            start=int(candle['from'])
+            if start%60==0 and start+60<=current:closed.append(dict(candle))
+        except (ValueError,KeyError,TypeError,OverflowError):
+            continue
+    if not closed or max(x['from'] for x in closed)!=current-60:return []
+    return closed
+
 def dispatch(c):
     global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute,_capture_slot
     op=c['op']
@@ -169,8 +187,12 @@ def dispatch(c):
         return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
     if op=='market':
+        # Discovery is intentionally broader than trade approval. Scan ALL
+        # open turbo (including OTC) pairs; enforce configured payout again
+        # just before every live PRACTICE order.
         available=market(force=True)
-        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else v['payout']>max(80,c['payout']))]}
+        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open']],
+                'open_count':sum(v['open'] for v in available.values())}
     if op=='snapshot':
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.
@@ -210,11 +232,11 @@ def dispatch(c):
             # Copiar: o websocket atualiza em outra thread.
             snapshot=list(api.api.real_time_candles[asset][60].copy().values())
             current=int(now//60)*60
-            closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
-            # Guardar TODOS os candles fechados observados, mesmo que a vela
-            # atual ainda não tenha chegado para permitir uma entrada.
+            closed=closed_m1_at_boundary(snapshot,current)
+            # The newest CLOSED candle is sufficient. Requiring a tick from
+            # the new (incomplete) candle misses Sniper crosses at rollover.
             if do_capture and closed:observed_closed.append({'asset':asset,'candles':closed})
-            if not any(b.get('from')==current for b in snapshot):continue
+            if not closed:continue
             items.append({'asset':asset,'candles':closed})
         if do_capture:
             _capture_slot=int(now//10)

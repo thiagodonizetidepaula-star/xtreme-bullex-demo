@@ -227,6 +227,9 @@ def loop(c):
     acked=set()
     seen=set()
     seen_confluence=set()
+    # One indicator evaluation per closed M1 per pair; avoid repeating
+    # 80-150 OHLC calculations on every 100ms scanner poll.
+    evaluated=set()
     candidates=[];catalog_at=0
     stop_reason=''
     state['analyzed_count']=0
@@ -305,8 +308,8 @@ def loop(c):
                 candidates=market_response['assets']
                 catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos abertos; até '+str(c['max_open_trades'])+
-                    ' operações PRACTICE simultâneas em pares distintos.')
+                state['scan_open_count']=len(candidates)
+                log(str(len(candidates))+' pares abertos (incluindo OTC): monitorando todos; entrada só com payout e seta Xtreme válidos.')
             if stop.is_set():continue
             if not candidates:
                 stop.wait(1);continue
@@ -335,12 +338,22 @@ def loop(c):
             scanner=(sorted(batch['items'],key=lambda v:payouts.get(v['asset'],0),reverse=True)
                      if c.get('strategy')=='sniper' else batch['items'])
             eligible=[]
+            state['scan_stream_ready']=len(batch['items'])
+            state['scan_last_at']=time.time()
             for item in scanner:
                 if stop.is_set():break
                 asset=item['asset']
                 if asset in active_assets:continue
+                bars=item.get('candles') or []
+                if not bars:continue
+                # Freshness is checked by sniper() and by worker.order;
+                # this cache only avoids useless repeated evaluation.
+                candle_stamp=max(int(b['from']) for b in bars)
+                lookup_key=(asset,candle_stamp)
+                if lookup_key in evaluated:continue
+                evaluated.add(lookup_key)
                 try:
-                    analysis=analyze_selected(item['candles'],batch['now'],
+                    analysis=analyze_selected(bars,batch['now'],
                                               c.get('strategy','sniper'),c.get('sniper_source','hl2'))
                 except (ValueError,KeyError,TypeError) as exc:
                     error_key=(asset,int(batch['now']//60)*60,'invalid')
@@ -386,8 +399,10 @@ def loop(c):
                 score=(int(analysis.get('quality',0)),
                        min(float(analysis.get('adx14',0)),35),payouts.get(asset,0))
                 eligible.append((score,item,analysis))
-                if c.get('strategy')=='sniper' and len(eligible)>=slots:
-                    break
+                # Do not break after finding 1-3 signals: all open pairs must
+                # be inspected for each new closed M1, including OTC.
+            state['scan_last_signals']=len(eligible)
+            state['scan_total_checks']=state.get('scan_total_checks',0)+sum(1 for a in scanner if (a.get('asset'),int((a.get('candles') or [{}])[-1].get('from',-1))) in evaluated)
             if not eligible:
                 state['message']='Monitorando pares M1: aguardando seta Xtreme alinhada à tendência.'
                 stop.wait(.12)
@@ -511,6 +526,9 @@ def loop(c):
                 log('PRACTICE '+asset+' '+direction.upper()+
                     ' enviada. '+str(len(_live_trades()))+'/'+str(c['max_open_trades'])+
                     ' operações ativas.')
+            if len(evaluated)>25000:
+                keep_after=int(batch['now']//60)*60-600
+                evaluated={key for key in evaluated if key[1]>=keep_after}
             if len(seen)>20000:
                 seen={key for key in seen if len(key)>1 and
                       key[1] is not None and isinstance(key[1],(int,float)) and
@@ -599,6 +617,10 @@ def lite_state():
           server_now=time.time(),feed_last_success_at=state.get('feed_last_success_at'),
           stream_ready=state.get('stream_ready',0),
           stream_total=state.get('stream_total',0),
+          scan_open_count=state.get('scan_open_count',0),
+          scan_last_signals=state.get('scan_last_signals',0),
+          scan_last_at=state.get('scan_last_at'),
+          scan_total_checks=state.get('scan_total_checks',0),
           wins=sum(t['status']=='WIN' for t in results),
           losses=sum(t['status']=='LOSS' for t in results),
           ties=sum(t['status']=='EMPATE' for t in results),

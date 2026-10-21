@@ -123,7 +123,9 @@ function activity(s){
  $("pnl").textContent=money(s.profit);
  $("pnl").className=s.profit>=0?"positive":"negative";
  const ignored=s.ignored||{};
- $("feed").textContent="Pares com candles: "+Number(s.stream_ready||0)+"/"+Number(s.stream_total||0)+
+ $("feed").textContent="Pares abertos: "+Number(s.scan_open_count||0)+
+  " · Com candles M1: "+Number(s.stream_ready||0)+"/"+Number(s.stream_total||0)+
+  " · Sinais Xtreme no último ciclo: "+Number(s.scan_last_signals||0)+
   " · Sinais atrasados hoje: "+Number(ignored.delay||0)+
   " · Payout vencido: "+Number(ignored.payout||0)+
   (s.feed_last_success_at?" · Última leitura: "+Math.max(0,Math.floor(Number(s.server_now)-Number(s.feed_last_success_at)))+"s atrás":"");
