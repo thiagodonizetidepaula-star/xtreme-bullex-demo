@@ -73,14 +73,16 @@ class ExpirySelectionTests(unittest.TestCase):
             body=client.get('/').get_data(as_text=True)
         self.assertIn('id="expiryMinutes"',body)
         self.assertIn('expiry_minutes:num("expiryMinutes")',body)
-        self.assertIn('id=\\"quickExpiry\\"',body)
+        from pathlib import Path
+        radar=(Path(__file__).resolve().parents[1]/'static/globo-radar.js').read_text(encoding='utf-8')
+        self.assertIn('quickExpiry',radar)
         for n in (60,120,180,300):
-            self.assertIn('value=\\"'+str(n)+'\\"',body)
+            self.assertIn('option value=',radar);self.assertIn(str(n),radar)
         import inspect
         source=inspect.getsource(site.loop)
         self.assertIn("expiry_minutes=c.get('expiry_minutes',1)",source)
         self.assertIn("timeout=120+60*c.get('expiry_minutes',1)",source)
-        self.assertIn("expiration=order['expiration']",source)
+        self.assertIn("expiration=order.get('expiration',trade['expiration'])",source)
 
 if __name__=='__main__':
     unittest.main()
