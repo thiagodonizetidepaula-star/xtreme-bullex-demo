@@ -13,7 +13,7 @@ ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
 history_lock=threading.Lock();history=TradeHistory()
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -97,12 +97,13 @@ def management():
     for t in reversed(done):
         if t['status']=='LOSS':consecutive_losses+=1
         else:break
+    unlimited=c.get('demo_unlimited') is True
     blockers=[]
-    if consecutive_losses>=3:blockers.append('Pausa de segurança: 3 LOSS consecutivos. Não serão enviadas novas ordens hoje.')
-    if len(ts)>=c['limit']:blockers.append('Limite diário atingido: %d entradas realizadas de %d permitidas.'%(len(ts),c['limit']))
-    if profit>=c['stop_win']:blockers.append('Stop win atingido: resultado do dia %.2f, limite %.2f.'%(profit,c['stop_win']))
-    if profit-c['stake'] < -c['stop_loss']:blockers.append('Stop loss / reserva para próxima entrada: resultado %.2f, stop %.2f.'%(profit,c['stop_loss']))
-    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'consecutive_losses':consecutive_losses,'blocked_reasons':blockers,'block_reason':' '.join(blockers),'can_trade':risk_ok(c,profit,len(ts)) and consecutive_losses<3}
+    if not unlimited and consecutive_losses>=3:blockers.append('Pausa de segurança: 3 LOSS consecutivos. Não serão enviadas novas ordens hoje.')
+    if not unlimited and len(ts)>=c['limit']:blockers.append('Limite diário atingido: %d entradas realizadas de %d permitidas.'%(len(ts),c['limit']))
+    if not unlimited and profit>=c['stop_win']:blockers.append('Stop win atingido: resultado do dia %.2f, limite %.2f.'%(profit,c['stop_win']))
+    if not unlimited and profit-c['stake'] < -c['stop_loss']:blockers.append('Stop loss / reserva para próxima entrada: resultado %.2f, stop %.2f.'%(profit,c['stop_loss']))
+    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'consecutive_losses':consecutive_losses,'blocked_reasons':blockers,'block_reason':' '.join(blockers),'demo_unlimited':unlimited,'can_trade':unlimited or (risk_ok(c,profit,len(ts)) and consecutive_losses<3)}
 def comparison():
     out=[]
     for key,name in STRATEGIES.items():
@@ -111,6 +112,7 @@ def comparison():
         out.append({'strategy':name,'operations':len(ts),'wins':sum(t['status']=='WIN' for t in ts),'losses':sum(t['status']=='LOSS' for t in ts),'ties':sum(t['status']=='EMPATE' for t in ts),'profit':round(sum(t['profit'] for t in ts),2),'payout_mean':round(sum(payouts)/len(payouts),2) if payouts else None})
     return out
 def limits(c):
+    if c.get('demo_unlimited') is True:return True
     m=management()
     if not c.get('stop_win_enabled',True) or not c.get('stop_loss_enabled',True):return False
     recent=[t for t in state['trades'] if t.get('status') in ('WIN','LOSS')]
@@ -213,7 +215,7 @@ def loop(c):
                     [t for t in state['trades'] if t is not trade],
                     state.get('balance') if isinstance(state.get('balance'),(int,float)) else float('nan'),
                     c['stake'],payouts.get(c['asset'],0),c['stop_win'],c['stop_loss'],
-                    c['limit'],c['asset'],a['candle'],c['payout'])
+                    c['limit'],c['asset'],a['candle'],c['payout'],demo_unlimited=c.get('demo_unlimited') is True)
                 if not allowed_risk:
                     trade['status']='IGNORADA'
                     trade['reason']='Gestão de risco: '+why_risk
@@ -335,9 +337,10 @@ def config():
         if state['running']:return jsonify(error='Pare o robô para editar.'),409
         try:
             cfg=validate_config(request.get_json())
-            if not cfg.get('stop_win_enabled',True) or not cfg.get('stop_loss_enabled',True):
+            if cfg.get('demo_unlimited') is not True and (not cfg.get('stop_win_enabled',True) or not cfg.get('stop_loss_enabled',True)):
                 return jsonify(error='Stop win e stop loss são obrigatórios.'),400
             state['config']=cfg
+            log('MODO DEMO CONTÍNUO: não aplicar stops, limite diário ou pausas por perdas; payout e travas por ordem mantidos.' if cfg.get('demo_unlimited') is True else 'Modo protegido DEMO: limites diários ativos.')
             return jsonify(ok=True)
         except Exception as e:return jsonify(error=str(e)),400
 @app.post('/api/start')
