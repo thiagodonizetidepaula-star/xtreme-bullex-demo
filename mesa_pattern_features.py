@@ -93,7 +93,7 @@ def normalized(bars):
    ts=b.get("from")
    if ts is None:
     ts=int(datetime.fromisoformat(b["candle_time"].replace("Z","+00:00")).timestamp())
-   result.append({"from":int(ts),"o":float(b["o"]),"h":float(b["h"]),"l":float(b["l"]),"c":float(b["c"])})
+   result.append({"from":int(ts),"o":float(b.get("o",b.get("open"))),"h":float(b.get("h",b.get("max"))),"l":float(b.get("l",b.get("min"))),"c":float(b.get("c",b.get("close")))})
   except (ValueError,TypeError,KeyError):continue
  return result
 
