@@ -1,7 +1,8 @@
-import sys,pathlib,json,logging,time,contextlib,math,signal
+import sys,pathlib,json,logging,time,contextlib,math,signal,threading,os
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
+from mesa_chart import WATCH_FILE,LIVE_FILE,valid_bar
 # A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
 # Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
 from bullexapi.ws.objects.timesync import TimeSync
@@ -32,6 +33,36 @@ api=None
 market_cache={};market_at=0
 stream_assets=set();stream_retry={};stream_seed_at=0
 balance_cache=None;balance_at=0
+live_monitor_started=False
+
+def _live_chart_publisher():
+    """Purely visual: snapshots the already-subscribed current candle once a second.
+    Independent thread continues while the main RPC awaits result of an open order.
+    No connection calls and no trading orders.
+    """
+    while True:
+        try:
+            asset=WATCH_FILE.read_text(encoding="ascii").strip()
+            broker=api
+            if broker is not None and asset in stream_assets:
+                candles=broker.api.real_time_candles[asset][60].copy().values()
+                current=int(time.time()//60)*60
+                candle=next((valid_bar(b) for b in candles if isinstance(b,dict) and b.get("from")==current),None)
+                if candle:
+                    record={"asset":asset,"candle":candle,"received_at":time.time()}
+                    temp=LIVE_FILE.with_suffix(".tmp")
+                    temp.write_text(json.dumps(record,separators=(",",":")),encoding="utf-8")
+                    os.replace(temp,LIVE_FILE)
+        except (OSError,KeyError,ValueError,TypeError,AttributeError,RuntimeError):
+            pass
+        time.sleep(1)
+
+def start_live_monitor():
+    global live_monitor_started
+    if not live_monitor_started:
+        live_monitor_started=True
+        threading.Thread(target=_live_chart_publisher,name="mesa_visual_only",daemon=True).start()
+
 
 @contextlib.contextmanager
 def stage(name, seconds):
@@ -80,6 +111,8 @@ def dispatch(c):
         with stage('seleção e saldo da conta demo',10):
             api.change_balance('PRACTICE');demo()
             balance=api.get_balance();currency=api.get_currency();balance_cache=balance;balance_at=time.time()
+        # Atualizador visual independente do loop de ordens; não envia negociações.
+        start_live_monitor()
         # Não aguardar os catálogos de CFD, forex e cripto para conectar M1.
         return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
