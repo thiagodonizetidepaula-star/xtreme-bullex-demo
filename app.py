@@ -1,7 +1,8 @@
-import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math
+import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math,uuid
 from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
+from mesa_history import TradeHistory,HistoryError
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -9,7 +10,8 @@ app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'mesa','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+history_lock=threading.Lock();history=TradeHistory()
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'mesa','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -37,6 +39,51 @@ class Client:
             return r['data']
     def close(self):
         if self.p.poll() is None:self.p.terminate()
+
+def restore_history():
+    """Lê operações históricas antes de qualquer novo start, inclusive após restart."""
+    if state['history_ready']:return True
+    if not history.enabled:
+        state['history_error']='Banco permanente indisponível; robô bloqueado por segurança.'
+        return False
+    with history_lock:
+        if state['history_ready']:return True
+        try:trades=history.load()
+        except HistoryError as exc:
+            state['history_error']='Não foi possível carregar o histórico: '+str(exc)
+            return False
+        with lock:
+            if state['running']:return False
+            unresolved=[t for t in trades if t.get('status') in ('ABERTA','ENVIANDO')]
+            for t in unresolved:
+                t['status']='INCERTA'
+                t['reason']='Resultado não confirmado após reinício; confira a Bullex PRACTICE antes de operar.'
+            state['trades']=trades
+            state['uncertain']=bool(unresolved)
+            state['history_ready']=True
+            state['history_error']=''
+            state['history_saved']=True
+            if trades:log('Histórico recuperado do Supabase: '+str(len(trades))+' operações.')
+        for t in unresolved:
+            try:history.save(t)
+            except HistoryError:
+                state['history_saved']=False
+                state['history_error']='Não foi possível marcar ordem incerta no banco.'
+                break
+        return True
+
+def save_trade(trade):
+    try:
+        history.save(trade)
+        state['history_saved']=True
+        state['history_error']=''
+        return True
+    except HistoryError as exc:
+        state['history_saved']=False
+        state['history_error']='Falha ao salvar; operação automática pausada: '+str(exc)
+        stop.set()
+        log(state['history_error'])
+        return False
 
 def day():return datetime.now(timezone(timedelta(hours=-3))).date().isoformat()
 def management():
@@ -116,26 +163,26 @@ def loop(c):
                 state['last_signal']={'side':a['direction'],'asset':c['asset'],'at':time.time(),'status':'detected','votes':a.get('votes',{})}
                 with lock:
                     if stop.is_set():break
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
+                    trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
                     state['trades'].append(trade)
                     state['uncertain']=True
                 order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
                 if not order['sent']:
-                    trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason'])
+                    trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
                 else:
                     trade.update(id=order['id'],status='ABERTA',payout=order['payout'],source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'));state['last_signal']['status']='confirmed';
                     if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
-                    log('Ordem confirmada na DEMO. Aguardando resultado.')
+                    log('Ordem confirmada na DEMO. Aguardando resultado.');save_trade(trade)
                     result=client.call('result',timeout=150,id=order['id'])
                     trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
                     trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
-                    state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status'])
+                    state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status']);save_trade(trade)
             stop.wait(.15)
     except Exception as e:
         log(str(e));state['connected']=False
         if client:client.close()
         if state['uncertain']:
-            state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
+            state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.');save_trade(state['trades'][-1])
     finally:state['running']=False
 
 @app.before_request
@@ -166,6 +213,27 @@ def access():
 @app.get('/api/state')
 def status():
     with lock:return jsonify(**state,management=management(),comparison=comparison(),server_now=time.time(),csrf=session['csrf'])
+@app.get('/api/history')
+def get_history():
+    if not restore_history():
+        return jsonify(error=state['history_error'],history_ready=False),503
+    with lock:return jsonify(trades=state['trades'],history_ready=True,uncertain=state['uncertain'])
+
+@app.post('/api/review')
+def review():
+    data=request.get_json(silent=True) or {}
+    if data.get('confirmed') is not True:return jsonify(error='Confira o histórico da Bullex PRACTICE antes de confirmar.'),400
+    with lock:
+        if state['running']:return jsonify(error='Pare o robô antes de revisar ordens.'),409
+        if not state['history_ready']:return jsonify(error='Carregue o histórico primeiro.'),409
+        for t in state['trades']:
+            if t.get('status')=='INCERTA' and not t.get('reviewed'):
+                t['reviewed']=True
+                t['reviewed_at']=datetime.now(timezone.utc).isoformat()
+                if not save_trade(t):return jsonify(error=state['history_error']),503
+        state['uncertain']=False
+    return jsonify(ok=True)
+
 @app.post('/api/connect')
 def connect():
     global client
@@ -196,6 +264,7 @@ def start():
         if state['running']:return jsonify(ok=True)
         if bot and bot.is_alive():return jsonify(error='Aguarde o encerramento da operação anterior.'),409
         if not state['connected'] or state['uncertain']:return jsonify(error='Conecte e valide a demo primeiro.'),409
+        if not restore_history():return jsonify(error=state['history_error']),503
         c=dict(state['config'])
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
         if not limits(c):return jsonify(error='Limites do dia atingidos.'),409
