@@ -52,7 +52,7 @@ class PatternGateway:
      f.seek(self.cursor)
      candles=[];payouts=[]
      offset=self.cursor
-     for i in range(220):
+     for i in range(160):
       line=f.readline()
       if not line or not line.endswith("\n"):break
       try:rec=json.loads(line)
