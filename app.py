@@ -67,7 +67,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'chart_last_updated':0,'confluence_last':None,'confluence_stats':{'checked':0,'passed':0,'rsi_rejected':0,'bb_rejected':0},'feed_retry_count':0,'feed_last_success_at':None,'run_state':'idle','last_stop_reason':'','stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'max_open_trades':3,'strategy':'sniper','confluence_rsi':True,'confluence_bollinger':True,'demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'chart_last_updated':0,'confluence_last':None,'confluence_stats':{'checked':0,'passed':0,'rsi_rejected':0,'bb_rejected':0},'feed_retry_count':0,'feed_last_success_at':None,'run_state':'idle','last_stop_reason':'','stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'expiry_minutes':1,'max_open_trades':3,'strategy':'sniper','confluence_rsi':False,'confluence_bollinger':False,'demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -354,9 +354,12 @@ def loop(c):
                     state['analyzed_count']+=1
                     log(asset+' · '+analysis['reason'])
                 if not analysis.get('direction'):continue
-                if c.get('strategy')=='sniper':
-                    # Compute only on closed M1 candles, after an aligned
-                    # crossover; count each eligible event once.
+                if c.get('strategy')=='sniper' and not (c.get('confluence_rsi',False) or c.get('confluence_bollinger',False)):
+                    # Lite fast path: a confirmed Sniper/Trend signal needs no
+                    # extra RSI/Bollinger calculation or logging before sending.
+                    analysis['confluence']={'passed':True,'reason':'Lite: somente Xtreme Sniper + Tendência'}
+                elif c.get('strategy')=='sniper':
+                    # Optional research only: expensive confluence runs when enabled.
                     try:
                         conf=evaluate_confluence(
                             item['candles'],analysis['direction'],
@@ -550,7 +553,11 @@ def security(r):
     return r
 
 @app.get('/')
-def home():return render_template('mesa.html')
+def home():return render_template('lite.html')
+
+@app.get('/avancado')
+def advanced_dashboard():return render_template('mesa.html')
+
 @app.get('/legacy')
 def legacy():return render_template('index.html')
 @app.get('/health')
@@ -561,6 +568,48 @@ def access():
     if not secrets.compare_digest(str(data.get('key','')),ACCESS):return jsonify(error='Chave inválida.'),401
     session.clear();session.permanent=True;session['owner']=True;session['csrf']=secrets.token_hex(24)
     return jsonify(csrf=session['csrf'])
+@app.get('/api/lite/state')
+def lite_state():
+    # Lightweight, read-only mobile dashboard. No broker RPC or network calls:
+    # the scanner must not wait for rendering/history/statistics in the browser.
+    with lock:
+        today=day()
+        daily=[t for t in state['trades'] if t.get('day')==today]
+        results=[t for t in daily if t.get('status') in ('WIN','LOSS','EMPATE')]
+        ignored=[t for t in daily if t.get('status')=='IGNORADA']
+        statuses={'delay':0,'payout':0,'other':0}
+        for event in ignored:
+            reason=str(event.get('reason','')).lower()
+            if 'janela' in reason or 'atraso' in reason:statuses['delay']+=1
+            elif 'payout' in reason or 'catálogo' in reason:statuses['payout']+=1
+            else:statuses['other']+=1
+        current_open=[{'asset':t.get('asset'),'direction':t.get('direction'),
+                       'expiration':t.get('expiration'),'stake':t.get('stake'),
+                       'status':t.get('status')} for t in _live_trades()]
+        chart=state.get('candles',[])[-40:]
+        recent=state['trades'][-16:][::-1]
+        return jsonify(csrf=session['csrf'],connected=state['connected'],
+          running=state['running'],run_state=state.get('run_state'),
+          stop_requested=state.get('stop_requested',False),
+          history_ready=state.get('history_ready',False),
+          history_error=state.get('history_error'),
+          uncertain=state['uncertain'],last_stop_reason=state.get('last_stop_reason'),
+          message=state.get('message'),balance=state.get('balance'),
+          currency=state.get('currency'),config=state['config'],
+          server_now=time.time(),feed_last_success_at=state.get('feed_last_success_at'),
+          stream_ready=state.get('stream_ready',0),
+          stream_total=state.get('stream_total',0),
+          wins=sum(t['status']=='WIN' for t in results),
+          losses=sum(t['status']=='LOSS' for t in results),
+          ties=sum(t['status']=='EMPATE' for t in results),
+          profit=round(sum(float(t.get('profit') or 0) for t in results),4),
+          ignored=statuses,open_trades=current_open,
+          chart_asset=state.get('analysis_asset'),chart=chart,
+          trades=[{'event_key':t.get('event_key'),'asset':t.get('asset'),
+                   'direction':t.get('direction'),'status':t.get('status'),
+                   'profit':t.get('profit'),'time':t.get('time'),
+                   'result_time':t.get('result_time')} for t in recent])
+
 @app.get('/api/state')
 def status():
     with lock:
