@@ -5,6 +5,12 @@
 <meta name="theme-color" content="#090f1f">
 <title>Mesa de Traders · Bullex DEMO</title>
 <style>
+.chart-on-home{margin:20px auto;max-width:1180px}
+.chart-on-home>.panel{padding:16px}
+.xtreme-filter-switch{padding:7px 0}
+.xtreme-filter-switch input{accent-color:#49daa3}
+.xtreme-rsi-status{font-size:13px;padding:8px 10px;background:#122340;border-radius:8px;border:1px solid #35577a;margin:8px 0;color:#e9d69a;font-weight:750}
+
 :root{color-scheme:dark;--bg:#090f1f;--panel:#121d31;--panel2:#172840;--line:#2b3a58;--fg:#eaf2ff;--muted:#93a6c5;--green:#40e0a5;--red:#ff7078;--yellow:#ffcf73;--blue:#6baaff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse 70% 30% at 45% 0%,#20375b 0%,transparent 88%),var(--bg);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--fg);font-size:14px}
 header{padding:17px max(18px,calc((100% - 1420px)/2));display:flex;justify-content:space-between;align-items:center;gap:15px;border-bottom:1px solid var(--line);background:#090f1fde;flex-wrap:wrap;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}
@@ -47,13 +53,29 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=three-open-20261021">
 <script src="/static/globo-radar.js?v=three-open-20261021" defer></script>
-<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive3"><script src="/static/xtreme-live-chart.js?v=xtlive3" defer></script><link rel="stylesheet" href="/static/mesa-pattern-dashboard.css?v=learn1"><script src="/static/mesa-pattern-dashboard.js?v=learn1" defer></script></head>
+<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive4-confluence"><script src="/static/xtreme-live-chart.js?v=xtlive4-confluence" defer></script><link rel="stylesheet" href="/static/mesa-pattern-dashboard.css?v=learn1"><script src="/static/mesa-pattern-dashboard.js?v=learn1" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small" id="currentStrategyLabel">Xtreme Sniper + Tendência · Bullex PRACTICE · M1</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small connection-pill" role="status" aria-live="polite">Corretora desconectada</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Sair encerra a conexão PRACTICE e o login deste navegador">Sair da conta</button></div></header>
 <main>
 <div id="radarMount"></div>
 <p class="small" style="max-width:1180px;margin:10px auto 0;line-height:1.5">O celular pode fechar a página sem tocar em Sair: enquanto o servidor estiver ativo, o robô continua nele. No Render gratuito, a execução não é contínua: o serviço pode hibernar após 15 minutos sem acesso.</p>
+<section class="chart-on-home" id="chartHome" aria-label="Gráfico de candles ao vivo">
+<section class="panel">
+ <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
+ <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
+ <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
+ <div class="xtreme-legend">
+ <label><input id="xtremeShowTrend" type="checkbox" checked> Xtreme Tendência (ATR 18 × 2) <span class="xtreme-key" style="background:#3ef4a1"></span>Alta <span class="xtreme-key" style="background:#ff657d"></span>Baixa</label>
+ <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT (S = alinhado)</label>
+ <label><input id="xtremeShowBollinger" type="checkbox" checked> Bandas Bollinger 20 × 2 <span class="xtreme-key" style="background:#e3adff"></span></label>
+ </div>
+ <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
+ <div id="xtremeRSIState" class="xtreme-rsi-status">RSI 14: aguardando histórico</div>
+ <p id="xtremeTrendState" class="xtreme-chart-status" style="font-weight:800">SEM TENDÊNCIA CONFIRMADA</p><p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
+ <p id="xtremeDescription" class="xtreme-chart-caption">A seta Sniper é confirmada após o fechamento da vela. A operação pode começar na vela M1 seguinte, somente se estiver alinhada ao Xtreme Tendência e às demais travas DEMO.</p>
+ </section>
+</section>
 <section class="settings-drawer" id="advancedSettings" hidden aria-label="Configurações avançadas do robô">
 <div class="headline"><div><h2>Central de operações</h2><div class="small">Gerenciamento, gráficos e histórico · somente PRACTICE</div></div><span class="tag" id="modeLabel">CONTA PRACTICE</span></div>
 <div class="stats">
@@ -67,21 +89,6 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
   <div class="small">Cada par possui seu próprio vencimento e resultado. No máximo três ordens PRACTICE e nenhuma duplicada.</div>
   <div id="openSlots" class="open-slots" role="status" aria-live="polite">Nenhuma operação aberta.</div>
 </section>
-<div class="two">
-<section class="panel">
- <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
- <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
- <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
- <div class="xtreme-legend">
- <label><input id="xtremeShowTrend" type="checkbox" checked> Xtreme Tendência (ATR 18 × 2) <span class="xtreme-key" style="background:#3ef4a1"></span>Alta <span class="xtreme-key" style="background:#ff657d"></span>Baixa</label>
- <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT (S = alinhado)</label>
- </div>
- <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
- <p id="xtremeTrendState" class="xtreme-chart-status" style="font-weight:800">SEM TENDÊNCIA CONFIRMADA</p><p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
- <p id="xtremeDescription" class="xtreme-chart-caption">A seta Sniper é confirmada após o fechamento da vela. A operação pode começar na vela M1 seguinte, somente se estiver alinhada ao Xtreme Tendência e às demais travas DEMO.</p>
- </section>
-
-</div>
 <div class="two">
 <section class="panel"><h2>Conexão e gerenciamento</h2>
 <div class="controls">
@@ -118,6 +125,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
+  <div style="grid-column:1/-1"><strong>Confluências adicionais Xtreme (experimentais)</strong>
+   <div class="xtreme-filter-switch"><label><input type="checkbox" id="confluenceRSI" checked> Exigir RSI 14 na direção do sinal (CALL: 50–70 / PUT: 30–50)</label></div>
+   <div class="xtreme-filter-switch"><label><input type="checkbox" id="confluenceBollinger" checked> Exigir fechamento do lado correto da média Bollinger 20 × 2 sem tocar na banda extrema</label></div>
+   <div id="confluenceStatus" class="small" style="margin-top:7px">Os filtros são medidos individualmente; mais filtros não garantem mais WIN.</div>
+  </div>
   <div><label for="expiryMinutes">Tempo de expiração</label>
     <select id="expiryMinutes" title="Candles analisados em M1; vencimento escolhido na Bullex PRACTICE">
       <option value="1">1 minuto</option><option value="2">2 minutos</option>
@@ -227,7 +239,9 @@ function updateDemoModeLabel(){
     $(id).disabled=unlimited||running;
 }
 function setConfig(c){
- $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("maxOpenTrades").value=String(c.max_open_trades||1);$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
+ $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("maxOpenTrades").value=String(c.max_open_trades||1);
+ $("confluenceRSI").checked=c.confluence_rsi!==false;
+ $("confluenceBollinger").checked=c.confluence_bollinger!==false;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
  $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
  $("patternOnly").checked=c.pattern_only===true;
@@ -275,6 +289,11 @@ function render(s){
  connected=!!s.connected;running=!!s.running;assets(s);
  if(first){setConfig(s.config);first=false;}
  const mg=s.management||{};
+ const stats=s.confluence_stats||{};
+ const checked=stats.checked||0;
+ $("confluenceStatus").textContent="Sinais Sniper/Tendência avaliados: "+checked+
+   " · passaram: "+(stats.passed||0)+" · RSI rejeitou: "+(stats.rsi_rejected||0)+
+   " · Bollinger rejeitou: "+(stats.bb_rejected||0)+". São contagens, não taxa de acerto.";
  positionBaseAt=Date.now();
  const positions=Array.isArray(s.open_trades)?s.open_trades:[];
  $("openCount").textContent=positions.length+"/"+String(s.config.max_open_trades||1);
@@ -287,7 +306,7 @@ function render(s){
  $("currentStrategyLabel").textContent=s.config&&s.config.strategy==="mesa"?"Mesa Tendência 6 · Bullex PRACTICE · M1/M5":"Xtreme Sniper + Tendência · Bullex PRACTICE · M1";
  $("execRules").textContent=s.config&&s.config.strategy==="mesa"?
    "Mesa Tendência 6: EMA20/50/100, M1/M5, ADX/DI, MACD, RSI e recuo. Exige 5/6 confirmações mais alinhamentos obrigatórios. Valida payout, janela de até 2 segundos e conta PRACTICE.":
-   "Xtreme Sniper + Tendência: até "+String(s.config.max_open_trades||1)+" operações simultâneas em pares distintos, somente após cruzamento Sniper confirmado no fechamento M1 e alinhado ao Xtreme Tendência ATR18 × 2. Expiração escolhida: "+String(s.config&&s.config.expiry_minutes||1)+" minuto(s). Mantém payout válido, janela de até 2 segundos, até 2% da banca, ordens únicas, sem martingale; sem stops diários no modo DEMO Contínua.";
+   "Xtreme Sniper + Tendência + confluências configuráveis RSI14/Bollinger20x2: até "+String(s.config.max_open_trades||1)+" operações simultâneas em pares distintos, somente após cruzamento Sniper confirmado no fechamento M1 e alinhado ao Xtreme Tendência ATR18 × 2. Expiração escolhida: "+String(s.config&&s.config.expiry_minutes||1)+" minuto(s). Mantém payout válido, janela de até 2 segundos, até 2% da banca, ordens únicas, sem martingale; sem stops diários no modo DEMO Contínua.";
  const hs=$("historyStatus");if(hs)hs.textContent=s.history_ready?"Histórico permanente conectado ao Supabase":(s.history_error||"Carregando histórico permanente...");
  $("led").className="indicator"+(running?" active":connected?" warn":"");
  const connection=$("connection"),connectionStatus=$("bullexConnectionStatus");
@@ -315,7 +334,7 @@ function render(s){
  $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||(s.config.demo_unlimited===true?"✓ Modo DEMO CONTÍNUO: PRACTICE verificada; sem pausa diária por LOSS.":"✓ Conta PRACTICE pronta para iniciar no modo protegido.");
  $("startBlockReason").className="start-guidance"+(running||!blockReason?" ready":"");
  $("stop").disabled=!running;
- ["asset","strategy","stake","payout","expiryMinutes","maxOpenTrades","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ ["asset","strategy","stake","payout","expiryMinutes","maxOpenTrades","confluenceRSI","confluenceBollinger","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("demoUnlimited").disabled=running;
  $("patternOnly").disabled=running;
  updateDemoModeLabel();
@@ -339,7 +358,7 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),max_open_trades:num("maxOpenTrades"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),max_open_trades:num("maxOpenTrades"),confluence_rsi:$("confluenceRSI").checked,confluence_bollinger:$("confluenceBollinger").checked,stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("switchBullex").onclick=()=>{wantChangeAccount=!wantChangeAccount;$("bullexConnectFields").hidden=!wantChangeAccount;$("switchBullex").textContent=wantChangeAccount?"Cancelar troca de conta":"Trocar ou reconectar conta";};
