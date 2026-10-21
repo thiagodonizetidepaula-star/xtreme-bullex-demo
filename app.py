@@ -3,6 +3,7 @@ from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 from mesa_history import TradeHistory,HistoryError
+from mesa_chart import studies,watch,published_candle
 from mesa_quant import snapshot,metrics,grouped,risk_decision,breakeven,DEFAULT_FILTERS,check_filters
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
@@ -12,7 +13,7 @@ ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
 history_lock=threading.Lock();history=TradeHistory()
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'mesa','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'mesa','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -157,6 +158,17 @@ def loop(c):
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
             state['analysis']=a;state['analysis_asset']=item['asset'];state['candles']=data['candles'][-50:]
+            # Visual-only: never influence a directional decision or place orders.
+            try:watch(item['asset'])
+            except (OSError,ValueError):pass
+            chart_key=(item['asset'],a.get('candle'),c.get('sniper_source','hl2'))
+            if state.get('chart_study_key')!=chart_key:
+                try:
+                    state['chart_studies']=studies(data['candles'],c.get('sniper_source','hl2'))
+                    state['chart_study_key']=chart_key
+                except (ValueError,KeyError,TypeError,OverflowError):
+                    state['chart_studies']={'rows':[],'reason':'Aguardando candles M1 íntegros'}
+                    state['chart_study_key']=chart_key
             if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
                 evaluated=(c['asset'],a['candle'])
                 checks=a.get('checks',{})
@@ -251,7 +263,14 @@ def access():
     return jsonify(csrf=session['csrf'])
 @app.get('/api/state')
 def status():
-    with lock:return jsonify(**state,management=management(),comparison=comparison(),server_now=time.time(),csrf=session['csrf'])
+    with lock:
+        asset=state.get('analysis_asset')
+        connected=state.get('connected')
+        payload={**state,'management':management(),'comparison':comparison(),
+                 'server_now':time.time(),'csrf':session['csrf']}
+    # Leitura local do último candle parcial validado, sem bloquear o motor.
+    payload['chart_live']=published_candle(asset) if connected and asset else None
+    return jsonify(payload)
 @app.get('/api/history')
 def get_history():
     if not restore_history():
