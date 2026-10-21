@@ -124,7 +124,7 @@ window.updateGlobeRadar=function(s){
   detail="Sinal em "+detected.asset+"; envio sujeito às validações da DEMO.";
  } else if(s.running&&s.connected){
   status="BUSCANDO OPORTUNIDADES";message="PROCURANDO OPORTUNIDADE";
-  detail="Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.";
+  detail=s.config&&s.config.strategy==="mesa"?"Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.":"Xtreme Tendência ATR 18 × 2 · aguardando a próxima seta Sniper alinhada no fechamento M1.";
  } else if(s.connected){
   status="DEMO CONECTADA · PAUSADO";message="RADAR PRONTO";
   detail="Clique Iniciar robô DEMO para procurar oportunidades.";
