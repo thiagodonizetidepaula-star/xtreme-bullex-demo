@@ -1,0 +1,22 @@
+/* Visual-only market monitor; independent of trade execution. */
+.xtreme-chart-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.xtreme-chart-header h2{margin:0}
+.xtreme-legend{display:flex;flex-wrap:wrap;gap:8px 16px;padding:12px 0 10px}
+.xtreme-legend label{font-size:12px;color:#b5c9df;display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0}
+.xtreme-legend input{appearance:auto;width:auto;accent-color:#53e9a6}
+.xtreme-key{display:inline-block;width:17px;height:3px;border-radius:3px}
+.xtreme-market-head{display:flex;gap:8px 14px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:8px 0 10px}
+.xtreme-price{font-variant-numeric:tabular-nums;font-size:22px;font-weight:800;color:#f4f9ff}
+.xtreme-preview{font-size:11px;color:#b8cce0;border:1px solid #516783;padding:5px 9px;border-radius:9px}
+.xtreme-preview.fresh{border-color:#4ecba0;color:#8cface}
+.xtreme-preview.stale{border-color:#b77c44;color:#edc387}
+.xtreme-chart-shell{position:relative;width:100%;background:#0b1426;border:1px solid #263954;border-radius:14px;overflow:hidden}
+.xtreme-chart-shell canvas{display:block;width:100%;height:auto;aspect-ratio: 1000/470;min-height:250px;touch-action:pan-y}
+.xtreme-chart-status{font-size:12px;color:#a1b9d5;margin-top:8px;line-height:1.55}
+.xtreme-chart-caption{font-size:11px;color:#93a8c6;margin-top:5px;line-height:1.5}
+@media(max-width:600px){
+ .xtreme-chart-shell canvas{min-height:270px;aspect-ratio:1000/580}
+ .xtreme-price{font-size:20px}
+ .xtreme-preview{font-size:10px}
+ .xtreme-market-head{align-items:flex-start}
+}
