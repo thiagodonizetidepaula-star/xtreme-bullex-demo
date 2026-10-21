@@ -31,10 +31,10 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 <link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
-<script src="/static/globo-radar.js?v=20261020trend6" defer></script>
+<script src="/static/globo-radar.js?v=xtfollow1" defer></script>
 <link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive3"><script src="/static/xtreme-live-chart.js?v=xtlive3" defer></script></head>
 <body>
-<header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small">6 filtros internos · Bullex PRACTICE · tendência M1/M5</div></div></div>
+<header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small" id="currentStrategyLabel">Xtreme Sniper + Tendência · Bullex PRACTICE · M1</div></div></div>
 <div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
 <main>
 <div id="radarMount"></div>
@@ -162,6 +162,7 @@ function render(s){
  connected=!!s.connected;running=!!s.running;assets(s);
  if(first){setConfig(s.config);first=false;}
  const mg=s.management||{};
+ $("currentStrategyLabel").textContent=s.config&&s.config.strategy==="mesa"?"Mesa Tendência 6 · Bullex PRACTICE · M1/M5":"Xtreme Sniper + Tendência · Bullex PRACTICE · M1";
  const hs=$("historyStatus");if(hs)hs.textContent=s.history_ready?"Histórico permanente conectado ao Supabase":(s.history_error||"Carregando histórico permanente...");
  $("led").className="indicator"+(running?" active":connected?" warn":"");
  $("connection").textContent=running?"ROBÔ AUTOMÁTICO ATIVO":connected?"PRACTICE conectada":"Corretora desconectada";
