@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081526"><title>Mesa Trader Xtreme Lite · PRACTICE</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,Roboto,Arial,sans-serif;--bg:#081526;--box:#122238;--border:#283e59;--gold:#d6ae65;--green:#3bdaaa;--red:#ff8294;--muted:#a6bad1}*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at top,#193454,var(--bg) 65%);color:#eaf2fd}
+main{max-width:850px;margin:0 auto;padding:16px 15px 38px}h1{font-size:clamp(22px,5vw,29px);margin:0;color:#f8dea3}h2{font-size:16px;margin:0 0 12px}p{line-height:1.5}small,.muted{color:var(--muted)}.tiny{font-size:12px}
+header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap}.sub{font-size:12px;color:var(--muted);margin-top:5px}
+.tag{padding:7px 9px;border-radius:30px;border:1px solid #526b87;font-size:12px;font-weight:800;color:#d3dfed}
+.tag.ok{color:#a1f4d4;background:#063e35;border-color:#1c987d}.tag.warn{color:#ffe0ac;background:#493415;border-color:#946d37}
+section,.panel{background:linear-gradient(150deg,#14263c,#0d1c31);border:1px solid var(--border);border-radius:17px;padding:16px;margin:12px 0;box-shadow:0 8px 24px #0002}
+.hero{text-align:center;background:radial-gradient(circle at center,#163d51,#0d192c 70%);border:1px solid #826b44}.orb{width:130px;height:130px;border:2px solid #c7a35e;border-radius:50%;margin:5px auto 18px;display:grid;place-items:center;position:relative;box-shadow:0 0 45px #dfb35f30,inset 0 0 40px #f6cf7833}
+.orb:before,.orb:after{content:"";position:absolute;inset:14px;border:1px solid #ebca7e88;border-radius:50%;transform:rotate(45deg) scaleX(.5)}.orb:after{transform:rotate(75deg) scaleY(.45)}.orb.running{animation:turn 7s linear infinite;border-color:#5ee4b0}.orb.running:before{animation:turn 5s linear infinite}.orb span{font-size:43px;z-index:1}
+@keyframes turn{to{transform:rotate(360deg)}}#headline{font-size:20px;font-weight:850}#detail{color:#aebfd4;font-size:13px;line-height:1.55;margin:9px auto;max-width:560px}
+.actions{display:flex;gap:9px;flex-wrap:wrap}button,input,select{font:inherit}button{min-height:46px;border:0;border-radius:12px;padding:11px 15px;font-weight:800;cursor:pointer;color:#082018;background:var(--green)}button.secondary{color:#f8ddb1;border:1px solid #826d45;background:#1f3041}button.stop{background:#65303c;color:#ffccd3;border:1px solid #b45a68}button:disabled{opacity:.45;cursor:not-allowed}.actions>button{flex:1;min-width:130px}
+fieldset{border:0;padding:0;margin:0}.controls{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:13px 0}.controls label{display:flex;flex-direction:column;gap:6px;color:#b4c9de;font-size:12px;font-weight:750}
+input,select{color:#eef4fa;background:#0b1b2e;border:1px solid #476381;border-radius:9px;min-width:0;padding:11px;width:100%}input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid #edc47c;outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}.stat{padding:12px 8px;text-align:center;border:1px solid #2a4262;border-radius:12px;background:#08182c}.stat strong{display:block;font-size:24px;font-variant-numeric:tabular-nums}.stat small{font-size:11px}.positive{color:#80e6bf}.negative{color:#ff9cac}
+.openrow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.slot{padding:10px;background:#0c1b30;border:1px solid #3d5570;border-radius:10px;font-size:12px;min-height:69px}.slot b{font-size:13px;display:block}.slot em{font-style:normal;color:#eacb89;font-variant-numeric:tabular-nums;font-size:19px;font-weight:850}
+#feed{font-size:12px;line-height:1.5;color:#b5c8d8;min-height:22px}
+canvas{display:block;width:100%;height:210px;border-radius:9px;background:#071425}#chartNote{margin-top:8px;font-size:12px;color:#9eafc3}
+#events{margin:0;padding:0;list-style:none;display:grid;gap:7px}#events li{display:flex;justify-content:space-between;border-bottom:1px solid #26394e;padding:4px 0;font-size:12px;gap:10px}
+.details{margin-top:10px}details summary{cursor:pointer;color:#d8c08d;font-size:13px;font-weight:750}details .extra{padding-top:12px}.link{color:#f3d18a}
+#toast{color:#f4ddb0;font-size:12px;line-height:1.5;min-height:18px;margin-top:10px}#toast.error{color:#ffadba}
+#loginLayer{position:fixed;inset:0;z-index:20;background:#061325f2;display:flex;justify-content:center;align-items:center;padding:18px}#loginCard{width:min(100%,380px);border:1px solid #957b50;border-radius:20px;padding:26px;background:#13283e}
+#loginCard h2{font-size:21px;color:#f4da9d}#loginCard form{display:grid;gap:12px}#loginCard button{width:100%}
+[hidden]{display:none!important}
+@media(max-width:580px){main{padding:11px}.controls{grid-template-columns:repeat(2,1fr)}.stats{gap:6px}.stat{padding:10px 4px}.stat strong{font-size:21px}.openrow{grid-template-columns:1fr}.actions>button{min-width:45%}section{padding:13px}}
+</style></head>
+<body><main>
+<header><div><h1>◉ Xtreme Lite</h1><div class="sub">Mesa de Traders · somente Bullex PRACTICE · sem martingale</div></div><span id="connected" class="tag warn">DESCONectado</span></header>
+<section class="hero">
+<div id="orbit" class="orb"><span>◎</span></div>
+<div id="headline">Aguardando conexão</div>
+<div id="detail">Conecte sua conta DEMO para começar.</div>
+<div class="actions"><button id="startBtn" type="button" disabled>▶ INICIAR DEMO</button><button id="stopBtn" type="button" class="stop" disabled>■ PARAR BOT</button></div>
+<div id="toast" role="status" aria-live="polite"></div>
+</section>
+<section>
+<h2>Configuração rápida</h2>
+<div class="controls">
+<label>Valor da entrada <input id="stake" type="number" min=".01" step=".01" value="2" inputmode="decimal"></label>
+<label>Expiração <select id="expiry"><option value="1">1 minuto</option><option value="2">2 minutos</option><option value="3">3 minutos</option><option value="5">5 minutos</option></select></label>
+<label>Operações simultâneas <select id="maxOpen"><option value="1">1 operação</option><option value="2">2 operações</option><option value="3" selected>3 operações</option></select></label>
+<label>Payout mínimo <select id="payout"><option value="80">80%</option><option value="85">85%</option><option value="90">90%</option></select></label>
+</div>
+<div class="muted tiny">Estratégia fixa: <b>Xtreme Sniper + Xtreme Tendência</b>. RSI, Bollinger e aprendizado desativados neste modo. Entrada fixa até 2% da banca virtual, sem martingale; nunca duas ordens no mesmo par.</div>
+<div class="actions" style="margin-top:12px"><button id="saveBtn" type="button" class="secondary">Salvar configuração</button></div>
+</section>
+<section>
+<h2>Resultados DEMO de hoje</h2>
+<div class="stats"><div class="stat"><strong class="positive" id="wins">0</strong><small>WIN</small></div><div class="stat"><strong class="negative" id="losses">0</strong><small>LOSS</small></div><div class="stat"><strong id="accuracy">—</strong><small>Acerto</small></div><div class="stat"><strong id="pnl">0</strong><small>Lucro/prejuízo</small></div></div>
+<div id="feed" style="margin-top:14px">Lendo histórico da DEMO...</div>
+</section>
+<section><h2>Operações abertas <span class="tag" id="openCount">0/3</span></h2><div id="openSlots" class="openrow"><div class="muted tiny">Nenhuma operação aberta.</div></div></section>
+<section><h2>Gráfico M1 · Xtreme</h2><canvas id="priceChart" role="img" aria-label="Candles do último par monitorado" width="800" height="210"></canvas><div id="chartNote">Aguardando candles da Bullex PRACTICE.</div></section>
+<section><h2>Últimas operações</h2><ul id="events"><li>Aguardando dados.</li></ul></section>
+<section id="connectPanel"><h2>Conectar à Bullex DEMO</h2><div class="controls" style="grid-template-columns:1fr 1fr"><label>Email Bullex <input id="email" type="email" autocomplete="username" placeholder="email da conta"></label><label>Senha Bullex <input id="password" type="password" autocomplete="current-password" placeholder="senha"></label></div><div class="actions"><button type="button" id="connectBtn">Conectar PRACTICE</button></div><p class="tiny muted">A senha é enviada apenas ao seu servidor para autenticar na corretora e não é gravada na página.</p></section>
+<section><details><summary>Som e opções adicionais</summary><div class="extra"><div class="actions"><button class="secondary" id="voiceBtn" type="button">🔈 Ativar voz</button><button class="secondary" id="testVoice" type="button">Testar voz</button><button class="secondary" id="logoutBtn" type="button">Sair da conta</button></div><p class="muted tiny">Voz do Android em português, somente com a página aberta. Não altera operações.</p><p class="tiny"><a class="link" href="/avancado">Abrir painel avançado antigo</a></p></div></details></section>
+<p class="tiny muted">Modo de teste: não garante ganhos. Sinais atrasados, sem payout confirmado ou ordens com resultado incerto continuam bloqueados. A conta DEMO pode perder todo o saldo virtual.</p>
+</main>
+<div id="loginLayer" hidden><div id="loginCard"><h2>🔐 Mesa Trader</h2><p class="muted tiny">Entre usando a chave de acesso ao painel.</p><form id="loginForm"><input id="panelKey" type="password" autocomplete="current-password" required placeholder="Chave do painel"><button type="submit">Entrar</button></form><p id="loginError" class="negative tiny"></p></div></div>
+<script>
+(()=>{
+"use strict";
+const $=id=>document.getElementById(id);
+let csrf="",current=null,initializedVoice=false,speechEnabled=false,lastTradeStatus=new Map(),clockAt=Date.now(),busy=false;
+const money=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
+const safe=s=>String(s??"").replace(/[<>&"'\\u0000-\\u001f]/g,"").slice(0,90);
+function note(t,error=false){$("toast").textContent=t;$("toast").className=error?"error":"";}
+async function api(path,data,opts={}){
+ const response=await fetch(path,{method:data===undefined?"GET":"POST",credentials:"same-origin",cache:"no-store",signal:opts.signal,
+  headers:data===undefined?{}:{"Content-Type":"application/json","X-CSRF-Token":csrf},
+  body:data===undefined?undefined:JSON.stringify(data)});
+ const json=await response.json().catch(()=>({error:"Resposta do servidor inválida."}));
+ if(response.status===401||response.status===403){$("loginLayer").hidden=false;}
+ if(!response.ok)throw Error(json.error||"Erro HTTP "+response.status);
+ return json;
+}
+function disable(){
+ const running=!!current?.running,connected=!!current?.connected,uncertain=!!current?.uncertain;
+ for(const id of ["stake","expiry","maxOpen","payout","saveBtn"])$(id).disabled=running||busy;
+ $("startBtn").disabled=busy||running||!connected||uncertain||!current?.history_ready;
+ $("stopBtn").disabled=!running;
+ $("connectBtn").disabled=busy||running;
+}
+function formCfg(){
+ const c={...(current?.config||{})};
+ return Object.assign(c,{strategy:"sniper",sniper_source:"hl2",pattern_only:false,
+  confluence_rsi:false,confluence_bollinger:false,demo_unlimited:true,
+  stake:Number($("stake").value),expiry_minutes:Number($("expiry").value),
+  max_open_trades:Number($("maxOpen").value),payout:Number($("payout").value)});
+}
+async function save(){
+ if(!current)return;
+ const payload=formCfg();
+ if(!Number.isFinite(payload.stake)||payload.stake<=0)throw Error("Informe valor de entrada válido.");
+ if(!current.connected&&payload.stake<=0)throw Error("Conecte a conta DEMO.");
+ const r=await api("/api/config",payload);
+ current.config=payload;
+ note("Configuração Xtreme Lite salva: Sniper + Tendência, sem filtros adicionais.");
+ return r;
+}
+function activity(s){
+ const connected=!!s.connected,running=!!s.running;
+ $("connected").className="tag "+(connected?"ok":"warn");
+ $("connected").textContent=connected?"✓ PRACTICE":"DESCONECTADO";
+ const blocked=s.uncertain?"Ordem com resultado incerto: confira o histórico Bullex e use o painel avançado para revisão.":null;
+ let headline=connected?"RADAR PRONTO":"DEMO DESCONECTADA",detail="Conecte a Bullex PRACTICE para começar.";
+ if(connected){
+  detail=running?"Xtreme Sniper + Tendência monitorando os pares. Só entra com seta confirmada e validação atual.":"Clique em Iniciar DEMO para analisar os pares.";
+  if(running)headline="BUSCANDO SINAIS XTREME";
+  if(s.run_state==="retrying_feed"){headline="RECUPERANDO DADOS";detail="Falha temporária no feed. Sem enviar ordens desatualizadas.";}
+  if(s.run_state==="awaiting_open_results"){headline="PARANDO";detail="Aguardando o resultado das operações já enviadas.";}
+  if(s.stop_requested&&!running){headline="BOT PARADO";detail="Parada confirmada.";}
+  if(!running&&s.last_stop_reason)detail=s.last_stop_reason;
+ }
+ if(blocked){headline="REVISÃO NECESSÁRIA";detail=blocked;}
+ $("headline").textContent=headline;$("detail").textContent=detail;$("orbit").classList.toggle("running",running&&!blocked);
+ const wins=Number(s.wins)||0,losses=Number(s.losses)||0;
+ $("wins").textContent=wins;$("losses").textContent=losses;
+ $("accuracy").textContent=wins+losses?((wins/(wins+losses))*100).toFixed(1).replace(".",",")+"%":"—";
+ $("pnl").textContent=money(s.profit);
+ $("pnl").className=s.profit>=0?"positive":"negative";
+ const ignored=s.ignored||{};
+ $("feed").textContent="Pares com candles: "+Number(s.stream_ready||0)+"/"+Number(s.stream_total||0)+
+  " · Sinais atrasados hoje: "+Number(ignored.delay||0)+
+  " · Payout vencido: "+Number(ignored.payout||0)+
+  (s.feed_last_success_at?" · Última leitura: "+Math.max(0,Math.floor(Number(s.server_now)-Number(s.feed_last_success_at)))+"s atrás":"");
+ const opens=Array.isArray(s.open_trades)?s.open_trades:[];
+ $("openCount").textContent=opens.length+"/"+String(s.config?.max_open_trades||3);
+ clockAt=Date.now();
+ $("openSlots").replaceChildren();
+ if(!opens.length){const d=document.createElement("div");d.className="tiny muted";d.textContent="Sem operações abertas."; $("openSlots").append(d);}
+ for(const t of opens){
+  const el=document.createElement("div");el.className="slot";
+  const title=document.createElement("b");title.textContent=safe(t.asset)+" · "+String(t.direction||"").toUpperCase();
+  const left=document.createElement("em");left.dataset.expire=String(Number(t.expiration)||0);
+  el.append(title,left);$("openSlots").append(el);
+ }
+ const events=Array.isArray(s.trades)?s.trades:[];
+ $("events").replaceChildren();
+ for(const t of events.slice(0,8)){
+  const li=document.createElement("li");const a=document.createElement("span");const b=document.createElement("span");
+  a.textContent=safe(t.asset)+" "+(t.direction==="call"?"CALL":t.direction==="put"?"PUT":"");
+  b.textContent=t.status+(Number.isFinite(Number(t.profit))&&t.profit!==null?" · "+money(t.profit):"");
+  li.append(a,b);$("events").append(li);
+ }
+ if(!events.length)$("events").textContent="Aguardando histórico.";
+ if(s.config){for(const [id,key] of [["stake","stake"],["expiry","expiry_minutes"],["maxOpen","max_open_trades"],["payout","payout"]]){
+   const el=$(id);if(document.activeElement!==el&&!el.dataset.dirty)el.value=String(s.config[key]);}}
+ $("connectPanel").hidden=connected;
+ if(s.chart?.length)drawChart(s.chart);
+ else $("chartNote").textContent="Gráfico aguardando candles M1 contínuos.";
+ announce(s.trades||[]);
+ disable();
+}
+function tick(){
+ const time=Number(current?.server_now)||Date.now()/1000;
+ const now=time+(Date.now()-clockAt)/1000;
+ document.querySelectorAll("[data-expire]").forEach(el=>{
+  const sec=Math.max(0,Math.ceil(Number(el.dataset.expire)-now));
+  el.textContent=Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
+ });
+}
+function drawChart(candles){
+ const bars=candles.filter(x=>[x.open,x.close,x.max,x.min].every(v=>Number.isFinite(Number(v)))).slice(-40);
+ if(bars.length<2)return;
+ const canvas=$("priceChart"),dpr=window.devicePixelRatio||1;
+ const w=Math.max(280,canvas.clientWidth),h=210;
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+ const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+ const min=Math.min(...bars.map(b=>Number(b.min))),max=Math.max(...bars.map(b=>Number(b.max)));
+ const pad=(max-min)*.08||1,rng=max-min+2*pad,scale=v=>h-18-((Number(v)-(min-pad))/rng)*(h-33);
+ ctx.strokeStyle="#23405a";ctx.lineWidth=1;
+ for(let i=1;i<=3;i++){const y=h*i/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+ const width=w/bars.length;
+ bars.forEach((b,i)=>{const x=width*(i+.5),o=scale(b.open),c=scale(b.close),hi=scale(b.max),lo=scale(b.min);
+  const up=Number(b.close)>=Number(b.open);ctx.strokeStyle=up?"#48dfaf":"#ff8599";ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(x,hi);ctx.lineTo(x,lo);ctx.stroke();ctx.fillRect(x-Math.max(2,width*.25),Math.min(o,c),Math.max(3,width*.5),Math.max(1,Math.abs(c-o)));});
+ $("chartNote").textContent="Candles M1 do par exibido: "+safe(current?.chart_asset||"—")+". Apenas visualização.";
+}
+let voice={};
+function speak(t){
+ if(!speechEnabled||!window.speechSynthesis||!window.SpeechSynthesisUtterance)return;
+ const u=new SpeechSynthesisUtterance(t);u.lang="pt-BR";u.rate=1;u.volume=.8;
+ window.speechSynthesis.speak(u);
+}
+function announce(trades){
+ if(!initializedVoice){trades.forEach(t=>lastTradeStatus.set(t.event_key,t.status));initializedVoice=true;return;}
+ for(const t of trades){const key=t.event_key;if(!key)continue;const previous=lastTradeStatus.get(key);lastTradeStatus.set(key,t.status);
+ if(!speechEnabled||previous===t.status)continue;
+ if(t.status==="ABERTA"&&t.time&&Date.now()-Date.parse(t.time)<90000)
+   speak("Entrada DEMO confirmada. "+safe(t.asset)+". "+(t.direction==="call"?"Compra":"Venda")+".");
+ if((t.status==="WIN"||t.status==="LOSS")&&t.result_time&&Date.now()-Date.parse(t.result_time)<90000)
+   speak(t.status==="WIN"?"WIN confirmado. "+safe(t.asset):"LOSS confirmado. "+safe(t.asset));
+ }
+ if(lastTradeStatus.size>250){for(const key of [...lastTradeStatus.keys()].slice(0,100))lastTradeStatus.delete(key);}
+}
+async function poll(){
+ try{const s=await api("/api/lite/state");csrf=s.csrf;current=s;$("loginLayer").hidden=true;activity(s);}
+ catch(error){if(!current||String(error.message).includes("chave"))$("loginLayer").hidden=false;else note("Conexão com Render falhou: "+error.message+". Isso não confirma a parada do bot.",true);}
+}
+async function action(run){if(busy)return;busy=true;disable();try{await run();}catch(e){note(e.message,true);}finally{busy=false;disable();poll();}}
+$("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";
+ try{const r=await api("/api/access",{key:$("panelKey").value});csrf=r.csrf;$("panelKey").value="";await poll();}
+ catch(error){$("loginError").textContent=error.message;}
+});
+$("connectBtn").onclick=()=>action(async()=>{const email=$("email").value.trim(),password=$("password").value;
+ if(!email||!password)throw Error("Informe email e senha da Bullex PRACTICE.");
+ await api("/api/connect",{email,password});$("password").value="";note("✓ Bullex PRACTICE conectada.");});
+$("saveBtn").onclick=()=>action(async()=>{await save();});
+$("startBtn").onclick=()=>action(async()=>{await save();await api("/api/start",{});note("Início confirmado. Aguardando sinal Sniper alinhado, sem forçar entradas.");});
+$("stopBtn").onclick=async()=>{
+ // Emergency stop never depends on normal button busy/poll sequence.
+ $("stopBtn").disabled=true;note("Enviando parada ao servidor...");
+ try{const r=await api("/api/stop",{});note(r.running?"Pedido de parada recebido. Aguardando operações abertas.":"Robô parado confirmado pelo servidor.");}
+ catch(e){note("Parada NÃO confirmada: "+e.message+". Confira conexão com Render.",true);}
+ finally{await poll();}
+};
+$("logoutBtn").onclick=()=>action(async()=>{if(!confirm("Desconectar PRACTICE e encerrar o login deste celular?"))return;await api("/api/logout",{});current=null;$("loginLayer").hidden=false;});
+$("voiceBtn").onclick=()=>{speechEnabled=!speechEnabled;$("voiceBtn").textContent=speechEnabled?"🔊 Voz ativada":"🔈 Ativar voz";if(speechEnabled)speak("Assistente de voz Xtreme ativado.");else try{window.speechSynthesis.cancel();}catch(e){};};
+$("testVoice").onclick=()=>{const was=speechEnabled;speechEnabled=true;speak("Teste de voz, Mesa Trader Xtreme Lite.");speechEnabled=was;};
+for(const id of ["stake","expiry","maxOpen","payout"])$(id).addEventListener("change",()=>$(id).dataset.dirty="true");
+poll();setInterval(poll,3000);setInterval(tick,500);
+})();
+</script></body></html>
