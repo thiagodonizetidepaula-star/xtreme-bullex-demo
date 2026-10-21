@@ -185,6 +185,10 @@ def dispatch(c):
         if not isinstance(bars,list): raise RuntimeError('Corretora não forneceu velas')
         return {'candles':bars,'now':now}
     if op=='order':
+        expiry=c.get('expiry_minutes',1)
+        if type(expiry) is not int or expiry not in (1,2,3,5):
+            return {'sent':False,'reason':'Expiração inválida. Permitidos 1, 2, 3 ou 5 minutos.'}
+        expiration=int(c['candle']+60*(expiry+1))
         started=broker_now()
         window=2 if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 5
         if not 0<=started-c['candle']-60<=window:return {'sent':False,'reason':'Janela de entrada encerrada antes da validação.'}
@@ -221,13 +225,13 @@ def dispatch(c):
                     sent_at=current;send_catalog_age=time.time()-market_at
                 return original(payload,*args,**kwargs)
             ws.send=guarded_send
-            try:ok,order_id=api.buy_by_raw_expirations(c['stake'],c['asset'],c['direction'],'turbo',int(c['candle']+120))
+            try:ok,order_id=api.buy_by_raw_expirations(c['stake'],c['asset'],c['direction'],'turbo',expiration)
             finally:ws.send=original
         else:
-            ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],1)
+            ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],expiry)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
         balance_cache-=c['stake']
-        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),
+        return {'sent':True,'id':order_id,'payout':payout,'expiration':expiration,'expiry_minutes':expiry,
                 'catalog_age':round(send_catalog_age,3),'catalog_latency':round(market_duration,3),
                 'send_delay':round((sent_at or broker_now())-c['candle']-60,3),
                 'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else api.get_server_timestamp()}
