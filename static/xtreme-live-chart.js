@@ -38,8 +38,17 @@ function draw(){
  const overlays=new Map(((state.chart_studies||{}).rows||[]).map(p=>[p.from,p]));
  const trendOn=$("xtremeShowTrend")?$("xtremeShowTrend").checked:true;
  const sniperOn=$("xtremeShowSniper")?$("xtremeShowSniper").checked:true;
+ const bollingerOn=$("xtremeShowBollinger")?$("xtremeShowBollinger").checked:true;
  const left=30,right=105,top=25,bottom=50,plotW=w-left-right,plotH=h-top-bottom;
  const values=candles.flatMap(b=>[Number(b.min),Number(b.max)]);
+ if(bollingerOn){
+  for(const b of closed){
+   const point=overlays.get(b.from);
+   if(point&&Number.isFinite(point.bb_upper)&&Number.isFinite(point.bb_lower)){
+     values.push(point.bb_upper,point.bb_lower);
+   }
+  }
+ }
  if(trendOn){
   for(const b of closed){
    const point=overlays.get(b.from);
@@ -71,6 +80,26 @@ function draw(){
    ctx.setLineDash([]);
    if(i%8===0 || i===candles.length-1){ctx.fillStyle="#7f98b7";ctx.font="11px system-ui";ctx.fillText(fmtTime(bar.from),Math.max(left,x-17),h-15);}
  });
+ if(bollingerOn){
+  // Confirmed Bollinger 20, 2 standard deviations on the closed candle.
+  // All three lines are drawn strictly from server-provided causal overlays.
+  for(const [property,color,width] of [
+    ["bb_upper","#d9a8ff",1.7],
+    ["bb_middle","#8d86db",1.15],
+    ["bb_lower","#d9a8ff",1.7]
+  ]){
+    ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();
+    let started=false;
+    for(let i=0;i<closed.length;i++){
+      const overlay=overlays.get(closed[i].from);
+      const value=overlay&&overlay[property];
+      if(!Number.isFinite(value)){started=false;continue;}
+      if(!started){ctx.moveTo(xx(i),yy(value));started=true;}
+      else{ctx.lineTo(xx(i),yy(value));}
+    }
+    ctx.stroke();
+  }
+ }
  if(trendOn){
   // Xtreme Tendência: ATR(18) * 2. Segmentos separados nas viradas.
   // Calculado no servidor apenas com candles fechados, sem sinal provisório.
@@ -125,18 +154,27 @@ function update(s){
  mode.textContent=live?"Prévia M1 • amostra lida há "+Math.max(0,Math.round(age))+"s":"Sem prévia recente • candles fechados";
  const lastClose=(s.chart_studies&&Array.isArray(s.chart_studies.rows))?s.chart_studies.rows.at(-1):null;
  const up=lastClose&&lastClose.trend_position===1,down=lastClose&&lastClose.trend_position===-1;
+ const lastRSI=lastClose&&Number(lastClose.rsi14);
+ const rsiEl=$("xtremeRSIState");
+ if(rsiEl){
+   const available=lastClose&&Number.isFinite(lastRSI);
+   const note=!available?"Aguardando RSI 14":lastRSI>70?"RSI elevado · CALL bloqueável":lastRSI<30?"RSI baixo · PUT bloqueável":
+      lastRSI>=50?"Momentum de alta":"Momentum de baixa";
+   rsiEl.textContent=available?"RSI 14: "+lastRSI.toFixed(1)+" · "+note:"RSI 14: "+note;
+   rsiEl.style.color=available?(lastRSI>=70||lastRSI<=30?"#ffcf73":"#8eebc1"):"#c3c5d1";
+ }
  const trendEl=$("xtremeTrendState");
  if(trendEl){
    trendEl.textContent=up?"TENDÊNCIA DE ALTA":down?"TENDÊNCIA DE BAIXA":"SEM TENDÊNCIA CONFIRMADA";
    trendEl.style.color=up?"#43e6a0":down?"#ff7085":"#c8ad7a";
  }
  $("xtremeDescription").textContent=s.connected?
-  "Xtreme Tendência ATR 18 × 2 acompanha a direção. O próximo cruzamento Sniper confirmado na mesma direção pode gerar entrada na vela seguinte, apenas na conta DEMO e respeitando as travas de risco. Setas amarelas são rejeitadas.":
+  "Xtreme Tendência ATR 18 × 2 e Sniper geram o sinal de base. RSI 14 e Bollinger 20 × 2 são confluências configuráveis, calculadas em velas M1 fechadas. A ordem exige validação PRACTICE e risco. Setas amarelas não confirmadas são descartadas.":
   "Conecte a conta PRACTICE; o gráfico não gera preços nem sinais artificiais.";
  clock();draw();
 }
 function init(){
- for(const id of ["xtremeShowTrend","xtremeShowSniper"]){
+ for(const id of ["xtremeShowTrend","xtremeShowSniper","xtremeShowBollinger"]){
   const el=$(id);if(el)el.addEventListener("change",draw);
  }
  window.addEventListener("resize",()=>{if(last)draw();});
