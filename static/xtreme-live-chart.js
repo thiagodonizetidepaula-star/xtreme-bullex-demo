@@ -36,12 +36,16 @@ function draw(){
    return;
  }
  const overlays=new Map(((state.chart_studies||{}).rows||[]).map(p=>[p.from,p]));
- const emaOn=$("xtremeShowEma")?$("xtremeShowEma").checked:true;
+ const trendOn=$("xtremeShowTrend")?$("xtremeShowTrend").checked:true;
  const sniperOn=$("xtremeShowSniper")?$("xtremeShowSniper").checked:true;
  const left=30,right=105,top=25,bottom=50,plotW=w-left-right,plotH=h-top-bottom;
  const values=candles.flatMap(b=>[Number(b.min),Number(b.max)]);
- if(emaOn){
-  for(const b of closed){const point=overlays.get(b.from);if(point)for(const key of ["ema20","ema50","ema100"]){const v=point[key];if(typeof v==="number"&&Number.isFinite(v))values.push(v);}}
+ if(trendOn){
+  for(const b of closed){
+   const point=overlays.get(b.from);
+   const v=point&&point.trend_stop;
+   if(typeof v==="number"&&Number.isFinite(v))values.push(v);
+  }
  }
  const lo=Math.min(...values),hi=Math.max(...values);
  if(!Number.isFinite(lo)||!Number.isFinite(hi))return;
@@ -67,16 +71,20 @@ function draw(){
    ctx.setLineDash([]);
    if(i%8===0 || i===candles.length-1){ctx.fillStyle="#7f98b7";ctx.font="11px system-ui";ctx.fillText(fmtTime(bar.from),Math.max(left,x-17),h-15);}
  });
- if(emaOn){
-  const fields=[["ema20","#ffdc72"],["ema50","#70b1ff"],["ema100","#bc91ff"]];
-  for(const [key,color] of fields){
-   ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();let first=true;
-   for(let i=0;i<closed.length;i++){
-    const point=overlays.get(closed[i].from),v=point&&point[key];
-    if(!Number.isFinite(v)){first=true;continue;}
-    if(first){ctx.moveTo(xx(i),yy(v));first=false;}else ctx.lineTo(xx(i),yy(v));
+ if(trendOn){
+  // Xtreme Tendência: ATR(18) * 2. Segmentos separados nas viradas.
+  // Calculado no servidor apenas com candles fechados, sem sinal provisório.
+  for(let i=0;i<closed.length;i++){
+   const p=overlays.get(closed[i].from);
+   if(!p||!Number.isFinite(p.trend_stop)||![-1,1].includes(p.trend_position))continue;
+   const color=p.trend_position===1?"#3ef4a1":"#ff657d";
+   const prev=i>0?overlays.get(closed[i-1].from):null;
+   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=3.2;
+   if(prev&&prev.trend_position===p.trend_position&&Number.isFinite(prev.trend_stop)){
+    ctx.beginPath();ctx.moveTo(xx(i-1),yy(prev.trend_stop));ctx.lineTo(xx(i),yy(p.trend_stop));ctx.stroke();
+   }else{
+    ctx.beginPath();ctx.arc(xx(i),yy(p.trend_stop),2.5,0,Math.PI*2);ctx.fill();
    }
-   ctx.stroke();
   }
  }
  if(sniperOn){
@@ -103,7 +111,7 @@ function draw(){
   ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(w-right,y);ctx.stroke();ctx.setLineDash([]);
   ctx.fillStyle="#f3d18b";ctx.font="bold 11px system-ui";ctx.fillText("VELA EM FORMAÇÃO",Math.min(w-right-120,xx(lastIndex)-110),top+14);
  }
- ctx.fillStyle="#a0b4cd";ctx.font="12px system-ui";ctx.fillText("M1 • valores do streaming Bullex • setas Sniper apenas após fechamento • horário de Brasília",left,h-35);
+ ctx.fillStyle="#a0b4cd";ctx.font="12px system-ui";ctx.fillText("M1 • Xtreme Tendência + Sniper confirmados após fechamento • horário de Brasília",left,h-35);
 }
 function update(s){
  last=s;
@@ -115,13 +123,20 @@ function update(s){
  const age=live?Math.max(0,serverBase-Number(s.chart_live.received_at||0)):Infinity;
  mode.className="xtreme-preview "+(age<4?"fresh":"stale");
  mode.textContent=live?"Prévia M1 • amostra lida há "+Math.max(0,Math.round(age))+"s":"Sem prévia recente • candles fechados";
+ const lastClose=(s.chart_studies&&Array.isArray(s.chart_studies.rows))?s.chart_studies.rows.at(-1):null;
+ const up=lastClose&&lastClose.trend_position===1,down=lastClose&&lastClose.trend_position===-1;
+ const trendEl=$("xtremeTrendState");
+ if(trendEl){
+   trendEl.textContent=up?"TENDÊNCIA DE ALTA":down?"TENDÊNCIA DE BAIXA":"SEM TENDÊNCIA CONFIRMADA";
+   trendEl.style.color=up?"#43e6a0":down?"#ff7085":"#c8ad7a";
+ }
  $("xtremeDescription").textContent=s.connected?
-  "Dados recebidos pelo bot; visualização atualizada a cada ~2,5 s. Setas: cruzamento Sniper e confirmação de tendência (S). Não alteram as entradas do robô.":
+  "Xtreme Tendência ATR 18 × 2 acompanha a direção. O próximo cruzamento Sniper confirmado na mesma direção pode gerar entrada na vela seguinte, apenas na conta DEMO e respeitando as travas de risco. Setas amarelas são rejeitadas.":
   "Conecte a conta PRACTICE; o gráfico não gera preços nem sinais artificiais.";
  clock();draw();
 }
 function init(){
- for(const id of ["xtremeShowEma","xtremeShowSniper"]){
+ for(const id of ["xtremeShowTrend","xtremeShowSniper"]){
   const el=$(id);if(el)el.addEventListener("change",draw);
  }
  window.addEventListener("resize",()=>{if(last)draw();});
