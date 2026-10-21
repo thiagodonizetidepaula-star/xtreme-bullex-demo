@@ -182,7 +182,7 @@ function startBlockReason(s){
  if(s.running)return "";
  if(s.uncertain)return "Existe ordem incerta: confira o histórico da Bullex e confirme a revisão nas Configurações.";
  if(!s.history_ready)return s.history_error||"Aguardando recuperação do histórico permanente do Supabase.";
- if(s.management&&s.management.can_trade===false)return "Stop win/loss, sequência de perdas ou limite diário bloqueou novas entradas.";
+ if(s.management&&s.management.can_trade===false)return s.management.block_reason||"Limite de risco da DEMO atingido. Confira o resultado do dia e os stops.";
  const balance=Number(s.balance),stake=Number(s.config&&s.config.stake);
  if(!Number.isFinite(balance)||balance<=0)return "Saldo DEMO indisponível: confira a conexão.";
  if(!Number.isFinite(stake)||stake<=0)return "Configure um valor de entrada válido.";
@@ -215,7 +215,7 @@ function render(s){
  $("winrate").textContent=closed?(100*(mg.wins||0)/closed).toFixed(1)+"%":"—";
  $("record").textContent=(mg.wins||0)+" WIN · "+(mg.losses||0)+" LOSS · "+(mg.ties||0)+" EMPATE";
  $("trades").textContent=String(mg.used||0)+"/"+String(s.config.limit||5);
- $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected?"Pronto para iniciar":"Aguardando conexão";
+ $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected&&mg.can_trade===false?(mg.block_reason||"Pausa por limite de risco"):connected?"Pronto para iniciar":"Aguardando conexão";
  const blockReason=startBlockReason(s);
  $("start").disabled=running||!!blockReason;
  $("start").title=blockReason||"Robô DEMO pronto para iniciar";
