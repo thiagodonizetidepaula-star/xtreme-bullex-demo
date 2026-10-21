@@ -126,8 +126,8 @@ class PaperRunner:
                                 self.events.append(record)
                                 self.signals+=len(found)
                                 self.asset=selected['asset']
-                                self.message='Sinal virtual '+selected['direction'].upper()+' · '+selected['asset']+
-                                   ' | aguardando fechamento da próxima M1.'
+                                self.message=('Sinal virtual '+selected['direction'].upper()+
+                                              ' · '+selected['asset']+' | aguardando fechamento da próxima M1.')
                 self.stop_event.wait(.65)
         except Exception as exc:
             with self.lock:
