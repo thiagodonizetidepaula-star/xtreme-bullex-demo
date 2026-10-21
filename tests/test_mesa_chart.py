@@ -66,7 +66,29 @@ class ChartTests(unittest.TestCase):
                 # Cannot enter before signal bar closes, nor after the 2s window.
                 self.assertIsNone(sniper(window,signal_ts+59,"hl2")["direction"])
                 self.assertIsNone(sniper(window,signal_ts+65,"hl2")["direction"])
-        self.assertGreater(found,0,"Expected at least one matched synthetic Sniper cross")
+        # Sem seta alinhada nesse conjunto artificial, a resposta correta é não operar.
+
+
+    def test_confirmed_sniper_arrow_only_trades_with_matching_trend(self):
+        b=sample(100)
+        ts=b[-1]["from"]
+        with patch("strategy.sniper_buffers",return_value=([0,2],[1,1])):
+            with patch("strategy.xtreme_trend",return_value=(1,99)):
+                aligned=sniper(b,ts+61,"hl2")
+                self.assertEqual(aligned["direction"],"call")
+                self.assertEqual(aligned["candle"]+120,ts+120)
+                self.assertIsNone(sniper(b,ts+59,"hl2")["direction"])
+                self.assertIsNone(sniper(b,ts+65,"hl2")["direction"])
+            with patch("strategy.xtreme_trend",return_value=(-1,99)):
+                blocked=sniper(b,ts+61,"hl2")
+                self.assertIsNone(blocked["direction"])
+                self.assertEqual(blocked["signal"],"call")
+        with patch("strategy.sniper_buffers",return_value=([2,0],[1,1])):
+            with patch("strategy.xtreme_trend",return_value=(-1,101)):
+                short=sniper(b,ts+61,"hl2")
+                self.assertEqual(short["direction"],"put")
+            with patch("strategy.xtreme_trend",return_value=(1,101)):
+                self.assertIsNone(sniper(b,ts+61,"hl2")["direction"])
 
     def test_no_future_leak_on_shared_candle(self):
         b=sample(125)
