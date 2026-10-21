@@ -66,7 +66,7 @@ def start_pattern_collectors():
                      daemon=True,name="mesa_passive_market_reader")
         pattern_scanner.start()
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'last_signal':None,'trades':[],'logs':[],'uncertain':False,'last_candle':None,'chart_studies':{'rows':[]},'chart_study_key':None,'history_ready':False,'history_error':'Histórico não carregado.','history_saved':False,'stop_requested':False,'stop_requested_at':None,'stop_completed_at':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','demo_unlimited':True,'pattern_only':False,'stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -83,6 +83,8 @@ class Client:
         threading.Thread(target=read,daemon=True).start()
     def call(self,op,timeout=35,**kwargs):
         with self.lock:
+            if op=='order' and stop.is_set():
+                return {'sent':False,'reason':'Parada solicitada antes de enviar ordem à Bullex.'}
             if self.p.poll() is not None:raise RuntimeError('Integração encerrada. Reconecte.')
             self.p.stdin.write(json.dumps({'op':op,**kwargs})+'\n');self.p.stdin.flush()
             try: line=self.q.get(timeout=timeout)
@@ -186,13 +188,16 @@ def loop(c):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
                 log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 'acima de '+str(max(80,c['payout'])))+'%.')
+            if stop.is_set():break
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
+            if stop.is_set():break
             for error in batch.get('errors',[]):log(error)
             selected=None;selected_score=None
             payouts={x['asset']:float(x.get('payout',0)) for x in candidates}
             for item in batch['items']:
+                if stop.is_set():break
                 try:
                     analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
                 except (ValueError,KeyError,TypeError) as e:
@@ -210,6 +215,7 @@ def loop(c):
                        min(float(analysis.get('adx14',0)),35.0),payouts.get(item['asset'],0.0))
                 if selected_score is None or score>selected_score:
                     selected=(item,analysis);selected_score=score
+            if stop.is_set():break
             state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
             if selected is None:
                 state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
@@ -286,6 +292,13 @@ def loop(c):
                     save_trade(trade)
                     stop.wait(.1)
                     continue
+                if stop.is_set():
+                    trade['status']='IGNORADA'
+                    trade['reason']='Parada solicitada antes do envio. Nenhuma ordem enviada.'
+                    state['uncertain']=False
+                    state['last_signal']['status']='ignored'
+                    save_trade(trade)
+                    break
                 order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];trade['catalog_age']=order.get('catalog_age');trade['catalog_latency']=order.get('catalog_latency');state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
@@ -307,7 +320,12 @@ def loop(c):
         if client:client.close()
         if state['uncertain']:
             state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.');save_trade(state['trades'][-1])
-    finally:state['running']=False
+    finally:
+        with lock:
+            state['running']=False
+            if state.get('stop_requested'):
+                state['stop_completed_at']=time.time()
+                log('Robô parado: nenhuma nova ordem será enviada. Operações previamente enviadas podem já ter vencido.')
 
 @app.before_request
 def auth():
@@ -344,6 +362,9 @@ def status():
         connected=state.get('connected')
         payload={**state,'management':management(),'comparison':comparison(),
                  'server_now':time.time(),'csrf':session['csrf']}
+        # Keep mobile polling lightweight; full permanent history remains /api/history.
+        payload['trades']=state['trades'][-35:]
+        payload['logs']=state['logs'][-25:]
     # Leitura local do último candle parcial validado, sem bloquear o motor.
     payload['chart_live']=published_candle(asset) if connected and asset else None
     payload['pattern_learning']={"enabled":pattern_gateway.enabled,
@@ -457,12 +478,36 @@ def start():
         balance=state.get('balance')
         if not isinstance(balance,(int,float)) or not math.isfinite(balance) or not 0<c['stake']<=balance*.02:
             return jsonify(error='Entrada fixa deve ser no máximo 2% do saldo DEMO.'),409
-        stop.clear();state['running']=True;bot=threading.Thread(target=loop,args=(c,),daemon=True);bot.start()
+        stop.clear()
+        state['stop_requested']=False
+        state['stop_requested_at']=None
+        state['stop_completed_at']=None
+        state['running']=True
+        bot=threading.Thread(target=loop,args=(c,),daemon=True)
+        bot.start()
         return jsonify(ok=True)
 @app.post('/api/stop')
 def halt():
-    with lock:stop.set();log('Parada solicitada. Uma ordem já enviada será acompanhada até o resultado.')
-    return jsonify(ok=True)
+    # Emergency STOP must never wait on app.lock, current order, or heavy state API.
+    # Acknowledges REQUEST, not completion; any placed order still needs settlement.
+    stop.set()
+    if not state.get('stop_requested'):
+        state['stop_requested']=True
+        state['stop_requested_at']=time.time()
+        log('PARADA RECEBIDA: novas entradas bloqueadas. Aguardando operação em andamento, se houver.')
+    if not state.get('running'):
+        state['stop_completed_at']=time.time()
+    return jsonify(ok=True,requested=True,running=bool(state.get('running')),
+                   status='parando' if state.get('running') else 'parado')
+
+@app.get('/api/control')
+def control_status():
+    # Small independent endpoint, no trade history or chart payload.
+    return jsonify(running=bool(state.get('running')),
+                   stop_requested=bool(stop.is_set()),
+                   completed_at=state.get('stop_completed_at'),
+                   uncertain=bool(state.get('uncertain')),
+                   server_now=time.time())
 @app.post('/api/logout')
 def logout():
     global client
