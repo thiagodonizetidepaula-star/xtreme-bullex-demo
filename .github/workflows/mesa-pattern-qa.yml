@@ -17,10 +17,10 @@ jobs:
       - run: pip install -r requirements.txt
       - name: Syntax check, zero real broker calls
         run: python -m compileall -q mesa_pattern_client.py mesa_market_capture.py mesa_pattern_features.py mesa_pattern_train.py app.py worker.py
-      - name: Validate offline
+      - name: Install pinned audited Bullex vendor and run full regression
         env:
           APP_ACCESS_KEY: test-access-key-only
           SESSION_SECRET: unit_test_flask_secret_64_characters_long_for_cookie_signing
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: python bootstrap.py
       - name: Frontend JS syntax
         run: node --check static/mesa-pattern-dashboard.js
