@@ -103,10 +103,10 @@ CONFIGS=["baseline","votes_4","votes_5","votes_6","sessions","volatility","adx_2
          "support_resistance","candle","news","bad_segments"]
 
 def walk_forward(by_asset,news=None):
-    all_events=candidate_events(by_asset)
     times=sorted({r["from"] for rows in by_asset.values() for r in rows})
     if len(times)<400:
         raise ValueError("Amostra pequena: forneça pelo menos 400 minutos M1, por vários dias para análise.")
+    all_events=candidate_events(by_asset)
     cut1=times[int(.6*len(times))]
     cut2=times[int(.8*len(times))]
     folds=[
