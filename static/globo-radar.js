@@ -147,7 +147,19 @@ window.updateGlobeRadar=function(s){
    if(Number.isFinite(Number(current)))quick.value=String(current);
  }
  $("quickSave").disabled=!!s.running;
- $("quickStart").disabled=!s.connected||!!s.running||!!s.uncertain||(s.management&&s.management.can_trade===false);
+ // Compartilhe o motivo real do bloqueio com o botão principal do painel.
+ // Não acenda o atalho quando a API recusaria a partida (histórico/limites).
+ const originalStart=$("start");
+ $("quickStart").disabled=originalStart?originalStart.disabled:
+   !s.connected||!!s.running||!!s.uncertain||!s.history_ready||(s.management&&s.management.can_trade===false);
+ $("quickStart").title=originalStart?originalStart.title:"Conecte à PRACTICE e valide os limites";
+ const reason=window.getDemoStartBlockReason?window.getDemoStartBlockReason(s):"";
+ const quickMessage=$("quickFeedback");
+ if(quickMessage&&!s.running&&!s.connected){
+   quickMessage.textContent="Conecte a conta PRACTICE em Configurações para ativar o radar.";
+ }else if(quickMessage&&!s.running&&reason){
+   quickMessage.textContent=reason;
+ }
  $("quickStop").hidden=!s.running;
  $("quickStop").disabled=!s.running;
  $("quickStart").hidden=!!s.running;
