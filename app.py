@@ -605,6 +605,7 @@ def lite_state():
           profit=round(sum(float(t.get('profit') or 0) for t in results),4),
           ignored=statuses,open_trades=current_open,
           chart_asset=state.get('analysis_asset'),chart=chart,
+          chart_overlay=state.get('chart_studies',{}).get('rows',[])[-40:],
           trades=[{'event_key':t.get('event_key'),'asset':t.get('asset'),
                    'direction':t.get('direction'),'status':t.get('status'),
                    'profit':t.get('profit'),'time':t.get('time'),

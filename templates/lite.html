@@ -89,7 +89,7 @@ function formCfg(){
  return Object.assign(c,{strategy:"sniper",sniper_source:"hl2",pattern_only:false,
   confluence_rsi:false,confluence_bollinger:false,demo_unlimited:true,
   stake:Number($("stake").value),expiry_minutes:Number($("expiry").value),
-  max_open_trades:Number($("maxOpen").value),payout:Number($("payout").value)});
+  max_open_trades:Number($("maxOpen").value),payout:Math.max(80,Number($("payout").value)||80)});
 }
 async function save(){
  if(!current)return;
@@ -150,7 +150,7 @@ function activity(s){
  if(s.config){for(const [id,key] of [["stake","stake"],["expiry","expiry_minutes"],["maxOpen","max_open_trades"],["payout","payout"]]){
    const el=$(id);if(document.activeElement!==el&&!el.dataset.dirty)el.value=String(s.config[key]);}}
  $("connectPanel").hidden=connected;
- if(s.chart?.length)drawChart(s.chart);
+ if(s.chart?.length)drawChart(s.chart,s.chart_overlay||[]);
  else $("chartNote").textContent="Gráfico aguardando candles M1 contínuos.";
  announce(s.trades||[]);
  disable();
@@ -163,7 +163,7 @@ function tick(){
   el.textContent=Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0");
  });
 }
-function drawChart(candles){
+function drawChart(candles,overlay=[]){
  const bars=candles.filter(x=>[x.open,x.close,x.max,x.min].every(v=>Number.isFinite(Number(v)))).slice(-40);
  if(bars.length<2)return;
  const canvas=$("priceChart"),dpr=window.devicePixelRatio||1;
@@ -178,7 +178,23 @@ function drawChart(candles){
  bars.forEach((b,i)=>{const x=width*(i+.5),o=scale(b.open),c=scale(b.close),hi=scale(b.max),lo=scale(b.min);
   const up=Number(b.close)>=Number(b.open);ctx.strokeStyle=up?"#48dfaf":"#ff8599";ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1.2;
   ctx.beginPath();ctx.moveTo(x,hi);ctx.lineTo(x,lo);ctx.stroke();ctx.fillRect(x-Math.max(2,width*.25),Math.min(o,c),Math.max(3,width*.5),Math.max(1,Math.abs(c-o)));});
- $("chartNote").textContent="Candles M1 do par exibido: "+safe(current?.chart_asset||"—")+". Apenas visualização.";
+ const lookup=new Map((Array.isArray(overlay)?overlay:[]).map(o=>[Number(o.from),o]));
+ // ATR18 x2 Xtreme Tendência and confirmed Sniper arrows, visual only.
+ for(let i=0;i<bars.length;i++){
+  const b=bars[i],o=lookup.get(Number(b.from));if(!o)continue;
+  if(Number.isFinite(Number(o.trend_stop))&&o.trend_stop!==null){
+   ctx.fillStyle=Number(o.trend_position)>0?"#54e9ad":"#ff8fa3";
+   ctx.beginPath();ctx.arc(width*(i+.5),scale(o.trend_stop),2.6,0,Math.PI*2);ctx.fill();
+  }
+  if(o.sniper&&o.sniper.confirmed){
+   ctx.fillStyle=o.sniper.direction==="call"?"#a0ffd0":"#ffaaaa";
+   ctx.font="bold 18px sans-serif";ctx.textAlign="center";
+   ctx.fillText(o.sniper.direction==="call"?"▲":"▼",width*(i+.5),
+     scale(o.sniper.direction==="call"?b.min:b.max)+(o.sniper.direction==="call"?18:-7));
+  }
+ }
+ $("chartNote").textContent="M1 "+safe(current?.chart_asset||"—")+
+ " · Xtreme Tendência (pontos verdes/vermelhos) · setas Sniper confirmadas. Somente visualização.";
 }
 let voice={};
 function speak(t){

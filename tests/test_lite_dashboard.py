@@ -22,7 +22,7 @@ class LiteDashboard(unittest.TestCase):
         result=self.client.get("/api/lite/state")
         self.assertEqual(result.status_code,200)
         data=result.get_json()
-        for item in ("csrf","ignored","trades","open_trades","chart","history_ready"):
+        for item in ("csrf","ignored","trades","open_trades","chart","chart_overlay","history_ready"):
             self.assertIn(item,data)
         self.assertNotIn("password",data)
         self.assertLess(len(result.data),20000)
