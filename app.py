@@ -445,8 +445,8 @@ def start():
         if state['uncertain']:return jsonify(error='Uma operação anterior ficou sem resultado confirmado. Confira na Bullex PRACTICE e confirme a revisão em Configurações.'),409
         c=dict(state['config'])
         if c.get('pattern_only') is True and not approved_patterns(refresh=True):
-            return jsonify(error=pattern_cache["error"] or
-                'Amostra insuficiente: nenhum padrão validado. Coleta continua, mas ordens bloqueadas.'),409
+            return jsonify(error='SEM PADRÃO APROVADO: '+(pattern_cache["error"] or
+                'amostra insuficiente; coletor ativo, ordens bloqueadas.')),409
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
         if not limits(c):
             m=management()
