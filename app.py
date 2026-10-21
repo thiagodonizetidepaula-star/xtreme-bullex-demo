@@ -173,8 +173,19 @@ def loop(c):
                     if stop.is_set():break
                     trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
                     # Indicadores congelados da vela fechada (nunca reestimados depois da ordem).
-                    features=snapshot(c['asset'],a,data['candles'][-1],
+                    sorted_candles=sorted(data['candles'],key=lambda b:float(b['from']))
+                    features=snapshot(c['asset'],a,sorted_candles[-1],
                                       a['candle']+60,payouts.get(c['asset']),c['stake'])
+                    shadow={}
+                    for filter_name in DEFAULT_FILTERS:
+                        if filter_name=='bad_segments':
+                            shadow[filter_name]={'passed':None,'reason':'Exige 300 operações anteriores por par/horário'}
+                            continue
+                        assessment=check_filters(a,sorted_candles,a['candle']+60,
+                                         c['asset'],switches={filter_name:True},events=None)
+                        shadow[filter_name]={'passed':assessment['checks'].get(filter_name),
+                                             'details':assessment.get('meta') or {}}
+                    features['shadow_filters']=shadow
                     trade.update(features=features,
                                  timestamp_utc=features['timestamp_utc'],
                                  timestamp_brasilia=features['timestamp_brasilia'],
