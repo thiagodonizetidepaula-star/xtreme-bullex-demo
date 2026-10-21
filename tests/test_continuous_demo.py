@@ -3,7 +3,7 @@ No live broker requests are made during these tests.
 """
 import os,unittest
 from unittest.mock import patch
-os.environ.setdefault("APP_ACCESS_KEY","unit_test_panel_access_key_32_chars")
+os.environ["APP_ACCESS_KEY"]="test-access-key-only"
 os.environ.setdefault("SESSION_SECRET","unit_test_flask_secret_64_characters_long_for_cookie_signing")
 import app as site
 from strategy import validate_config
