@@ -109,6 +109,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
+  <div><label for="expiryMinutes">Tempo de expiração</label>
+    <select id="expiryMinutes" title="Candles analisados em M1; vencimento escolhido na Bullex PRACTICE">
+      <option value="1">1 minuto</option><option value="2">2 minutos</option>
+      <option value="3">3 minutos</option><option value="5">5 minutos</option>
+    </select></div>
   <div><label for="limit">Máximo de entradas por dia</label><input id="limit" type="number" min="1" max="100" value="5"></div>
   <div><label for="stopwin">Stop win</label><input id="stopwin" type="number" min=".01" step=".01" value="20"></div>
   <div><label for="stoploss">Stop loss</label><input id="stoploss" type="number" min="2" step=".01" value="10"></div>
@@ -207,7 +212,7 @@ function updateDemoModeLabel(){
     $(id).disabled=unlimited||running;
 }
 function setConfig(c){
- $("stake").value=c.stake;$("payout").value=c.payout;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
+ $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
  $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
  $("patternOnly").checked=c.pattern_only===true;
@@ -274,7 +279,7 @@ function render(s){
  $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||(s.config.demo_unlimited===true?"✓ Modo DEMO CONTÍNUO: PRACTICE verificada; sem pausa diária por LOSS.":"✓ Conta PRACTICE pronta para iniciar no modo protegido.");
  $("startBlockReason").className="start-guidance"+(running||!blockReason?" ready":"");
  $("stop").disabled=!running;
- ["asset","strategy","stake","payout","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
+ ["asset","strategy","stake","payout","expiryMinutes","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("demoUnlimited").disabled=running;
  $("patternOnly").disabled=running;
  updateDemoModeLabel();
@@ -298,7 +303,7 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
 $("switchBullex").onclick=()=>{wantChangeAccount=!wantChangeAccount;$("bullexConnectFields").hidden=!wantChangeAccount;$("switchBullex").textContent=wantChangeAccount?"Cancelar troca de conta":"Trocar ou reconectar conta";};
