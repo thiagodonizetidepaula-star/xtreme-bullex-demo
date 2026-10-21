@@ -207,177 +207,275 @@ def read_market_with_retry(operation,**kwargs):
     state['run_state']='scanning'
     return data
 
+def _unresolved_trades():
+    return [t for t in state['trades'] if t.get('status') in ('ABERTA','ENVIANDO','INCERTA') and not t.get('reviewed')]
+
+def _live_trades():
+    return [t for t in state['trades'] if t.get('status') in ('ABERTA','ENVIANDO') and not t.get('reviewed')]
+
+def _refresh_uncertainty():
+    state['uncertain']=bool(_unresolved_trades())
+
 def loop(c):
-    last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
-    candidates=[];catalog_at=0;seen=set()
+    """Read-only scanner stays responsive while the worker settles 1-3 orders.
+
+    Every confirmed DEMO order is tracked asynchronously by worker.py;
+    this loop polls completed results, persists them before acknowledgment,
+    and never opens more than the configured independent PRACTICE slots.
+    """
+    acked=set()
+    seen=set()
+    candidates=[];catalog_at=0
     stop_reason=''
+    state['analyzed_count']=0
     state['run_state']='scanning'
     try:
-        while not stop.is_set():
+        while True:
+            opened=_live_trades()
+            if opened:
+                # The result RPC never awaits expiry. Results have unique order IDs.
+                reply=client.call('results',ack=sorted(acked),timeout=8)
+                acked.clear()
+                for outcome in reply.get('finished',[]):
+                    order_id=str(outcome.get('id',''))
+                    trade=next((t for t in state['trades']
+                                if str(t.get('id',''))==order_id and t.get('status')=='ABERTA'),None)
+                    if trade is None:
+                        # A result previously saved may need its acknowledgment
+                        # after a transport retry. Never attribute it to a new trade.
+                        if any(str(t.get('id',''))==order_id and t.get('status') in ('WIN','LOSS','EMPATE')
+                               for t in state['trades']):
+                            acked.add(order_id)
+                        continue
+                    if outcome.get('status')!='settled':
+                        trade['status']='INCERTA'
+                        trade['reason']=outcome.get('reason','Resultado Bullex não confirmado.')
+                        state['uncertain']=True
+                        stop.set()
+                        stop_reason='Resultado não confirmado para '+trade['asset']+'. Revise a PRACTICE.'
+                        save_trade(trade)
+                        continue
+                    profit=float(outcome['profit'])
+                    if not math.isfinite(profit):
+                        raise RuntimeError('Resultado inválido, revisão obrigatória.')
+                    trade.update(status='WIN' if profit>0 else 'LOSS' if profit<0 else 'EMPATE',
+                                 profit=profit,
+                                 result_time=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'))
+                    if isinstance(state.get('balance'),(int,float)):
+                        # Stake was reserved immediately on order confirmation;
+                        # net P&L is added on return of the principal.
+                        state['balance']=round(state['balance']+trade['stake']+profit,4)
+                    if save_trade(trade):
+                        acked.add(order_id)
+                        log('Resultado '+trade['asset']+': '+trade['status']+' '+str(profit)+' DEMO.')
+                        if trade.get('pattern_id') and pattern_gateway.enabled:
+                            try:pattern_gateway._request("POST","guard",json={})
+                            except Exception:pass
+                            approved_patterns(refresh=True)
+                # Do not silently close a position with an unconfirmed outcome.
+                for trade in _live_trades():
+                    if trade.get('status')=='ABERTA' and time.time()>float(trade['expiration'])+180:
+                        trade['status']='INCERTA'
+                        trade['reason']='Vencimento ultrapassado sem confirmação do resultado; confira a Bullex.'
+                        save_trade(trade)
+                        stop.set()
+                        stop_reason='Resultado de ordem expirou sem confirmação; interrompendo novas entradas.'
+                _refresh_uncertainty()
+            if stop.is_set():
+                if not _live_trades():
+                    break
+                state['run_state']='awaiting_open_results'
+                state['message']='PARADA recebida. Acompanhando '+str(len(_live_trades()))+' operação(ões) já enviadas.'
+                stop.wait(.35)
+                continue
             if not limits(c):
                 stop_reason=management().get('block_reason') or 'Modo protegido: limite de risco atingido.'
-                log(stop_reason)
-                break
+                log(stop_reason);break
+            opened=_live_trades()
+            slots=max(0,c.get('max_open_trades',1)-len(opened))
+            if slots==0:
+                state['message']='Monitorando '+str(len(opened))+' operação(ões) PRACTICE; aguardando vagas.'
+                stop.wait(.25)
+                continue
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
-                market_response=read_market_with_retry('market',payout=c['payout'],strategy=c.get('strategy','rejection'))
+                market_response=read_market_with_retry('market',payout=c['payout'],strategy=c.get('strategy','sniper'))
                 if market_response is None:continue
-                candidates=market_response['assets'];catalog_at=time.time()
+                candidates=market_response['assets']
+                catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 'acima de '+str(max(80,c['payout'])))+'%.')
-            if stop.is_set():break
+                log(str(len(candidates))+' ativos abertos; até '+str(c['max_open_trades'])+
+                    ' operações PRACTICE simultâneas em pares distintos.')
+            if stop.is_set():continue
             if not candidates:
-                stop.wait(2);continue
+                stop.wait(1);continue
             batch=read_market_with_retry('snapshot',assets=[x['asset'] for x in candidates])
             if batch is None:continue
-            if stop.is_set():break
+            if stop.is_set():continue
             for error in batch.get('errors',[]):log(error)
-            selected=None;selected_score=None
-            payouts={x['asset']:float(x.get('payout',0)) for x in candidates}
-            # The Sniper ranks valid crosses only by payout (quality/ADX are
-            # absent on its signals). Inspect higher payout first and stop at
-            # the first valid aligned cross instead of burning the 2s entry
-            # window checking 80+ additional symbols.
-            scan_items=(sorted(batch['items'],
-                        key=lambda it:payouts.get(it['asset'],0),reverse=True)
-                        if c.get('strategy')=='sniper' else batch['items'])
-            for item in scan_items:
+            state['stream_ready']=batch.get('ready',0)
+            state['stream_total']=batch.get('total',0)
+            payouts={x['asset']:float(x.get('payout') or 0) for x in candidates}
+            active_assets={t['asset'] for t in _live_trades()}
+            scanner=(sorted(batch['items'],key=lambda v:payouts.get(v['asset'],0),reverse=True)
+                     if c.get('strategy')=='sniper' else batch['items'])
+            eligible=[]
+            for item in scanner:
                 if stop.is_set():break
+                asset=item['asset']
+                if asset in active_assets:continue
                 try:
-                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
-                except (ValueError,KeyError,TypeError) as e:
-                    invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
-                    if invalid_key not in seen:
-                        seen.add(invalid_key);log(item['asset']+': dados inválidos; ativo ignorado ('+str(e)+').')
+                    analysis=analyze_selected(item['candles'],batch['now'],
+                                              c.get('strategy','sniper'),c.get('sniper_source','hl2'))
+                except (ValueError,KeyError,TypeError) as exc:
+                    error_key=(asset,int(batch['now']//60)*60,'invalid')
+                    if error_key not in seen:
+                        seen.add(error_key)
+                        log(asset+': dados inválidos ('+str(exc)[:100]+').')
                     continue
-                key=(item['asset'],analysis.get('candle'))
+                key=(asset,analysis.get('candle'))
                 if key not in seen:
-                    seen.add(key);state['analyzed_count']+=1
-                    log(item['asset']+' · '+analysis['reason'])
-                # Escolher entre os sinais válidos pelo quórum, regime ADX e payout;
-                # nunca fingir que pontuação equivale a chance de WIN.
-                score=(int(bool(analysis.get('direction'))),int(analysis.get('quality',0)),
-                       min(float(analysis.get('adx14',0)),35.0),payouts.get(item['asset'],0.0))
-                if selected_score is None or score>selected_score:
-                    selected=(item,analysis);selected_score=score
-                if c.get('strategy')=='sniper' and analysis.get('direction'):
-                    # Same choice as full Sniper score ranking: highest payout
-                    # confirmed signal. Still passes every order/risk check.
+                    seen.add(key)
+                    state['analyzed_count']+=1
+                    log(asset+' · '+analysis['reason'])
+                if not analysis.get('direction'):continue
+                if not entry_allowed(state['trades'],asset,analysis['candle'],c.get('strategy','sniper'))[0]:
+                    continue
+                score=(int(analysis.get('quality',0)),
+                       min(float(analysis.get('adx14',0)),35),payouts.get(asset,0))
+                eligible.append((score,item,analysis))
+                if c.get('strategy')=='sniper' and len(eligible)>=slots:
                     break
-            if stop.is_set():break
-            state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
-            if selected is None:
-                state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
-                stop.wait(.15);continue
-            item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
-            # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
-            if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
-            state['analysis']=a;state['analysis_asset']=item['asset'];state['candles']=data['candles'][-50:]
-            # Visual-only: never influence a directional decision or place orders.
-            try:watch(item['asset'])
-            except (OSError,ValueError):pass
-            chart_key=(item['asset'],a.get('candle'),c.get('sniper_source','hl2'))
-            if state.get('chart_study_key')!=chart_key:
-                try:
-                    state['chart_studies']=studies(data['candles'],c.get('sniper_source','hl2'))
-                    state['chart_study_key']=chart_key
-                except (ValueError,KeyError,TypeError,OverflowError):
-                    state['chart_studies']={'rows':[],'reason':'Aguardando candles M1 íntegros'}
-                    state['chart_study_key']=chart_key
-            if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
-                evaluated=(c['asset'],a['candle'])
-                checks=a.get('checks',{})
-                closed=datetime.fromtimestamp(a['candle']+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
-                log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
-            state['message']=a['reason']
-            if (c['asset'],a.get('candle'))!=last and a.get('direction'):
-                pattern_id=None
+            if not eligible:
+                state['message']='Monitorando pares M1: aguardando seta Xtreme alinhada à tendência.'
+                stop.wait(.12)
+                continue
+            if c.get('strategy')!='sniper':
+                eligible.sort(key=lambda x:x[0],reverse=True)
+            for score,item,analysis in eligible:
+                if stop.is_set() or len(_live_trades())>=c['max_open_trades']:break
+                asset=item['asset']
+                candle=analysis['candle']
+                if any(t.get('asset')==asset for t in _live_trades()):continue
+                direction=analysis['direction']
                 if c.get('pattern_only') is True:
                     live_features=features_for_closed(normalized(item['candles']))
-                    matches=matching_patterns(approved_patterns(),a['direction'],live_features,expiry=c.get('expiry_minutes',1))
-                    if not matches:
-                        state['message']='Sem padrão aprovado para este sinal; coletando dados.'
-                        stop.wait(.1)
-                        continue
+                    matches=matching_patterns(approved_patterns(),direction,live_features,
+                                              expiry=c.get('expiry_minutes',1))
+                    if not matches:continue
                     pattern_id=matches[0]['pattern_id']
-                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'],c.get('strategy','rejection'))
-                if not allowed:
-                    log(c['asset']+': '+reason);stop.wait(.2);continue
-                last=(c['asset'],a['candle']);state['last_candle']=last
-                state['last_signal']={'side':a['direction'],'asset':c['asset'],'at':time.time(),'status':'detected','votes':a.get('votes',{})}
+                else:pattern_id=None
+                allowed,reason=entry_allowed(state['trades'],asset,candle,c.get('strategy','sniper'))
+                if not allowed:continue
+                allowed_risk,why_risk=risk_decision(
+                    state['trades'],
+                    state.get('balance') if isinstance(state.get('balance'),(int,float)) else float('nan'),
+                    c['stake'],payouts.get(asset,0),c['stop_win'],c['stop_loss'],
+                    c['limit'],asset,candle,c['payout'],
+                    demo_unlimited=c.get('demo_unlimited') is True,
+                    max_open=c['max_open_trades'])
+                if not allowed_risk:
+                    if 'simultâne' not in why_risk:state['message']=why_risk
+                    continue
+                trade={'event_key':str(uuid.uuid4()),
+                       'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),
+                       'day':day(),'asset':asset,'direction':direction,'stake':c['stake'],
+                       'status':'ENVIANDO','candle':candle,
+                       'strategy_key':c.get('strategy','sniper'),
+                       'strategy':STRATEGIES[c.get('strategy','sniper')],
+                       'expiration':candle+60*(c.get('expiry_minutes',1)+1),
+                       'expiry_minutes':c.get('expiry_minutes',1),'pattern_id':pattern_id}
                 with lock:
                     if stop.is_set():break
-                    trade={'event_key':str(uuid.uuid4()),'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+60*(c.get('expiry_minutes',1)+1),'expiry_minutes':c.get('expiry_minutes',1)}
-                    # Indicadores congelados da vela fechada (nunca reestimados depois da ordem).
-                    sorted_candles=sorted(data['candles'],key=lambda b:float(b['from']))
-                    features=snapshot(c['asset'],a,sorted_candles[-1],
-                                      a['candle']+60,payouts.get(c['asset']),c['stake'])
-                    shadow={}
-                    for filter_name in DEFAULT_FILTERS:
-                        if filter_name=='bad_segments':
-                            shadow[filter_name]={'passed':None,'reason':'Exige 300 operações anteriores por par/horário'}
-                            continue
-                        assessment=check_filters(a,sorted_candles,a['candle']+60,
-                                         c['asset'],switches={filter_name:True},events=None)
-                        shadow[filter_name]={'passed':assessment['checks'].get(filter_name),
-                                             'details':assessment.get('meta') or {}}
-                    features['shadow_filters']=shadow
-                    trade.update(features=features,pattern_id=pattern_id,
-                                 timestamp_utc=features['timestamp_utc'],
-                                 timestamp_brasilia=features['timestamp_brasilia'],
-                                 timeframe='M1/M5',payout=payouts.get(c['asset']))
                     state['trades'].append(trade)
-                    state['uncertain']=True
-                allowed_risk,why_risk=risk_decision(
-                    [t for t in state['trades'] if t is not trade],
-                    state.get('balance') if isinstance(state.get('balance'),(int,float)) else float('nan'),
-                    c['stake'],payouts.get(c['asset'],0),c['stop_win'],c['stop_loss'],
-                    c['limit'],c['asset'],a['candle'],c['payout'],demo_unlimited=c.get('demo_unlimited') is True)
-                if not allowed_risk:
-                    trade['status']='IGNORADA'
-                    trade['reason']='Gestão de risco: '+why_risk
-                    state['uncertain']=False
-                    state['last_signal']['status']='ignored'
+                    _refresh_uncertainty()
+                state['last_signal']={'side':direction,'asset':asset,'at':time.time(),
+                                      'status':'detected','votes':analysis.get('votes',{})}
+                # The broker checks current payout and its own live PRACTICE
+                # account immediately before submission, inside the 2s window.
+                try:
+                    order=client.call('order',asset=asset,stake=c['stake'],payout=c['payout'],
+                                      direction=direction,candle=candle,
+                                      strategy=c.get('strategy','sniper'),
+                                      expiry_minutes=c.get('expiry_minutes',1))
+                except Exception:
+                    trade['status']='INCERTA'
+                    trade['reason']='Confirmação do envio indisponível; confira a PRACTICE.'
                     save_trade(trade)
-                    stop.wait(.1)
+                    stop.set()
+                    raise
+                if not order.get('sent'):
+                    trade.update(status='IGNORADA',reason=order.get('reason','Ordem não enviada.'),
+                                 catalog_age=order.get('catalog_age'),
+                                 catalog_latency=order.get('catalog_latency'))
+                    state['last_signal']['status']='ignored'
+                    log(trade['reason'])
+                    save_trade(trade)
+                    _refresh_uncertainty()
                     continue
-                if stop.is_set():
-                    trade['status']='IGNORADA'
-                    trade['reason']='Parada solicitada antes do envio. Nenhuma ordem enviada.'
-                    state['uncertain']=False
-                    state['last_signal']['status']='ignored'
-                    save_trade(trade)
-                    break
-                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'),expiry_minutes=c.get('expiry_minutes',1))
-                if not order['sent']:
-                    trade['status']='IGNORADA';trade['reason']=order['reason'];trade['catalog_age']=order.get('catalog_age');trade['catalog_latency']=order.get('catalog_latency');state['uncertain']=False;state['last_signal']['status']='ignored';log(order['reason']);save_trade(trade)
-                else:
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],expiration=order.get('expiration',trade['expiration']),expiry_minutes=c.get('expiry_minutes',1),source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'),catalog_latency=order.get('catalog_latency'));state['last_signal']['status']='confirmed';
-                    if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
-                    log('Ordem confirmada na DEMO. Aguardando resultado.');save_trade(trade)
-                    result=client.call('result',timeout=120+60*c.get('expiry_minutes',1),id=order['id'])
-                    trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
-                    trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
-                    state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status']);save_trade(trade)
-                    if pattern_id and pattern_gateway.enabled:
-                        try:pattern_gateway._request("POST","guard",json={})
-                        except Exception:pass
-                        approved_patterns(refresh=True)
-            stop.wait(.15)
+                trade.update(id=order['id'],status='ABERTA',payout=order['payout'],
+                             expiration=order.get('expiration',trade['expiration']),
+                             send_delay=order.get('send_delay'),
+                             catalog_age=order.get('catalog_age'),
+                             catalog_latency=order.get('catalog_latency'))
+                if isinstance(state.get('balance'),(int,float)):
+                    state['balance']=max(0,state['balance']-float(c['stake']))
+                if order.get('sent_at') is not None:
+                    trade['time']=datetime.fromtimestamp(order['sent_at'],
+                               timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
+                state['last_signal']['status']='confirmed'
+                state['last_candle']=(asset,candle)
+                state['analysis']=analysis;state['analysis_asset']=asset
+                state['candles']=item['candles'][-50:]
+                # All heavy features are AFTER sending the time-critical order.
+                try:
+                    bars=sorted(item['candles'],key=lambda x:float(x['from']))
+                    features=snapshot(asset,analysis,bars[-1],candle+60,
+                                      payouts.get(asset),c['stake'])
+                    shadow={}
+                    for name in DEFAULT_FILTERS:
+                        if name=='bad_segments':
+                            shadow[name]={'passed':None,'reason':'Amostra mínima de 300 operações'}
+                            continue
+                        assessment=check_filters(analysis,bars,candle+60,asset,
+                                                 switches={name:True},events=None)
+                        shadow[name]={'passed':assessment['checks'].get(name),
+                                      'details':assessment.get('meta') or {}}
+                    features['shadow_filters']=shadow
+                    trade.update(features=features,
+                                 timestamp_utc=features['timestamp_utc'],
+                                 timestamp_brasilia=features['timestamp_brasilia'],timeframe='M1/M5')
+                except (KeyError,ValueError,TypeError):
+                    log('Características adicionais incompletas; ordem já confirmada.')
+                try:watch(asset)
+                except (OSError,ValueError):pass
+                if not save_trade(trade):break
+                log('PRACTICE '+asset+' '+direction.upper()+
+                    ' enviada. '+str(len(_live_trades()))+'/'+str(c['max_open_trades'])+
+                    ' operações ativas.')
+            if len(seen)>20000:
+                seen={key for key in seen if len(key)>1 and
+                      key[1] is not None and isinstance(key[1],(int,float)) and
+                      key[1]>=batch['now']-3600}
+            stop.wait(.10)
     except Exception as e:
-        stop_reason='Falha da sessão Bullex: '+str(e)[:180]+' Reconecte a conta PRACTICE.'
-        log(stop_reason);state['connected']=False
+        stop_reason='Falha da integração Bullex: '+str(e)[:180]+'. Confira a PRACTICE.'
+        log(stop_reason)
+        state['connected']=False
         if client:client.close()
-        if state['uncertain']:
-            state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.');save_trade(state['trades'][-1])
+        for trade in _live_trades():
+            trade.update(status='INCERTA',
+                         reason='Servidor interrompido antes de confirmar resultado. Revise na Bullex.')
+            save_trade(trade)
+        _refresh_uncertainty()
     finally:
-        with lock:
-            state['running']=False
-            state['run_state']='stopped'
-            state['feed_retry_count']=0
-            state['last_stop_reason']=stop_reason or ('Parado pelo comando do usuário.' if stop.is_set() else 'Scanner encerrado; reinicie após verificar a conexão.')
-            if state.get('stop_requested'):
-                state['stop_completed_at']=time.time()
-                log('Robô parado: nenhuma nova ordem será enviada. Operações previamente enviadas podem já ter vencido.')
+        state['running']=False
+        state['run_state']='stopped'
+        state['feed_retry_count']=0
+        state['last_stop_reason']=stop_reason or ('Parado pelo usuário.' if stop.is_set()
+            else 'Scanner encerrado; confira conexão e histórico.')
+        if state.get('stop_requested'):
+            state['stop_completed_at']=time.time()
+            log('Robô parado. Nenhuma ordem nova foi enviada após o pedido de parada.')
 
 @app.before_request
 def auth():
