@@ -122,7 +122,7 @@ def analyze_mesa(candles, now):
     e9,e20,e50,e100=(ema(closes,p) for p in (9,20,50,100))
     adx,plus,minus,atr=_adx(bars)
     result=empty("Sem entrada")
-    result.update(candle=last_ts,age=age,atr14=round(atr,8),adx14=round(adx,2),
+    result.update(candle=last_ts,age=age,atr14=round(atr,8),adx14=round(adx,2),di_plus=round(plus,4),di_minus=round(minus,4),
                   ema20=e20[-1],ema50=e50[-1],ema100=e100[-1])
     if atr<=0 or not math.isfinite(atr):
         result["reason"]="Mercado sem variação: ATR indisponível."
@@ -140,7 +140,10 @@ def analyze_mesa(candles, now):
     macds=ema(macd,9)
     hist=[a-b for a,b in zip(macd,macds)]
     rsi=_rsi(closes)
-    result.update(rsi14=round(rsi,2),checks={
+    result.update(rsi14=round(rsi,2),macd=macd[-1],macd_hist=hist[-1],
+        distance_ema20_atr=(c-e20[-1])/atr,
+        candle_body_atr=body/atr,candle_range_atr=span/atr,
+        checks={
         "velas":"M1 fechadas íntegras",
         "m5":"somente blocos completos",
         "adx14":round(adx,2),
@@ -180,6 +183,9 @@ def analyze_mesa(candles, now):
     agents.append(agent(AGENTS[5],entryside,"Recuo + vela fechada de retomada" if entryside else "Sem retorno limpo à EMA20 / candle de força"))
     votes_call=sum(a["direction"]=="call" for a in agents)
     votes_put=sum(a["direction"]=="put" for a in agents)
+    result.update(opposing_wick_atr=(h-max(c,o))/atr if direction=="call" else (min(c,o)-l)/atr if direction=="put" else None)
+    core=(direction is not None and m5side==direction and adxside==direction and entryside==direction)
+    result.update(candidate_direction=direction if core else None)
     result.update(agents=agents,votes={"call":votes_call,"put":votes_put,
                  "neutral":6-votes_call-votes_put,"required":REQUIRED},
                  quality=max(votes_call,votes_put),trend=direction or "lateral",
