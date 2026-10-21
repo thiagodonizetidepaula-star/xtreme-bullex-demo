@@ -23,7 +23,7 @@ class StreamingTests(unittest.TestCase):
         with patch.object(worker.time,'time',return_value=6020):
             with self.assertRaises(RuntimeError):worker.dispatch({'op':'snapshot','assets':['A']})
     def test_batch_prioritizes_later_asset_signal(self):
-        c={**app.state['config'],'strategy':'resumption'};client=MagicMock();app.stop.clear()
+        c={**app.state['config'],'pattern_only':False,'strategy':'resumption'};client=MagicMock();app.stop.clear()
         def rpc(op,**kwargs):
             if op=='market':return {'assets':[{'asset':'A','payout':85},{'asset':'B','payout':85}]}
             if op=='snapshot':return {'items':[{'asset':'A','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]},{'asset':'B','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]}],'now':6001,'ready':2,'total':2}
