@@ -1,0 +1,14 @@
+/* Compact voice controls in the main mobile radar screen. */
+.mesa-voice{margin:12px auto 16px;max-width:1180px;padding:13px 16px;border:1px solid #9e7a45;border-radius:16px;background:linear-gradient(130deg,#1b190f,#111d31);color:#f7e2b2}
+.mesa-voice-head{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.mesa-voice-heading{font-size:15px;font-weight:850;letter-spacing:.01em;margin:0}
+.mesa-voice-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.mesa-voice button{background:#182b42;color:#f6e5bf;border:1px solid #ab874d;padding:10px 13px;border-radius:11px;font-size:13px;font-weight:780;min-height:44px;cursor:pointer}
+.mesa-voice button[aria-pressed="true"]{background:#12654f;border-color:#42d4a0;color:white}
+.mesa-voice button:disabled{opacity:.5;cursor:not-allowed}
+.mesa-voice-bottom{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px}
+.mesa-voice-bottom label{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:#e7d3aa}
+.mesa-voice input[type="range"]{width:110px;max-width:26vw;accent-color:#49dda0}
+.mesa-voice-status{color:#b6c8df;font-size:12px;line-height:1.45;flex:1;min-width:200px}
+.mesa-voice-foot{font-size:11px;color:#c6bba5;margin-top:8px;line-height:1.4}
+@media(max-width:560px){.mesa-voice{margin-top:10px;padding:12px}.mesa-voice-buttons{width:100%}.mesa-voice-buttons button{flex:1}.mesa-voice-bottom{align-items:flex-start;flex-direction:column;gap:8px}.mesa-voice input[type="range"]{max-width:none;width:130px}}
