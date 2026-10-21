@@ -3,7 +3,7 @@ import json,math,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from mesa_chart import studies,valid_bar,published_candle
-from strategy import sniper_buffers,xtreme_trend,ema
+from strategy import sniper_buffers,xtreme_trend,sniper,analyze_selected
 
 def sample(n=130):
     first=1760000100-1760000100%60
@@ -17,16 +17,26 @@ def sample(n=130):
     return out
 
 class ChartTests(unittest.TestCase):
-    def test_closed_emas_and_sniper_cross_are_same_as_existing_strategy(self):
+    def test_closed_xtreme_trend_line_and_sniper_cross_match_existing_strategy(self):
         b=sample()
         out=studies(b,"hl2")
         self.assertEqual(len(out["rows"]),50)
         last=out["rows"][-1]
-        self.assertAlmostEqual(last["ema20"],ema([x["close"] for x in b],20)[-1])
-        self.assertAlmostEqual(last["ema50"],ema([x["close"] for x in b],50)[-1])
-        self.assertAlmostEqual(last["ema100"],ema([x["close"] for x in b],100)[-1])
+        trend,stop=xtreme_trend(b,18,2)
+        self.assertEqual(last["trend_position"],trend)
+        self.assertAlmostEqual(last["trend_stop"],stop)
+        self.assertNotIn("ema20",last)
+        self.assertNotIn("ema50",last)
+        self.assertNotIn("ema100",last)
         for mark in out["rows"]:
             i=next(j for j,x in enumerate(b) if x["from"]==mark["from"])
+            if i>=17:
+                trend_i,stop_i=xtreme_trend(b[:i+1],18,2)
+                self.assertEqual(mark["trend_position"],trend_i)
+                self.assertAlmostEqual(mark["trend_stop"],stop_i)
+            else:
+                self.assertEqual(mark["trend_position"],0)
+                self.assertIsNone(mark["trend_stop"])
             if i<79:
                 self.assertIsNone(mark["sniper"]);continue
             fast,slow=sniper_buffers(b[:i+1],"hl2")
@@ -37,6 +47,26 @@ class ChartTests(unittest.TestCase):
                 p,_=xtreme_trend(b[:i+1],18,2)
                 self.assertEqual(mark["sniper"]["direction"],"call" if buy else "put")
                 self.assertEqual(mark["sniper"]["confirmed"],p==(1 if buy else -1))
+
+    def test_next_candle_entry_only_after_sniper_cross_matches_trend(self):
+        b=sample(230)
+        found=0
+        for j in range(80,len(b)):
+            window=b[:j+1]
+            signal_ts=b[j]["from"]
+            out=sniper(window,signal_ts+61,"hl2")
+            f,slow=sniper_buffers(window,"hl2")
+            pos,_=xtreme_trend(window,18,2)
+            raw="call" if f[-1]>slow[-1] and f[-2]<slow[-2] else "put" if f[-1]<slow[-1] and f[-2]>slow[-2] else None
+            expected=raw if ((raw=="call" and pos==1) or (raw=="put" and pos==-1)) else None
+            self.assertEqual(out["direction"],expected)
+            if expected:
+                found+=1
+                self.assertEqual(out["candle"]+120, signal_ts+120)
+                # Cannot enter before signal bar closes, nor after the 2s window.
+                self.assertIsNone(sniper(window,signal_ts+59,"hl2")["direction"])
+                self.assertIsNone(sniper(window,signal_ts+65,"hl2")["direction"])
+        self.assertGreater(found,0,"Expected at least one matched synthetic Sniper cross")
 
     def test_no_future_leak_on_shared_candle(self):
         b=sample(125)
