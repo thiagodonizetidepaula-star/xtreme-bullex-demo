@@ -1,0 +1,26 @@
+name: Mesa Quant Research checks
+on:
+  push:
+    branches: [mesa-quant-research]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline test dependencies
+        run: python -m pip install requests==2.32.5 Flask==3.1.2
+      - name: Syntax of research modules
+        run: python -m compileall -q mesa_quant.py mesa_backtest.py mesa_strategy.py app.py
+      - name: Offline unit tests (no Bullex connection)
+        run: python -m unittest discover -s tests -p 'test_quant_research.py' -v
+      - name: Original six-trader strategy regression
+        run: python -m unittest discover -s tests -p 'test_mesa_strategy.py' -v
+      - name: Browser performance module syntax
+        run: node --check static/mesa-performance.js
