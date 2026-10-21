@@ -53,7 +53,9 @@ class FlowTests(unittest.TestCase):
             if op=='market':return {'assets':[{'asset':'EURUSD-OTC','payout':80}]}
             if op=='snapshot':return {'items':[{'asset':'EURUSD-OTC','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]}],'now':6001,'ready':1,'total':1}
             if op=='order':return {'sent':True,'id':123,'payout':80,'sent_at':6001}
-            if op=='result':app.stop.set();return {'profit':1.6,'balance':101.6}
+            if op=='results':
+                app.stop.set()
+                return {'finished':[{'id':'123','status':'settled','profit':1.6}],'pending':[]}
         client.call.side_effect=call
         with patch.dict(app.state,{'trades':[],'last_candle':None,'uncertain':False,'balance':1000,'config':c}),patch.object(app,'client',client),patch.object(app,'save_trade',return_value=True),patch.object(app,'analyze_selected',return_value={'candle':5940,'direction':'call','signal':'call','reason':'Teste'}):
             app.loop(c)
@@ -65,6 +67,11 @@ class FlowTests(unittest.TestCase):
 
 class RepetitionOrderTests(unittest.TestCase):
     def setUp(self):
+        # The worker watches real IDs for the lifetime of one session; each
+        # isolated mocked broker test uses a fresh identity namespace.
+        with worker.settlement_lock:
+            worker.settlement_pending.clear()
+            worker.settlement_finished.clear()
         self.api=MagicMock();worker.api=self.api
         self.api.check_connect.return_value=True;self.api.get_balance_mode.return_value='PRACTICE'
         self.now=6001.;self.api.get_server_timestamp.return_value=self.now;self.api.get_balance.return_value=100
