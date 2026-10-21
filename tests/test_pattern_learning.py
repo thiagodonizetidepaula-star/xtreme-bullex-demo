@@ -66,6 +66,15 @@ class LearningTests(unittest.TestCase):
   self.assertIsNotNone(second)
   self.assertEqual(first,second)
 
+ def test_m5_closed_indicators_with_5_minute_timebase(self):
+  m1=bars(150)
+  m5=[{**r,"from":6000+300*i} for i,r in enumerate(m1)]
+  values=features_for_closed(m5,timeframe=5)
+  self.assertIsNotNone(values)
+  self.assertIn("ema100",values)
+  self.assertIn("adx14",values)
+  self.assertIsNone(features_for_closed(m5,timeframe=1))
+
  def test_rule_is_strict_and_directional(self):
   feats=features_for_closed(bars())
   r=[{"feature":"rsi14","op":">","value":0}]
