@@ -48,10 +48,13 @@ def _dmi(bars,n=14):
  adx=sum(dx[:n])/n
  for x in dx[n:]:adx=(adx*(n-1)+x)/n
  return (tr/n,adx,100*plus/tr,100*minus/tr)
-def features_for_closed(candles):
+def features_for_closed(candles,timeframe=1):
+ # Shared feature definitions for M1 and closed M5; never mix candle periods.
+ if timeframe not in (1,5):return None
  if len(candles)<110:return None
  rows=sorted(candles,key=lambda x:x["from"])
- if any(rows[i]["from"]-rows[i-1]["from"]!=60 for i in range(1,len(rows))):return None
+ step=60*timeframe
+ if any(rows[i]["from"]-rows[i-1]["from"]!=step for i in range(1,len(rows))):return None
  closes=[float(b["c"]) for b in rows]
  values={}
  for n in (20,50,100):values["ema"+str(n)]=_ema(closes,n)
