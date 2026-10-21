@@ -222,6 +222,16 @@ def metrics(trades:list[dict])->dict:
                f"Amostra insuficiente: {n}/{MIN_APPROVAL_TRADES} operações concluídas. Nenhuma melhoria aprovada."}
 
 def grouped(trades:list[dict],dimension:str)->list[dict]:
+    if dimension=="filter":
+        buckets=defaultdict(list)
+        for trade in trades:
+            if trade.get("status") not in ("WIN","LOSS"):continue
+            shadow=(trade.get("features") or {}).get("shadow_filters") or {}
+            for name,result in shadow.items():
+                passed=result.get("passed") if isinstance(result,dict) else None
+                if passed is not None:
+                    buckets[f"{name}: {'PASSOU' if passed else 'BLOQUEARIA'}"].append(trade)
+        return [{"group":key,**metrics(rows)} for key,rows in sorted(buckets.items())]
     def group_key(t):
         if dimension=="asset":return t.get("asset") or "Desconhecido"
         if dimension=="hour":
