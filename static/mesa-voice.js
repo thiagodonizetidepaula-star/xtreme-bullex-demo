@@ -105,8 +105,14 @@ function activate(){
    return;
  }
  // Ensure any existing state becomes the baseline before enabling narration.
- if(lastSnapshot)for(const t of lastSnapshot.trades||[])statuses.set(keyFor(t),t.status);
- initialized=true;
+ if(lastSnapshot){
+   for(const t of lastSnapshot.trades||[])statuses.set(keyFor(t),t.status);
+   initialized=true;
+ }else{
+   // If voice was enabled before the first network poll, the first packet
+   // still establishes a silent baseline (no historical replay).
+   initialized=false;
+ }
  enabled=true;
  const button=byId("mesaVoiceToggle");
  button.setAttribute("aria-pressed","true");
