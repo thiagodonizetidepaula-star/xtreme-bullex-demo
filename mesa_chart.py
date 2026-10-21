@@ -5,6 +5,7 @@ candles and the same sniper_buffers + xtreme_trend in strategy.py.
 """
 import json,math,os,pathlib,time
 from strategy import sniper_buffers,xtreme_trend
+from mesa_confluence import rsi_wilder,bollinger
 
 WATCH_FILE=pathlib.Path("/tmp/mesa_bullex_watch_asset.txt")
 LIVE_FILE=pathlib.Path("/tmp/mesa_bullex_current_m1.json")
@@ -51,9 +52,17 @@ def studies(candles,source="hl2"):
                     direction="call" if buy else "put"
                     confirmed=(direction=="call" and trend_pos==1) or (direction=="put" and trend_pos==-1)
                     mark={"direction":direction,"confirmed":confirmed,"source":"Sniper SMA1−SMA34 / WMA5 + Xtreme Tendência"}
+        # Closed-bar overlays use only the prefix ending at the current
+        # candle, avoiding future information even on historical previews.
+        prices=[float(x['close']) for x in bars[:i+1]]
+        rsi=rsi_wilder(prices) if len(prices)>=15 else None
+        bb=bollinger(prices) if len(prices)>=20 else None
         rows.append({
             "from":b["from"],"trend_position":trend_pos,
-            "trend_stop":trend_stop,
+            "trend_stop":trend_stop,"rsi14":rsi,
+            "bb_upper":bb['upper'] if bb else None,
+            "bb_middle":bb['middle'] if bb else None,
+            "bb_lower":bb['lower'] if bb else None,
             "sniper":mark
         })
     return {"rows":rows,"source":source,"data_origin":"candles M1 fechados"}
