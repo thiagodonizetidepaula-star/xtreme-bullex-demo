@@ -695,8 +695,13 @@ def connect():
         if not data.get('email') or not data.get('password'):return jsonify(error='Informe email e senha dentro do app.'),400
         try:
             client=Client();r=client.call('connect',timeout=55,email=data['email'],password=data['password'])
-            initial=client.call('candles',asset=state['config']['asset'])
             state.update(connected=True,balance=r['balance'],currency=r['currency'],assets=r['assets'],uncertain=False)
+            # The optional chart history must NEVER fail an otherwise valid
+            # authenticated PRACTICE connection.
+            try:initial=client.call('candles',asset=state['config']['asset'],timeout=18)
+            except (RuntimeError,ValueError,KeyError):
+                initial={'candles':[]}
+                log('PRACTICE conectada. Gráfico aguardando novo candle M1.')
             # Seed the visible graph immediately after PRACTICE connection,
             # even before the automatic bot/scanner has been started.
             try:
@@ -722,8 +727,11 @@ def connect():
                     watch(state['analysis_asset'])
             except (TypeError,KeyError,ValueError,OSError):
                 log('Gráfico aguardando histórico M1 contínuo no streaming; conexão PRACTICE confirmada.')
-            start_pattern_collectors()
-            log('PRACTICE conectada; coletor de candles M1/M5 iniciado sem depender de operações.');return jsonify(ok=True)
+            # Lite does not start background model research jobs. Preserve
+            # advanced collection when the user explicitly selects research.
+            if state['config'].get('pattern_only') is True:
+                start_pattern_collectors()
+            log('PRACTICE conectada. Xtreme Lite pronto para analisar pares M1.');return jsonify(ok=True)
         except Exception as e:
             client.close();log(str(e));return jsonify(error=str(e)),502
 @app.post('/api/config')
