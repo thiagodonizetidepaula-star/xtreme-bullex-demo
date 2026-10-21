@@ -11,7 +11,7 @@ class RiskPauseUXTests(unittest.TestCase):
         self.config={
            **state["config"],
            "asset":"EURUSD","stake":2,"payout":85,"limit":50,
-           "stop_win":30,"stop_loss":10,"stop_win_enabled":True,"stop_loss_enabled":True
+           "stop_win":30,"stop_loss":10,"stop_win_enabled":True,"stop_loss_enabled":True,"demo_unlimited":False
         }
         self.records=[
            {"day":self.today,"status":"WIN","profit":1.7,"asset":"EURUSD","payout":85},
