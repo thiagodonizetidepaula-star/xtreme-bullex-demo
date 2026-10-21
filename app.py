@@ -265,6 +265,7 @@ def start():
         if bot and bot.is_alive():return jsonify(error='Aguarde o encerramento da operação anterior.'),409
         if not state['connected'] or state['uncertain']:return jsonify(error='Conecte e valide a demo primeiro.'),409
         if not restore_history():return jsonify(error=state['history_error']),503
+        if state['uncertain']:return jsonify(error='Uma operação anterior ficou sem resultado confirmado. Confira na Bullex PRACTICE e confirme a revisão em Configurações.'),409
         c=dict(state['config'])
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
         if not limits(c):return jsonify(error='Limites do dia atingidos.'),409
