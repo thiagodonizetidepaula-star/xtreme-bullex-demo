@@ -4,10 +4,12 @@ import requests
 from flask import Flask,request,jsonify,session,send_from_directory
 from engine import ingest,ranking
 import execution
+import multifilter
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__,static_folder=None);app.secret_key=os.environ['SESSION_SECRET']
 app.config.update(MAX_CONTENT_LENGTH=8192,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',SESSION_COOKIE_SECURE=os.getenv('RENDER')=='true')
 GATE=os.environ['ANALYST_GATEWAY'];KEY=os.environ['ANALYST_GATEWAY_KEY']
+paper_lock=threading.Lock()
 contexts={};connect_lock=threading.Lock();attempts={}
 def db(op,owner,payload=None):
     r=requests.post(GATE,headers={'X-Analyst-Key':KEY},json={'op':op,'owner_id':owner,'payload':payload},timeout=3 if op=='checkpoint' else 20)
@@ -76,7 +78,12 @@ def loop(c):
 
 @app.before_request
 def auth():
-    if request.path in ('/','/health','/api/connect'):return
+    if request.path=='/api/paper/evaluate':
+        request.max_content_length=4000000
+        if request.headers.get('Origin') and request.headers['Origin']!=request.host_url.rstrip('/'):return jsonify(error='Origem inválida.'),403
+        if request.headers.get('Sec-Fetch-Site')=='cross-site':return jsonify(error='Origem inválida.'),403
+        return
+    if request.path in ('/','/health','/api/connect','/multifilter-ui.js'):return
     if not session.get('owner'):return jsonify(error='Conecte sua conta demo primeiro.'),401
     if request.method=='POST' and not secrets.compare_digest(request.headers.get('X-CSRF-Token',''),session.get('csrf','!')):return jsonify(error='Sessão inválida.'),403
 @app.after_request
@@ -85,7 +92,19 @@ def security(r):
 @app.get('/')
 def home():return send_from_directory(ROOT,'index.html')
 @app.get('/health')
-def health():return jsonify(status='ok',mode='DUAL_ENGINE_PRACTICE',real_orders_enabled=False,practice_orders_supported=True,active_strategies=len(execution.EXECUTABLE),new_orders_enabled=bool(execution.EXECUTABLE))
+def health():return jsonify(status='ok',mode='DUAL_ENGINE_PRACTICE',real_orders_enabled=False,practice_orders_supported=True,paper_strategy=multifilter.VERSION,paper_mode='CSV_ONLY_NO_ORDERS',active_strategies=len(execution.EXECUTABLE),new_orders_enabled=bool(execution.EXECUTABLE))
+@app.get('/multifilter-ui.js')
+def paper_ui():return send_from_directory(ROOT,'multifilter-ui.js')
+@app.errorhandler(413)
+def too_large(_):return jsonify(error='Arquivo/requisição excede o limite permitido.'),413
+@app.post('/api/paper/evaluate')
+def paper_evaluate():
+    if not request.is_json:return jsonify(error='Envie JSON com os arquivos CSV.'),400
+    data=request.get_json(silent=True)
+    if not paper_lock.acquire(blocking=False):return jsonify(error='Outra análise em andamento. Tente novamente.'),429
+    try:return jsonify(multifilter.evaluate(data))
+    except ValueError as e:return jsonify(error=str(e)),400
+    finally:paper_lock.release()
 @app.post('/api/connect')
 def connect():
     if request.headers.get('Origin') and request.headers['Origin']!=request.host_url.rstrip('/'):return jsonify(error='Origem inválida'),403

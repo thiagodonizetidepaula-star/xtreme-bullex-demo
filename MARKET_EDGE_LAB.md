@@ -45,3 +45,8 @@ Novo módulo isolado, identidade/versão próprias, contrato de sinal com instan
 - Interface informa SEM OPERAÇÃO e aguarda a nova regra. Reversão possível pelo commit pai; não é automática.
 
 Riscos/limitações: a publicação reinicia processos e exige reconexão; uma ordem já enviada na corretora não é cancelada pelo bloqueio de novas entradas. Ordens sem confirmação após reinício exigem conferência manual. O Render gratuito continua sujeito a suspensão. Nenhuma pesquisa regulatória, backtest fora da amostra ou estratégia nova foi concluída aqui.
+
+
+## Atualização: especificação Multifiltros V1.0 recebida
+
+Implementado módulo experimental somente PAPER/CSV conforme MULTIFILTER_V1.md. A hipótese possui regras rastreáveis, relatório e testes com dados fictícios. A geração por CSV não reativa as estratégias anteriores ou o executor. Pesquisa regulatória, API autorizada, dados reais e validação prospectiva continuam pendentes. A frase anterior sobre ausência de regra descrevia o estado da fase inicial, superado por esta atualização.

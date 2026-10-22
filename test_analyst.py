@@ -384,4 +384,5 @@ class ExecutorTests(LegacyStrategyFixture):
         for d in ({'stake':float('nan')},{'stake':101},{'limit':1.2},{'stop_loss':1}):
             with self.assertRaises(ValueError):execution.config(d)
 
+from test_multifilter import MultifilterTests,PaperApiTests
 if __name__=='__main__':unittest.main()
