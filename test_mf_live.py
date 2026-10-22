@@ -34,7 +34,7 @@ class LiveTests(unittest.TestCase):
     def test_expiry_specific_selection_old_rules_excluded_and_no_gale(self):
         rows=[{'key':live.KEY,'h':h,'result':'Acerto','payout':85} for h in (1,2,3,5)]
         self.assertEqual(execution.eligible(rows,5),[])
-        rows=[{'key':'sniper','h':h,'result':'Acerto','payout':85,'rule_version':3} for h in (1,2,3,5)]
+        rows=[{'key':'sniper','h':h,'result':'Acerto','payout':85,'rule_version':4} for h in (1,2,3,5)]
         self.assertEqual(execution.eligible(rows,5),[('sniper',5)])
         self.assertEqual(execution.eligible([{'key':'wick','h':3,'result':'Acerto','payout':85}]),[])
         with self.assertRaises(ValueError):execution.config({'mg_enabled':True})
@@ -44,15 +44,15 @@ class LiveTests(unittest.TestCase):
         for key in ('sniper','sniper_first_v2'):
             old=[{'key':key,'h':1,'result':'Acerto','payout':85,'rule_version':2}]*50
             self.assertEqual(execution.eligible(old,1),[])
-            current=[{'key':key,'h':1,'result':'Acerto','payout':85,'rule_version':3}]
+            current=[{'key':key,'h':1,'result':'Acerto','payout':85,'rule_version':4}]
             self.assertEqual(execution.eligible(old+current,1),[(key,1)])
     def test_live_research_and_sniper_can_coexist(self):
         import engine
         s={'events':[],'last':{}}
-        with patch.object(live.mf,'decision',side_effect=self.decision),patch.object(engine,'signals',return_value=[('sniper',1),('wick',1)]):
+        with patch.object(live.mf,'decision',side_effect=self.decision),patch.object(engine,'signals',return_value=[('sniper',1),('wick',1)]),patch.object(engine,'flow_decision',return_value={'direction':1,'filters':{'flow':True},'indicators':{},'params':{}}),patch.object(engine,'candle_decision',return_value={'direction':1,'filters':{},'indicators':{},'params':{},'source':{},'reason':'fixture'}):
             for n in (1000,1001):engine.ingest(s,'TEST',self.a[:n],self.a[n-1]['from']+60+.5,85,self.b)
-        self.assertEqual({e['key'] for e in s['events']},{'sniper','multifilter_v1'})
-        self.assertTrue(all(e['rule_version']==3 for e in s['events'] if e['key']=='sniper'))
+        self.assertEqual({e['key'] for e in s['events']},{'sniper','sniper_first_v2','multifilter_v1'})
+        self.assertTrue(all(e['rule_version']==4 for e in s['events'] if e['key']=='sniper'))
         e=next(e for e in s['events'] if e['key']=='sniper' and e['h']==1)
         engine.ingest(s,'TEST',self.a[:1002],self.a[1001]['from']+60+.5,85,self.b)
         self.assertEqual(e['base'],self.a[1001]['open']);self.assertIn(e['result'],('Acerto','Erro','Empate'))

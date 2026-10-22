@@ -1,4 +1,7 @@
 import math
+from flow import decision as flow_decision
+from candle_context import decision as candle_decision
+LIVE_VERSION=4
 from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
 NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','thiago_v1':'Thiago · Sniper + Tendência + Retração S/R','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
@@ -103,7 +106,7 @@ def ingest(state,asset,bars,now,payout,bars5=None):
         target=e['t']+e['h']*60;end=bytime.get(target)
         if end:
             entry=bytime.get(e['t']+60)
-            if e.get('rule_version')==3:
+            if e.get('rule_version') in (3,LIVE_VERSION):
                 if not entry:continue
                 e['base']=entry['o']
             delta=(end['c']-e['base'])*e['dir'];e.update(result='Acerto' if delta>0 else 'Erro' if delta<0 else 'Empate',exit=end['c'])
@@ -123,7 +126,8 @@ def ingest(state,asset,bars,now,payout,bars5=None):
         for i,x in enumerate(a):
             if x['t']<=tracker['t']:continue
             pos=positions[i]
-            if pos!=tracker['pos']:tracker.update(pos=pos,consumed=False)
+            if pos!=tracker['pos']:
+                tracker.update(reversed_at=x['t'] if tracker['pos'] in (-1,1) and pos in (-1,1) else None,pos=pos,consumed=False)
             j=i-offset
             raw=0 if j<1 else 1 if sf[j]>ss[j] and sf[j-1]<ss[j-1] else -1 if sf[j]<ss[j] and sf[j-1]>ss[j-1] else 0
             if raw and raw==pos and not tracker['consumed']:
@@ -132,6 +136,18 @@ def ingest(state,asset,bars,now,payout,bars5=None):
             tracker['t']=x['t']
     state['last'][asset]=max(latest['t'],previous or 0)
     state['chart']={'asset':asset,'candles':a[-70:]}
+    flow=None
+    if 'thiago_v1' in ACTIVE:
+        tracker=state.get('xtreme_regimes',{}).get(asset,{})
+        flow=flow_decision(a,permitted,tracker.get('reversed_at'))
+        candles=candle_decision(a,flow['direction'])
+        flow['candle_context']=candles
+        if flow['direction']:
+            flow['direction']=candles['direction'];flow['reason']=candles['reason']
+        flow['filters'].update(candles['filters']);flow['indicators'].update(candles['indicators'])
+        flow['params']['candle_context']=candles['params']
+        state.setdefault('flow_checks',{})[asset]={'asset':asset,'at':latest['t']+60,**flow}
+        permitted=flow['direction']
     thiago=None
     if 'thiago_v1' in ACTIVE:
         from thiago import decision
@@ -141,7 +157,7 @@ def ingest(state,asset,bars,now,payout,bars5=None):
     # First snapshot seeds history; only subsequently observed closed bars generate forward signals.
     if previous is None or latest['t']<=previous:return
     found=signals(a)
-    found=[(k,d) for k,d in found if k!='sniper_first_v2']
+    found=[(k,d) for k,d in found if k!='sniper_first_v2' and (flow is None or k!='sniper' or d==permitted)]
     if permitted:found.append(('sniper_first_v2',permitted))
     if thiago and thiago['direction']:found.append(('thiago_v1',thiago['direction']))
     if now-latest['t']-60>(5 if 'multifilter_v1' in ACTIVE else 15):return
@@ -151,7 +167,7 @@ def ingest(state,asset,bars,now,payout,bars5=None):
             if any(e['id']==event_id for e in state['events']):continue
             # No overlapping observations within the same strategy/asset/horizon.
             if any(e['asset']==asset and e['key']==key and e['h']==horizon and e['result']=='Aberto' for e in state['events']):continue
-            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':3 if 'multifilter_v1' in ACTIVE else 2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24),**({'indicators':thiago['indicators'],'filters':thiago['filters'],'levels':thiago['levels'],'params':thiago['params']} if key=='thiago_v1' else {})})
+            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':LIVE_VERSION if 'multifilter_v1' in ACTIVE else 2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24),**({'indicators':flow['indicators'],'filters':flow['filters'],'params':flow['params'],'candle_source':flow['candle_context']['source']} if flow else {}),**({'indicators':{**flow['indicators'],**thiago['indicators']},'flow_filters':flow['filters'],'flow_params':flow['params'],'filters':thiago['filters'],'levels':thiago['levels'],'params':thiago['params']} if key=='thiago_v1' else {})})
     state['events']=state['events'][-5000:]
 
 def ranking(events,archive=False):
@@ -159,7 +175,7 @@ def ranking(events,archive=False):
     for key,name in NAMES.items():
         for h in (1,2,3,5):
             if ((h in ACTIVE.get(key,())) == archive):continue
-            es=[e for e in events if e['key']==key and e['h']==h and (archive or key not in EXECUTABLE or 'multifilter_v1' not in ACTIVE or e.get('rule_version')==3)];w=sum(e['result']=='Acerto' for e in es);l=sum(e['result']=='Erro' for e in es);ties=sum(e['result']=='Empate' for e in es);n=w+l+ties;p=w/n if n else 0;z=1.96;den=1+z*z/(n or 1);lower=(p+z*z/(2*(n or 1))-z*math.sqrt(p*(1-p)/(n or 1)+z*z/(4*(n or 1)**2)))/den
+            es=[e for e in events if e['key']==key and e['h']==h and (archive or key not in EXECUTABLE or 'multifilter_v1' not in ACTIVE or e.get('rule_version')==LIVE_VERSION)];w=sum(e['result']=='Acerto' for e in es);l=sum(e['result']=='Erro' for e in es);ties=sum(e['result']=='Empate' for e in es);n=w+l+ties;p=w/n if n else 0;z=1.96;den=1+z*z/(n or 1);lower=(p+z*z/(2*(n or 1))-z*math.sqrt(p*(1-p)/(n or 1)+z*z/(4*(n or 1)**2)))/den
             profit=sum(e['payout']/100 if e['result']=='Acerto' else -1 if e['result']=='Erro' else 0 for e in es)
             out.append({'name':name,'h':h,'wins':w,'losses':l,'ties':ties,'open':sum(e['result']=='Aberto' for e in es),'missing':sum(e['result']=='Sem cotação' for e in es),'n':n,'rate':round(p*100,1) if n else None,'lower':round(max(0,lower)*100,1) if n else None,'ev':round(profit/n,3) if n else None,'status':'Arquivada' if archive else 'EM ESTUDO · NÃO OPERA' if key in RESEARCH else 'Novo teste' if key.startswith('sniper') and n<100 else 'Em observação' if n<100 else 'Confirmar em nova amostra'})
     return sorted(out,key=lambda r:r['lower'] if r['lower'] is not None else -1,reverse=True)

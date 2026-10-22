@@ -34,17 +34,17 @@ class ThiagoTests(unittest.TestCase):
         a=self.bars()
         with patch('thiago.levels',return_value=[{'kind':'support','label':'test','price':90.,'known_at':a[-1]['t']}]):self.assertEqual(thiago.decision(a,1)['direction'],0)
     def test_selection_separate_statistics_and_config(self):
-        old=[{'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85,'rule_version':3}]*20
+        old=[{'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85,'rule_version':4}]*20
         self.assertEqual(execution.eligible(old,1,thiago.KEY),[])
-        rows=old+[{'key':thiago.KEY,'h':1,'result':r,'payout':85,'rule_version':3} for r in ('Acerto','Erro')]
+        rows=old+[{'key':thiago.KEY,'h':1,'result':r,'payout':85,'rule_version':4} for r in ('Acerto','Erro')]
         self.assertEqual(execution.eligible(rows,1,thiago.KEY),[(thiago.KEY,1)])
         self.assertEqual(execution.config({'strategy':thiago.KEY})['strategy'],thiago.KEY)
         with self.assertRaises(ValueError):execution.config({'strategy':'wick'})
         with self.assertRaises(ValueError):execution.config({'strategy':thiago.KEY,'mg_enabled':True})
     def test_demo_loop_retains_levels_fixed_stake_and_does_not_trade_snipers(self):
         now=1710004860
-        event={'id':'thiago-test','asset':'TEST','t':now-60,'h':1,'key':thiago.KEY,'name':thiago.NAME,'dir':1,'result':'Aberto','rule_version':3,'levels':[{'price':99.,'kind':'support'}],'indicators':{'atr18':2},'filters':{'recovery':True},'params':thiago.PARAMS}
-        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[event,{'key':thiago.KEY,'h':1,'result':'Acerto','payout':85,'rule_version':3}]}
+        event={'id':'thiago-test','asset':'TEST','t':now-60,'h':1,'key':thiago.KEY,'name':thiago.NAME,'dir':1,'result':'Aberto','rule_version':4,'levels':[{'price':99.,'kind':'support'}],'indicators':{'atr18':2},'filters':{'recovery':True},'params':thiago.PARAMS}
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[event,{'key':thiago.KEY,'h':1,'result':'Acerto','payout':85,'rule_version':4}]}
         execution.init_execution(c,{})
         class Broker:
             def __init__(self):self.calls=[]

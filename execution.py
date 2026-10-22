@@ -80,7 +80,7 @@ def research_snapshot(c):
     return sorted(rows,key=lambda r:(r['promoted'],r['profit'],r['wins']),reverse=True)
 
 def snapshot(c):
-    return {'research':research_snapshot(c),'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'next_stake':bet_for(c,k,h)[0],'mg_level':bet_for(c,k,h)[1],'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
+    return {'research':research_snapshot(c),'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'next_stake':bet_for(c,k,h)[0],'mg_level':bet_for(c,k,h)[1],'n':r['n'],'wins':r['wins']} for k,h in c.get('exec_selected',[]) for r in ranking(c['events']) if r['name']==NAMES[k] and r['h']==h],'mode':'PRACTICE'}
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
@@ -127,7 +127,7 @@ def loop(c,save,checkpoint=None):
                         stake,mg_level=cfg['stake'],0
                         if c['exec_profit']-stake < -cfg['stop_loss']:
                             c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
-                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'levels':selected.get('levels',[]),'params':selected.get('params',{}),'created_at':time.time()}
+                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'levels':selected.get('levels',[]),'params':selected.get('params',{}),'flow_filters':selected.get('flow_filters',{}),'flow_params':selected.get('flow_params',{}),'candle_source':selected.get('candle_source',{}),'created_at':time.time()}
                     else:
                         current=None
                         if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 5 segundos.'

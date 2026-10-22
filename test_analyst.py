@@ -387,4 +387,6 @@ class ExecutorTests(LegacyStrategyFixture):
 from test_multifilter import MultifilterTests,PaperApiTests
 from test_mf_live import LiveTests
 from test_thiago import ThiagoTests
+from test_flow import FlowTests
+from test_candle_context import CandleContextTests
 if __name__=='__main__':unittest.main()
