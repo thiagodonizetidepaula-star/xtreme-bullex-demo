@@ -45,6 +45,64 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(archived['wins'],1)
     def test_no_order_code(self):
         s=pathlib.Path('worker.py').read_text();self.assertNotIn("op=='order'",s);self.assertNotIn('api.buy',s)
+class StrategyRevisionTests(unittest.TestCase):
+    def test_first_aligned_sniper_only_until_trend_reverses(self):
+        from engine import first_sniper_directions
+        with patch('engine.xtreme_trend_series',return_value=([0,1,1,1,-1,-1],[0]*6)),patch('engine.sniper_buffers',return_value=([-1,1,-1,1,1,-1],[0]*6)):
+            self.assertEqual(first_sniper_directions([{}]*6),[0,1,0,0,0,-1])
+    def test_raw_sniper_and_analysis_only_hypotheses_never_execute(self):
+        import execution
+        events=[{'key':key,'h':1,'result':'Acerto','payout':85} for key in ['sniper','sniper_trend','ema_pullback','rsi_bands','channel_break'] for _ in range(100)]
+        self.assertEqual(execution.eligible(events),[])
+        events.append({'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85})
+        self.assertEqual(execution.eligible(events),[('sniper_first_v2',1)])
+    def test_new_rules_buy_sell_and_gap_guard(self):
+        cases=[('ema_pullback',[100+i*.1 for i in range(100)]),('rsi_bands',[100.]*98+[80.,100.]),('channel_break',[100.]*99+[110.])]
+        for key,values in cases:
+            bars=[{'from':i*60,'open':v-.05,'close':v,'max':v+.1,'min':v-.1} for i,v in enumerate(values)]
+            if key=='ema_pullback':bars[-1]['min']=108.
+            a=normalized(bars,6000)
+            with patch('engine.xtreme_trend',return_value=(1,99)):
+                self.assertIn((key,1),signals(a))
+            inverse=[{'t':x['t'],'o':300-x['o'],'c':300-x['c'],'h':300-x['l'],'l':300-x['h']} for x in a]
+            with patch('engine.xtreme_trend',return_value=(-1,201)):
+                self.assertIn((key,-1),signals(inverse))
+            a.pop(-4);self.assertEqual(signals(a),[])
+    def test_wilder_rsi_flat_and_direction(self):
+        from engine import rsi_series
+        self.assertEqual(rsi_series([100.]*30)[-1],50)
+        self.assertEqual(rsi_series(list(range(1,31)))[-1],100)
+        self.assertEqual(rsi_series(list(range(30,0,-1)))[-1],0)
+    def test_tracker_no_repeated_or_late_first_signal(self):
+        bars=[{'from':i*60,'open':100.,'close':100.,'max':101.,'min':99.} for i in range(84)]
+        for delay in (1,20):
+            state={'events':[],'last':{}}
+            with patch('engine.xtreme_trend_series',side_effect=lambda b,*_ :([1]*len(b),[99.]*len(b))),patch('engine.sniper_buffers',side_effect=lambda b,*_ :([(-1 if i%2 else 1) if i>=79 else -1 for i in range(len(b))],[0]*len(b))),patch('engine.signals',return_value=[('sniper_trend',1)]):
+                ingest(state,'TEST',bars[:80],4801,85);self.assertEqual(state['events'],[])
+                ingest(state,'TEST',bars[:81],4860+delay,85)
+                self.assertEqual(len(state['events']),4 if delay==1 else 0)
+                for e in state['events']:
+                    self.assertEqual(e['key'],'sniper_first_v2');self.assertEqual(e['entry_at'],4860);self.assertEqual(e['entry_deadline'],4865);e['result']='Acerto'
+                ingest(state,'TEST',bars[:82],4921,85)
+                self.assertEqual(len(state['events']),4 if delay==1 else 0)
+    def test_skipped_candles_consume_first_cross_without_late_entry(self):
+        bars=[{'from':i*60,'open':100.,'close':100.,'max':101.,'min':99.} for i in range(85)]
+        state={'events':[],'last':{}}
+        with patch('engine.xtreme_trend_series',side_effect=lambda b,*_:([1]*len(b),[99.]*len(b))),patch('engine.sniper_buffers',side_effect=lambda b,*_:([(-1 if i%2 else 1) if i>=79 else -1 for i in range(len(b))],[0]*len(b))),patch('engine.signals',return_value=[('sniper_trend',1)]):
+            ingest(state,'TEST',bars[:80],4801,85)
+            ingest(state,'TEST',bars,5101,85)
+        self.assertEqual(state['events'],[]);self.assertTrue(state['xtreme_regimes']['TEST']['consumed'])
+    def test_corrected_xtreme_has_priority_only_when_qualified(self):
+        import execution
+        es=[{'key':'wick','h':3,'result':'Acerto','payout':85} for _ in range(100)]
+        es.append({'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85})
+        self.assertEqual(execution.eligible(es)[0],('sniper_first_v2',1))
+    def test_v2_statistics_do_not_borrow_old_outcomes(self):
+        from engine import NAMES
+        rows=ranking([{'key':'sniper_trend','h':1,'result':'Acerto','payout':85}])
+        self.assertEqual(next(r for r in rows if r['name']==NAMES['sniper_first_v2'] and r['h']==1)['n'],0)
+        self.assertTrue(any(r['name']==NAMES['sniper_trend'] and r['n']==1 for r in ranking([{'key':'sniper_trend','h':1,'result':'Acerto','payout':85}],archive=True)))
+
 class ApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

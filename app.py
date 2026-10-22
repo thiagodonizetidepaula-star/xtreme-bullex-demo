@@ -37,7 +37,7 @@ class Client:
 
 def save(c):
     with c['persist_lock']:
-        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[])}))
+        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[]),'xtreme_regimes':c.get('xtreme_regimes',{})}))
         try:
             db('write',c['owner'],payload)
             with c['lock']:c['saved_at']=time.time();c['storage']='Supabase sincronizado'
@@ -110,7 +110,7 @@ def connect():
         if old:
             old['client'].close()
             if old.get('exec_client'):old['exec_client'].close()
-        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
+        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'xtreme_regimes':stored.get('xtreme_regimes',{}),'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
         c.update(persist_lock=threading.Lock(),send_lock=threading.Lock())
         execution.init_execution(c,stored)
         contexts[owner]=c;session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])

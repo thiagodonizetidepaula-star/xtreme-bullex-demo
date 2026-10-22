@@ -1,14 +1,15 @@
 import math
 PRICE_SOURCES=('close','open','high','low','hl2','hlc3','ohlc4')
-def xtreme_trend(bars, period=18, multiplier=2):
+def xtreme_trend_series(bars, period=18, multiplier=2):
     # Wilder RMA: primeira média simples, depois atualização recursiva.
-    tr=[];stop=0.;pos=0;atr=None
+    tr=[];stop=0.;pos=0;atr=None;positions=[];stops=[]
     for i,b in enumerate(bars):
         close=float(b['close']);high=float(b['max']);low=float(b['min'])
         if not all(math.isfinite(v) and v>0 for v in (close,high,low)) or not low<=close<=high:raise ValueError('OHLC inválido')
         previous=float(bars[i-1]['close']) if i else close
         tr.append(max(high-low,abs(high-previous),abs(low-previous)))
-        if len(tr)<period:continue
+        if len(tr)<period:
+            positions.append(0);stops.append(0.);continue
         atr=sum(tr[-period:])/period if atr is None else (atr*(period-1)+tr[-1])/period
         old=stop;distance=atr*multiplier
         if close>old and previous>old:stop=max(old,close-distance)
@@ -16,7 +17,12 @@ def xtreme_trend(bars, period=18, multiplier=2):
         else:stop=close-distance if close>old else close+distance
         if previous<old and close>old:pos=1
         elif previous>old and close<old:pos=-1
-    return pos,stop
+        positions.append(pos);stops.append(stop)
+    return positions,stops
+
+def xtreme_trend(bars, period=18, multiplier=2):
+    positions,stops=xtreme_trend_series(bars,period,multiplier)
+    return (positions[-1],stops[-1]) if positions else (0,0.)
 
 def sniper_buffers(bars, source='hl2'):
     if source not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')

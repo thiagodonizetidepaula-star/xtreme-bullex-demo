@@ -1,5 +1,5 @@
 import time,math,threading
-from engine import ranking,ACTIVE,NAMES
+from engine import ranking,ACTIVE,NAMES,EXECUTABLE
 MAX_ENTRY_DELAY=5
 DEFAULT={'stake':2.,'limit':10,'min_payout':80.,'stop_loss':10.,'stop_win':20.}
 def init_execution(c,stored):
@@ -19,7 +19,9 @@ def config(data):
 def eligible(events):
     # User threshold: >=50% of completed observations, no minimum sample size.
     # Compare integer counts so rounding cannot promote 49.96% to 50%.
-    rs=[r for r in ranking(events) if r['n']>0 and r['wins']*100>=50*r['n']]
+    rs=[r for r in ranking(events) if r['name'] in {NAMES[k] for k in EXECUTABLE} and r['n']>0 and r['wins']*100>=50*r['n']]
+    # Prefer the corrected Xtreme when it qualifies, preserving the user's 50% floor.
+    rs.sort(key=lambda r:r['name']!=NAMES['sniper_first_v2'])
     chosen=[]
     for r in rs[:3]:
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
@@ -59,7 +61,7 @@ def loop(c,save,checkpoint=None):
                 candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
                 if candidates:
                     selected=next((e for pair in c['exec_selected'] for e in candidates if (e['key'],e['h'])==pair),None)
-                    current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':cfg['stake'],'status':'ENVIANDO','created_at':time.time()}
+                    current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':cfg['stake'],'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'created_at':time.time()}
                     c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
                 else:
                     current=None

@@ -1,9 +1,44 @@
 import math
 from statistics import mean,pstdev
-from sniper import sniper_buffers,xtreme_trend
-NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2'}
+from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
+NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
-ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_trend':(1,2,3,5)}
+ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
+# Raw Sniper and the three new hypotheses are analysis-only.
+EXECUTABLE={'wick','cross','engulf','sniper_first_v2'}
+
+def ema(values,period):
+    out=[];value=None;alpha=2/(period+1)
+    for x in values:
+        value=x if value is None else alpha*x+(1-alpha)*value;out.append(value)
+    return out
+
+def rsi_series(values,period=14):
+    out=[None]*len(values)
+    if len(values)<=period:return out
+    changes=[b-a for a,b in zip(values,values[1:])]
+    gain=sum(max(0,x) for x in changes[:period])/period
+    loss=sum(max(0,-x) for x in changes[:period])/period
+    for i in range(period,len(values)):
+        if i>period:
+            gain=(gain*(period-1)+max(0,changes[i-1]))/period
+            loss=(loss*(period-1)+max(0,-changes[i-1]))/period
+        out[i]=50. if gain==loss==0 else 100. if loss==0 else 100-100/(1+gain/loss)
+    return out
+
+def first_sniper_directions(bars):
+    # One aligned cross per ATR regime. Opposite raw crosses do not reset the regime.
+    positions,_=xtreme_trend_series(bars,18,2)
+    fast,slow=sniper_buffers(bars,'hl2');offset=len(bars)-len(fast)
+    out=[0]*len(bars);regime=0;consumed=False
+    for i,pos in enumerate(positions):
+        if pos!=regime:regime=pos;consumed=False
+        j=i-offset
+        if j<1:continue
+        raw=1 if fast[j]>slow[j] and fast[j-1]<slow[j-1] else -1 if fast[j]<slow[j] and fast[j-1]>slow[j-1] else 0
+        if raw and raw==regime and not consumed:out[i]=raw;consumed=True
+    return out
+
 def normalized(bars,now):
     out={}
     for b in bars:
@@ -31,12 +66,24 @@ def signals(a):
     elif p['c']>pm+2*sd and c['c']<=slow+2*cd:add('bands',-1)
     if len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])):
         bars=[{'from':x['t'],'open':x['o'],'max':x['h'],'min':x['l'],'close':x['c']} for x in a]
-        fast,slow=sniper_buffers(bars,'hl2')
-        raw=1 if fast[-1]>slow[-1] and fast[-2]<slow[-2] else -1 if fast[-1]<slow[-1] and fast[-2]>slow[-2] else 0
+        sniper_fast,sniper_slow=sniper_buffers(bars,'hl2')
+        raw=1 if sniper_fast[-1]>sniper_slow[-1] and sniper_fast[-2]<sniper_slow[-2] else -1 if sniper_fast[-1]<sniper_slow[-1] and sniper_fast[-2]>sniper_slow[-2] else 0
         if raw:
             add('sniper',raw)
             pos,_=xtreme_trend(bars,18,2)
             if pos==raw:add('sniper_trend',raw)
+        first=first_sniper_directions(bars)[-1]
+        if first:add('sniper_first_v2',first)
+    if len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])):
+        trend,_=xtreme_trend(bars,18,2)
+        ma=ema(values,20);rsi=rsi_series(values,14)
+        if ma[-1]>ma[-2] and c['l']<=ma[-1] and c['c']>ma[-1] and c['c']>c['o'] and p['c']>ma[-2]:add('ema_pullback',1)
+        elif ma[-1]<ma[-2] and c['h']>=ma[-1] and c['c']<ma[-1] and c['c']<c['o'] and p['c']<ma[-2]:add('ema_pullback',-1)
+        if p['c']<pm-2*sd and c['c']>=slow-2*cd and rsi[-2]<=30 and rsi[-1]>rsi[-2]:add('rsi_bands',1)
+        elif p['c']>pm+2*sd and c['c']<=slow+2*cd and rsi[-2]>=70 and rsi[-1]<rsi[-2]:add('rsi_bands',-1)
+        high20=max(x['h'] for x in a[-21:-1]);low20=min(x['l'] for x in a[-21:-1])
+        if trend==1 and c['c']>high20 and c['c']>c['o']:add('channel_break',1)
+        elif trend==-1 and c['c']<low20 and c['c']<c['o']:add('channel_break',-1)
     return out
 
 def ingest(state,asset,bars,now,payout):
@@ -50,18 +97,39 @@ def ingest(state,asset,bars,now,payout):
             delta=(end['c']-e['base'])*e['dir'];e.update(result='Acerto' if delta>0 else 'Erro' if delta<0 else 'Empate',exit=end['c'])
         elif now>target+180:e['result']='Sem cotação'
     latest=a[-1];previous=state['last'].get(asset)
+    # Replay newly closed candles into the regime tracker, never into the order queue.
+    # This consumes missed first crosses even when a poll skipped several candles.
+    permitted=0
+    if len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])):
+        history=[{'from':x['t'],'open':x['o'],'max':x['h'],'min':x['l'],'close':x['c']} for x in a]
+        positions,_=xtreme_trend_series(history,18,2)
+        sf,ss=sniper_buffers(history,'hl2');offset=len(history)-len(sf)
+        tracker=state.setdefault('xtreme_regimes',{}).setdefault(asset,{'pos':0,'consumed':False,'t':-1})
+        for i,x in enumerate(a):
+            if x['t']<=tracker['t']:continue
+            pos=positions[i]
+            if pos!=tracker['pos']:tracker.update(pos=pos,consumed=False)
+            j=i-offset
+            raw=0 if j<1 else 1 if sf[j]>ss[j] and sf[j-1]<ss[j-1] else -1 if sf[j]<ss[j] and sf[j-1]>ss[j-1] else 0
+            if raw and raw==pos and not tracker['consumed']:
+                tracker['consumed']=True
+                if i==len(a)-1:permitted=raw
+            tracker['t']=x['t']
     state['last'][asset]=max(latest['t'],previous or 0)
     state['chart']={'asset':asset,'candles':a[-70:]}
     # First snapshot seeds history; only subsequently observed closed bars generate forward signals.
     if previous is None or latest['t']<=previous:return
+    found=signals(a)
+    found=[(k,d) for k,d in found if k!='sniper_first_v2']
+    if permitted:found.append(('sniper_first_v2',permitted))
     if now-latest['t']-60>15:return
-    for key,direction in signals(a):
+    for key,direction in found:
         for horizon in ACTIVE.get(key,()):
             event_id=f'{asset}:{latest["t"]}:{key}:{horizon}'
             if any(e['id']==event_id for e in state['events']):continue
             # No overlapping observations within the same strategy/asset/horizon.
             if any(e['asset']==asset and e['key']==key and e['h']==horizon and e['result']=='Aberto' for e in state['events']):continue
-            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24)})
+            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24)})
     state['events']=state['events'][-5000:]
 
 def ranking(events,archive=False):
