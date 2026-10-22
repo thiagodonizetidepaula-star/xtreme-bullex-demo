@@ -1,4 +1,4 @@
-"""Private Supabase Edge client; credentials never leave the server."""
+"""Isolated Xtreme Pulse Supabase Edge client; credentials never leave the server."""
 import os
 import requests
 
@@ -7,12 +7,12 @@ class HistoryError(RuntimeError):
 
 class TradeHistory:
     def __init__(self,url=None,token=None):
-        self.url=(url if url is not None else os.environ.get('MESA_HISTORY_API_URL','')).strip()
-        self.token=(token if token is not None else os.environ.get('MESA_HISTORY_TOKEN','')).strip()
+        self.url=(url if url is not None else os.environ.get('PULSE_HISTORY_API_URL','')).strip()
+        self.token=(token if token is not None else os.environ.get('PULSE_HISTORY_TOKEN','')).strip()
         self.enabled=bool(self.url and self.token and self.url.startswith('https://'))
 
     def _headers(self):
-        return {'x-mesa-secret':self.token,'Accept':'application/json'}
+        return {'x-pulse-secret':self.token,'Accept':'application/json'}
 
     def load(self):
         if not self.enabled:raise HistoryError('credenciais de armazenamento ausentes')
