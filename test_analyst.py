@@ -11,9 +11,9 @@ class LegacyStrategyFixture(unittest.TestCase):
 class RetiredStrategiesTests(unittest.TestCase):
     def test_no_production_strategies_or_candidates(self):
         import engine,execution
-        self.assertEqual(set(engine.ACTIVE),{'multifilter_v1'});self.assertEqual(execution.EXECUTABLE,{'multifilter_v1'})
+        self.assertEqual(set(engine.ACTIVE),{'sniper','sniper_first_v2','multifilter_v1'});self.assertEqual(execution.EXECUTABLE,{'sniper','sniper_first_v2'})
         self.assertEqual(execution.eligible([{'key':'wick','h':3,'result':'Acerto','payout':85}]*100),[])
-        self.assertEqual(len(engine.ranking([])),4)
+        self.assertEqual(len(engine.ranking([])),12)
     def test_no_new_signals_history_settles_without_deletion(self):
         state={'events':[],'last':{'TEST':1740}}
         bars=[{'from':i*60,'open':100.,'close':101.,'max':102.,'min':99.} for i in range(32)]

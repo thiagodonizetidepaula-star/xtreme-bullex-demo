@@ -67,7 +67,7 @@ def loop(c):
             batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
             with c['lock']:
                 for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']],bars5=item.get('candles5',[]))
-                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Multifiltros ativa: analisando M1 + M5 nativos; aguardando confluência dos filtros.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
+                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Snipers ativos na demo; Multifiltros em estudo com M1/M5, sem enviar ordens.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
             if time.time()-save_at>=60:save(c);save_at=time.time()
             c['stop'].wait(.25)
     except Exception as e:
@@ -210,7 +210,7 @@ def executor_start():
         if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
         try:cfg=execution.config(request.get_json(silent=True) or {})
         except ValueError as e:return jsonify(error=str(e)),400
-        selected=execution.eligible(c['events'],cfg['expiry'] if 'multifilter_v1' in execution.EXECUTABLE else None)
+        selected=execution.eligible(c['events'],cfg['expiry'] if 'sniper' in execution.EXECUTABLE else None)
         c.update(exec_mg={},exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com pelo menos 50% de acerto nos resultados concluídos.')
         c['exec_stop'].clear();c['exec_thread']=threading.Thread(target=execution.loop,args=(c,save,checkpoint),daemon=True);c['exec_thread'].start()
     return jsonify(ok=True)

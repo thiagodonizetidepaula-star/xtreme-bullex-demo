@@ -19,7 +19,7 @@ def config(data):
     if out['expiry'] not in (1,2,3,5):raise ValueError('Escolha expiração de 1, 2, 3 ou 5 minutos.')
     out['expiry']=int(out['expiry'])
     enabled=data.get('mg_enabled',False)
-    if enabled and (not EXECUTABLE or 'multifilter_v1' in EXECUTABLE):raise ValueError('Martingale desativado na Multifiltros.')
+    if enabled and (not EXECUTABLE or 'sniper' in EXECUTABLE or 'multifilter_v1' in EXECUTABLE):raise ValueError('Martingale desativado na Multifiltros.')
     if not isinstance(enabled,bool):raise ValueError('Ativação do martingale inválida.')
     if int(out['mg_levels'])!=out['mg_levels'] or not 1<=out['mg_levels']<=3 or not 1<out['mg_multiplier']<=3:raise ValueError('Martingale: 1 a 3 níveis e multiplicador maior que 1 até 3.')
     if enabled and round(out['stake']*out['mg_multiplier']**int(out['mg_levels']),2)>100:raise ValueError('O maior gale ultrapassa 100 na moeda da demo. Reduza valor, níveis ou multiplicador.')
@@ -106,7 +106,7 @@ def loop(c,save,checkpoint=None):
                         elif c['exec_profit']-current['stake'] < -cfg['stop_loss']:
                             c['exec_message']='Próximo gale ultrapassaria o stop loss. Execução encerrada.';break
                 else:
-                    selected=eligible(c['events'],cfg['expiry'] if 'multifilter_v1' in EXECUTABLE else None)
+                    selected=eligible(c['events'],cfg['expiry'] if 'sniper' in EXECUTABLE else None)
                     if selected!=c['exec_selected']:
                         if not c['exec_selected'] and selected:c['exec_started']=time.time()
                         c['exec_selected']=selected

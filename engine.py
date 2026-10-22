@@ -1,15 +1,16 @@
 import math
 from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
-NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
+NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
 LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
 # Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
 LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
 
-# Retired by owner: no strategy may produce new signals or demo entries.
-ACTIVE={'multifilter_v1':(1,2,3,5)}
-EXECUTABLE={'multifilter_v1'}
+# Only the two owner-selected Snipers execute; Multifiltros remains research-only.
+RESEARCH={'multifilter_v1'}
+ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','multifilter_v1')}
+EXECUTABLE={'sniper','sniper_first_v2'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
@@ -93,14 +94,18 @@ def signals(a):
 def ingest(state,asset,bars,now,payout,bars5=None):
     if 'multifilter_v1' in ACTIVE:
         from mf_live import ingest_live
-        return ingest_live(state,asset,bars,bars5,now,payout)
+        ingest_live(state,asset,bars,bars5,now,payout)
     a=normalized(bars,now)
     if not a:return
     bytime={x['t']:x for x in a}
     for e in state['events']:
-        if e['asset']!=asset or e['result']!='Aberto':continue
+        if e.get('key')=='multifilter_v1' or e['asset']!=asset or e['result']!='Aberto':continue
         target=e['t']+e['h']*60;end=bytime.get(target)
         if end:
+            entry=bytime.get(e['t']+60)
+            if e.get('rule_version')==3:
+                if not entry:continue
+                e['base']=entry['o']
             delta=(end['c']-e['base'])*e['dir'];e.update(result='Acerto' if delta>0 else 'Erro' if delta<0 else 'Empate',exit=end['c'])
         elif now>target+180:e['result']='Sem cotação'
     if not ACTIVE:
@@ -132,14 +137,14 @@ def ingest(state,asset,bars,now,payout,bars5=None):
     found=signals(a)
     found=[(k,d) for k,d in found if k!='sniper_first_v2']
     if permitted:found.append(('sniper_first_v2',permitted))
-    if now-latest['t']-60>15:return
+    if now-latest['t']-60>(5 if 'multifilter_v1' in ACTIVE else 15):return
     for key,direction in found:
         for horizon in ACTIVE.get(key,()):
             event_id=f'{asset}:{latest["t"]}:{key}:{horizon}'
             if any(e['id']==event_id for e in state['events']):continue
             # No overlapping observations within the same strategy/asset/horizon.
             if any(e['asset']==asset and e['key']==key and e['h']==horizon and e['result']=='Aberto' for e in state['events']):continue
-            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24)})
+            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':3 if 'multifilter_v1' in ACTIVE else 2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24)})
     state['events']=state['events'][-5000:]
 
 def ranking(events,archive=False):
@@ -147,7 +152,7 @@ def ranking(events,archive=False):
     for key,name in NAMES.items():
         for h in (1,2,3,5):
             if ((h in ACTIVE.get(key,())) == archive):continue
-            es=[e for e in events if e['key']==key and e['h']==h];w=sum(e['result']=='Acerto' for e in es);l=sum(e['result']=='Erro' for e in es);ties=sum(e['result']=='Empate' for e in es);n=w+l+ties;p=w/n if n else 0;z=1.96;den=1+z*z/(n or 1);lower=(p+z*z/(2*(n or 1))-z*math.sqrt(p*(1-p)/(n or 1)+z*z/(4*(n or 1)**2)))/den
+            es=[e for e in events if e['key']==key and e['h']==h and (archive or key not in EXECUTABLE or 'multifilter_v1' not in ACTIVE or e.get('rule_version')==3)];w=sum(e['result']=='Acerto' for e in es);l=sum(e['result']=='Erro' for e in es);ties=sum(e['result']=='Empate' for e in es);n=w+l+ties;p=w/n if n else 0;z=1.96;den=1+z*z/(n or 1);lower=(p+z*z/(2*(n or 1))-z*math.sqrt(p*(1-p)/(n or 1)+z*z/(4*(n or 1)**2)))/den
             profit=sum(e['payout']/100 if e['result']=='Acerto' else -1 if e['result']=='Erro' else 0 for e in es)
-            out.append({'name':name,'h':h,'wins':w,'losses':l,'ties':ties,'open':sum(e['result']=='Aberto' for e in es),'missing':sum(e['result']=='Sem cotação' for e in es),'n':n,'rate':round(p*100,1) if n else None,'lower':round(max(0,lower)*100,1) if n else None,'ev':round(profit/n,3) if n else None,'status':'Arquivada' if archive else 'Novo teste' if key.startswith('sniper') and n<100 else 'Em observação' if n<100 else 'Confirmar em nova amostra'})
+            out.append({'name':name,'h':h,'wins':w,'losses':l,'ties':ties,'open':sum(e['result']=='Aberto' for e in es),'missing':sum(e['result']=='Sem cotação' for e in es),'n':n,'rate':round(p*100,1) if n else None,'lower':round(max(0,lower)*100,1) if n else None,'ev':round(profit/n,3) if n else None,'status':'Arquivada' if archive else 'EM ESTUDO · NÃO OPERA' if key in RESEARCH else 'Novo teste' if key.startswith('sniper') and n<100 else 'Em observação' if n<100 else 'Confirmar em nova amostra'})
     return sorted(out,key=lambda r:r['lower'] if r['lower'] is not None else -1,reverse=True)
