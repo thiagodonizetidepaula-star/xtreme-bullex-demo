@@ -51,8 +51,15 @@ def eligible(events,expiry=None,strategy='all'):
     return chosen
 
 def scoreboard(trades):
-    done=[t for t in trades if t.get('status') in ('WIN','LOSS','EMPATE')]
+    done=[t for t in trades if t.get('status') in ('WIN','LOSS','EMPATE') and not t.get('score_excluded',False)]
     return {'wins':sum(t['status']=='WIN' for t in done),'losses':sum(t['status']=='LOSS' for t in done),'ties':sum(t['status']=='EMPATE' for t in done),'profit':round(sum(t.get('profit',0) for t in done),2),'settled':len(done)}
+
+def reset_score(c):
+    # Clear the displayed score only. Pending orders count when they settle.
+    # Never change risk totals, history, qualification or broker state.
+    for t in c['exec_trades']:
+        if t.get('status') in ('WIN','LOSS','EMPATE'):t['score_excluded']=True
+
 
 def record_outcome(c,t):
     # Count only final broker-confirmed orders once, never theoretical observations.

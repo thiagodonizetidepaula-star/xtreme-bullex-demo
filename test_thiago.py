@@ -57,3 +57,27 @@ class ThiagoTests(unittest.TestCase):
         self.assertEqual([op for op,_ in c['exec_client'].calls],['demo_order','demo_result'])
         self.assertEqual(c['exec_trades'][0]['levels'],event['levels']);self.assertEqual(c['exec_trades'][0]['status'],'WIN')
         self.assertEqual(c['exec_client'].calls[0][1]['stake'],2.)
+    def test_reset_score_keeps_risk_history_and_pending_result(self):
+        import json
+        trades=[{'status':'WIN','profit':1.7},{'status':'LOSS','profit':-2},{'status':'ABERTA','profit':0}]
+        c={'exec_trades':trades,'exec_profit':-0.3,'exec_used':2,'exec_running':True,'exec_research':{'kept':1}}
+        execution.reset_score(c)
+        self.assertEqual(execution.scoreboard(trades),{'wins':0,'losses':0,'ties':0,'profit':0,'settled':0})
+        self.assertEqual((c['exec_profit'],c['exec_used'],c['exec_running']),(-.3,2,True));self.assertEqual(len(trades),3);self.assertEqual(c['exec_research'],{'kept':1})
+        restored=json.loads(json.dumps(trades));restored[-1].update(status='LOSS',profit=-2)
+        self.assertEqual(execution.scoreboard(restored),{'wins':0,'losses':1,'ties':0,'profit':-2,'settled':1})
+    def test_reset_endpoint_requires_auth_and_csrf_and_persists(self):
+        import os,importlib
+        os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only')
+        m=importlib.import_module('app');client=m.app.test_client();path='/api/executor/reset-score'
+        self.assertEqual(client.post(path,json={}).status_code,401)
+        c={'lock':threading.RLock(),'exec_trades':[{'status':'WIN','profit':1.7}],'exec_profit':1.7,'exec_used':1}
+        m.contexts['score-fixture']=c
+        try:
+            with client.session_transaction() as session:session.update(owner='score-fixture',csrf='score-fixture')
+            self.assertEqual(client.post(path,json={}).status_code,403)
+            with patch.object(m,'save',return_value=True) as save:
+                r=client.post(path,json={},headers={'X-CSRF-Token':'score-fixture'})
+                self.assertEqual(r.status_code,200);self.assertEqual(r.json['scoreboard']['wins'],0);save.assert_called_once_with(c)
+                self.assertEqual(c['exec_profit'],1.7);self.assertEqual(c['exec_used'],1)
+        finally:m.contexts.pop('score-fixture',None)

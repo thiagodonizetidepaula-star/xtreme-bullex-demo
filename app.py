@@ -221,3 +221,11 @@ def executor_stop():
         c['exec_stop'].set()
         with c['lock']:c['exec_message']='Parada solicitada. Ordem já enviada será acompanhada até o resultado.'
     return jsonify(ok=True)
+
+@app.post('/api/executor/reset-score')
+def executor_reset_score():
+    c=contexts.get(session['owner'])
+    if not c:return jsonify(error='Reconecte para zerar o placar.'),409
+    with c['lock']:execution.reset_score(c)
+    if not save(c):return jsonify(error='Placar zerado nesta sessão, mas ainda não foi salvo. Tente novamente antes de sair.'),503
+    return jsonify(ok=True,scoreboard=execution.scoreboard(c['exec_trades']))
