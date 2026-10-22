@@ -1,9 +1,9 @@
 import time,math,threading
 from engine import ranking,ACTIVE,NAMES,EXECUTABLE
 MAX_ENTRY_DELAY=5
-DEFAULT={'stake':2.,'limit':10,'min_payout':80.,'stop_loss':10.,'stop_win':20.}
+DEFAULT={'stake':2.,'limit':10,'min_payout':80.,'stop_loss':10.,'stop_win':20.,'mg_levels':1,'mg_multiplier':2.}
 def init_execution(c,stored):
-    c.update(exec_client=None,exec_connected=False,exec_running=False,exec_stop=threading.Event(),exec_thread=None,exec_message='Executor demo desconectado.',exec_trades=stored.get('exec_trades',[]),exec_config=dict(DEFAULT),exec_used=0,exec_profit=0.,exec_started=0)
+    c.update(exec_client=None,exec_connected=False,exec_running=False,exec_stop=threading.Event(),exec_thread=None,exec_message='Executor demo desconectado.',exec_trades=stored.get('exec_trades',[]),exec_config={**DEFAULT,'mg_enabled':False},exec_used=0,exec_profit=0.,exec_started=0,exec_mg={})
     c['exec_research']=stored.get('exec_research',{})
     for t in c['exec_trades']:
         if t['status'] in ('ENVIANDO','ABERTA'):t['status']='INCERTA'
@@ -16,7 +16,22 @@ def config(data):
         if isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v):raise ValueError('Configuração inválida.')
         out[k]=float(v)
     if not 0<out['stake']<=100 or not 1<=out['limit']<=100 or int(out['limit'])!=out['limit'] or not 0<=out['min_payout']<=100 or out['stop_loss']<out['stake'] or out['stop_win']<=0:raise ValueError('Revise entrada, limite, payout e stops.')
-    out['limit']=int(out['limit']);return out
+    enabled=data.get('mg_enabled',False)
+    if not isinstance(enabled,bool):raise ValueError('Ativação do martingale inválida.')
+    if int(out['mg_levels'])!=out['mg_levels'] or not 1<=out['mg_levels']<=3 or not 1<out['mg_multiplier']<=3:raise ValueError('Martingale: 1 a 3 níveis e multiplicador maior que 1 até 3.')
+    if enabled and round(out['stake']*out['mg_multiplier']**int(out['mg_levels']),2)>100:raise ValueError('O maior gale ultrapassa 100 na moeda da demo. Reduza valor, níveis ou multiplicador.')
+    out.update(mg_enabled=enabled,mg_levels=int(out['mg_levels']),limit=int(out['limit']));return out
+
+def bet_for(c,key,h):
+    cfg=c['exec_config'];level=c.get('exec_mg',{}).get(f'{key}:{h}',0) if cfg.get('mg_enabled') else 0
+    return round(cfg['stake']*cfg.get('mg_multiplier',2.)**level,2),level
+
+def advance_mg(c,t):
+    if not c['exec_config'].get('mg_enabled') or t.get('status') not in ('WIN','LOSS','EMPATE'):return
+    identity=f"{t['key']}:{t['h']}";level=t.get('mg_level',0)
+    if t['status']=='WIN':level=0
+    elif t['status']=='LOSS':level=level+1 if level<c['exec_config']['mg_levels'] else 0
+    c.setdefault('exec_mg',{})[identity]=level
 
 def eligible(events):
     # User threshold: >=50% of completed observations, no minimum sample size.
@@ -52,7 +67,7 @@ def research_snapshot(c):
     return sorted(rows,key=lambda r:(r['promoted'],r['profit'],r['wins']),reverse=True)
 
 def snapshot(c):
-    return {'research':research_snapshot(c),'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
+    return {'research':research_snapshot(c),'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'next_stake':bet_for(c,k,h)[0],'mg_level':bet_for(c,k,h)[1],'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
@@ -81,7 +96,10 @@ def loop(c,save,checkpoint=None):
                 candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
                 if candidates:
                     selected=next((e for pair in c['exec_selected'] for e in candidates if (e['key'],e['h'])==pair),None)
-                    current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':cfg['stake'],'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'created_at':time.time()}
+                    stake,mg_level=bet_for(c,selected['key'],selected['h'])
+                    if c['exec_profit']-stake < -cfg['stop_loss']:
+                        c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
+                    current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'created_at':time.time()}
                     c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
                 else:
                     current=None
@@ -105,7 +123,7 @@ def loop(c,save,checkpoint=None):
             checkpoint(c,current)
             result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'])
             with c['lock']:current.update(status=result['status'],profit=result['profit'],finished_at=time.time());c['exec_profit']+=result['profit'];c['exec_message']='Resultado confirmado pela corretora: '+result['status']
-            with c['lock']:record_outcome(c,current)
+            with c['lock']:record_outcome(c,current);advance_mg(c,current)
             while not save(c):
                 with c['lock']:c['exec_message']='Resultado '+result['status']+' confirmado. Aguardando salvar para retomar a busca; nenhuma nova ordem será enviada.'
                 if c['exec_stop'].wait(5):return

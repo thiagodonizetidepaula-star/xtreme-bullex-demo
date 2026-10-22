@@ -21,3 +21,6 @@ assert.equal(tableRows.bestHistory[0][3],5);assert.equal(tableRows.bestHistory[0
 assert.equal(tableRows.candidateHistory[0][3],'4 / 5');assert.equal(tableRows.candidateHistory[0][7],'1 WIN');
 const ps=html.indexOf('function showPanel('),pe=html.indexOf('\n',ps);vm.runInContext(html.slice(ps,pe)+';this.select=showPanel',researchContext);researchContext.select('best');assert.equal(dom.bestPanel.classList.hidden,false);assert.equal(dom.executorPanel.classList.hidden,true);assert.equal(dom.tabBest['aria-pressed'],'true');
 console.log('Best tab: empty state, fifth WIN, losses, negative profit, progress and navigation passed.');
+const ms=html.indexOf('function mgPreview('),me=html.indexOf('\nfor(const id',ms);vm.runInContext(html.slice(ms,me)+';this.preview=mgPreview',researchContext);
+elem('execStake').value='2';elem('execMgLevels').value='2';elem('execMgMultiplier').value='2';elem('execMg').checked=true;researchContext.preview();assert(dom.mgPreview.textContent.includes('Base: 2.00 → Gale 1: 4.00 → Gale 2: 8.00'));assert(dom.mgPreview.textContent.includes('14.00'));
+elem('execMg').checked=false;researchContext.preview();assert(dom.mgPreview.textContent.includes('desligado'));console.log('Martingale preview: off state, levels and total sequence loss passed.');

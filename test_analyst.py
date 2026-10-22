@@ -145,6 +145,55 @@ class ResearchTests(unittest.TestCase):
         for i in range(10):execution.record_outcome(c,self.trade('LOSS',broker_id=i+10))
         row=execution.research_snapshot(c)[0];self.assertTrue(row['promoted']);self.assertEqual(row['losses'],10);self.assertLess(row['profit'],0)
 
+class MartingaleTests(unittest.TestCase):
+    def context(self):
+        import execution
+        c={};execution.init_execution(c,{})
+        c['exec_config']=execution.config({'mg_enabled':True,'mg_levels':2,'mg_multiplier':2,'stop_loss':30})
+        return c
+    def test_loss_win_tie_limit_and_separate_pairs(self):
+        import execution
+        c=self.context()
+        def outcome(status,level):execution.advance_mg(c,{'key':'wick','h':3,'mg_level':level,'status':status})
+        self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
+        outcome('LOSS',0);self.assertEqual(execution.bet_for(c,'wick',3),(4,1));self.assertEqual(execution.bet_for(c,'wick',1),(2,0))
+        outcome('EMPATE',1);self.assertEqual(execution.bet_for(c,'wick',3),(4,1))
+        outcome('IGNORADA',1);self.assertEqual(execution.bet_for(c,'wick',3),(4,1))
+        outcome('LOSS',1);self.assertEqual(execution.bet_for(c,'wick',3),(8,2))
+        outcome('LOSS',2);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
+        outcome('LOSS',0);outcome('WIN',1);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
+        c['exec_config']['mg_enabled']=False;outcome('LOSS',0);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
+    def test_malformed_or_excessive_martingale_rejected(self):
+        import execution
+        for data in [{'mg_enabled':'yes'},{'mg_levels':0},{'mg_levels':4},{'mg_levels':1.5},{'mg_multiplier':1},{'mg_multiplier':float('nan')},{'mg_enabled':True,'stake':60,'stop_loss':100}]:
+            with self.assertRaises(ValueError):execution.config(data)
+        self.assertFalse(execution.config({})['mg_enabled'])
+    def test_loop_uses_gale_only_on_new_signal_and_resets_after_win(self):
+        import execution,threading
+        clock=[120.5]
+        def event(t):return {'id':str(t),'asset':'TEST','t':t,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'}
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[event(60),{'key':'wick','h':3,'result':'Acerto','payout':80}]}
+        execution.init_execution(c,{})
+        c['exec_config']=execution.config({'mg_enabled':True,'stop_loss':30})
+        class Broker:
+            stakes=[]
+            def call(self,op,**kw):
+                if op=='demo_order':self.stakes.append(kw['stake']);return {'sent':True,'id':len(self.stakes),'payout':85,'expiration':clock[0]+180}
+                n=len(self.stakes)
+                if n==3:c['exec_stop'].set()
+                else:clock[0]+=240;c['events'].append(event(int(clock[0])-60))
+                return {'status':'WIN' if n==2 else 'LOSS','profit':3.4 if n==2 else -2}
+        c.update(exec_client=Broker(),exec_selected=[('wick',3)],exec_started=120,exec_running=True)
+        with patch('execution.time.time',side_effect=lambda:clock[0]):execution.loop(c,lambda _:True,lambda *_:True)
+        self.assertEqual(c['exec_client'].stakes,[2,4,2]);self.assertEqual([t['mg_level'] for t in c['exec_trades']],[0,1,0])
+    def test_next_gale_cannot_exceed_remaining_stop_loss(self):
+        import execution,threading
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[{'id':'fresh','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'},{'key':'wick','h':3,'result':'Acerto','payout':80}]}
+        execution.init_execution(c,{})
+        c.update(exec_config=execution.config({'mg_enabled':True,'stop_loss':5}),exec_mg={'wick:3':1},exec_profit=-2,exec_selected=[('wick',3)],exec_started=120)
+        with patch('execution.time.time',return_value=120.5):execution.loop(c,lambda _:True,lambda *_:True)
+        self.assertEqual(c['exec_trades'],[]);self.assertIn('gale ultrapassaria',c['exec_message'])
+
 class ApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

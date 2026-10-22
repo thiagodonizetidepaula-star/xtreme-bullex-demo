@@ -189,7 +189,7 @@ def executor_start():
         try:cfg=execution.config(request.get_json(silent=True) or {})
         except ValueError as e:return jsonify(error=str(e)),400
         selected=execution.eligible(c['events'])
-        c.update(exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com pelo menos 50% de acerto nos resultados concluídos.')
+        c.update(exec_mg={},exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com pelo menos 50% de acerto nos resultados concluídos.')
         c['exec_stop'].clear();c['exec_thread']=threading.Thread(target=execution.loop,args=(c,save,checkpoint),daemon=True);c['exec_thread'].start()
     return jsonify(ok=True)
 @app.post('/api/executor/stop')
