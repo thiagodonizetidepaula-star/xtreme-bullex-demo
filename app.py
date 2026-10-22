@@ -238,7 +238,7 @@ def loop(c):
 
 @app.before_request
 def auth():
-    if request.path in ['/','/health','/api/access']:return
+    if request.path in ['/','/classic','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     if not session.permanent:session.permanent=True
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
@@ -250,7 +250,11 @@ def security(r):
     return r
 
 @app.get('/')
-def home():return render_template('mesa.html')
+def home():return render_template('pulse.html')
+
+@app.get('/classic')
+def classic():return render_template('mesa.html')
+
 @app.get('/legacy')
 def legacy():return render_template('index.html')
 @app.get('/health')
@@ -261,6 +265,35 @@ def access():
     if not secrets.compare_digest(str(data.get('key','')),ACCESS):return jsonify(error='Chave inválida.'),401
     session.clear();session.permanent=True;session['owner']=True;session['csrf']=secrets.token_hex(24)
     return jsonify(csrf=session['csrf'])
+@app.get('/api/pulse/state')
+def pulse_state():
+    # A compact mobile update that cannot block the broker RPC. History is
+    # checked before automation becomes available on the new service.
+    if not state['history_ready'] and history.enabled:
+        restore_history()
+    with lock:
+        m=management()
+        status={
+            'csrf':session['csrf'],
+            'server_now':time.time(),
+            'connected':state['connected'],
+            'running':state['running'],
+            'uncertain':state['uncertain'],
+            'history_ready':state['history_ready'],
+            'history_error':state['history_error'],
+            'balance':state['balance'],
+            'currency':state['currency'],
+            'message':state['message'],
+            'config':state['config'],
+            'management':m,
+            'last_signal':state.get('last_signal'),
+            'analysis_asset':state.get('analysis_asset'),
+            'scan_assets':state.get('scan_assets',[])[:60],
+            'candles':state.get('candles',[])[-48:],
+            'trades':state['trades'][-15:],
+        }
+    return jsonify(status)
+
 @app.get('/api/state')
 def status():
     with lock:
