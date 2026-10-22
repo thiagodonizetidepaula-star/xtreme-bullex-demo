@@ -65,7 +65,7 @@ def loop(c):
             batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
             with c['lock']:
                 for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']])
-                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Observando velas fechadas. Resultados teóricos, sem ordens.',errors=batch.get('errors',[])[-5:])
+                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Observando velas fechadas. Resultados teóricos, sem ordens.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
             if time.time()-save_at>=60:save(c);save_at=time.time()
             c['stop'].wait(.25)
     except Exception as e:
@@ -85,7 +85,7 @@ def security(r):
 @app.get('/')
 def home():return send_from_directory(ROOT,'index.html')
 @app.get('/health')
-def health():return jsonify(status='ok',mode='DUAL_ENGINE_PRACTICE',real_orders_enabled=False,practice_orders_supported=True)
+def health():return jsonify(status='ok',mode='DUAL_ENGINE_PRACTICE',real_orders_enabled=False,practice_orders_supported=True,active_strategies=len(execution.EXECUTABLE),new_orders_enabled=bool(execution.EXECUTABLE))
 @app.post('/api/connect')
 def connect():
     if request.headers.get('Origin') and request.headers['Origin']!=request.host_url.rstrip('/'):return jsonify(error='Origem inválida'),403
@@ -186,6 +186,7 @@ def executor_start():
         if c.get('exec_thread') and c['exec_thread'].is_alive():return jsonify(error='Parada em andamento.'),409
         if not c['exec_connected'] or not c['connected'] or not c['running']:return jsonify(error='Conecte os dois motores e inicie o analisador primeiro.'),409
         if any(t['status'] in ('ENVIANDO','ABERTA','INCERTA') for t in c['exec_trades']):return jsonify(error='Revise as ordens incertas na corretora antes de retomar.'),409
+        if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
         try:cfg=execution.config(request.get_json(silent=True) or {})
         except ValueError as e:return jsonify(error=str(e)),400
         selected=execution.eligible(c['events'])

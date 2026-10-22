@@ -3,9 +3,13 @@ from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
 NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
-ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
+LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
 # Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
-EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
+LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
+
+# Retired by owner: no strategy may produce new signals or demo entries.
+ACTIVE={}
+EXECUTABLE=set()
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
@@ -96,6 +100,9 @@ def ingest(state,asset,bars,now,payout):
         if end:
             delta=(end['c']-e['base'])*e['dir'];e.update(result='Acerto' if delta>0 else 'Erro' if delta<0 else 'Empate',exit=end['c'])
         elif now>target+180:e['result']='Sem cotação'
+    if not ACTIVE:
+        state['chart']={'asset':asset,'candles':a[-70:]}
+        return
     latest=a[-1];previous=state['last'].get(asset)
     # Replay newly closed candles into the regime tracker, never into the order queue.
     # This consumes missed first crosses even when a poll skipped several candles.

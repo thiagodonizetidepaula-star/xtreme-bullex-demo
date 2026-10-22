@@ -17,6 +17,7 @@ def config(data):
         out[k]=float(v)
     if not 0<out['stake']<=100 or not 1<=out['limit']<=100 or int(out['limit'])!=out['limit'] or not 0<=out['min_payout']<=100 or out['stop_loss']<out['stake'] or out['stop_win']<=0:raise ValueError('Revise entrada, limite, payout e stops.')
     enabled=data.get('mg_enabled',False)
+    if enabled and not EXECUTABLE:raise ValueError('Martingale retirado. Nenhuma estratégia ativa.')
     if not isinstance(enabled,bool):raise ValueError('Ativação do martingale inválida.')
     if int(out['mg_levels'])!=out['mg_levels'] or not 1<=out['mg_levels']<=3 or not 1<out['mg_multiplier']<=3:raise ValueError('Martingale: 1 a 3 níveis e multiplicador maior que 1 até 3.')
     if enabled and round(out['stake']*out['mg_multiplier']**int(out['mg_levels']),2)>100:raise ValueError('O maior gale ultrapassa 100 na moeda da demo. Reduza valor, níveis ou multiplicador.')
@@ -28,7 +29,7 @@ def bet_for(c,key,h):
 
 def gale_after(c,t):
     cfg=c['exec_config'];level=t.get('mg_level',0)
-    if not cfg.get('mg_enabled') or t.get('status')!='LOSS' or level>=cfg['mg_levels']:return None
+    if t.get('key') not in EXECUTABLE or not cfg.get('mg_enabled') or t.get('status')!='LOSS' or level>=cfg['mg_levels']:return None
     expiration=t.get('expiration')
     if not isinstance(expiration,int) or expiration%60:return None
     level+=1
@@ -84,6 +85,7 @@ def loop(c,save,checkpoint=None):
                 prepared_at=time.time()
             with c['lock']:
                 cfg=dict(c['exec_config'])
+                if not EXECUTABLE:c['exec_message']='SEM OPERAÇÃO: estratégias anteriores retiradas. Aguardando nova estratégia.';break
                 if not c['running'] or not c['connected']:c['exec_message']='Analisador parado/desconectado; executor pausado.';break
                 if c['exec_used']>=cfg['limit']:c['exec_message']='Máximo de ordens atingido. Ajuste o limite e inicie uma nova execução.';break
                 if c['exec_profit']-cfg['stake'] < -cfg['stop_loss']:c['exec_message']='Stop loss atingido: saldo insuficiente no limite para a próxima entrada.';break

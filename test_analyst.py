@@ -1,7 +1,42 @@
 import unittest,math,ast,pathlib,os,importlib,random
 from unittest.mock import patch
 from engine import normalized,ingest,ranking,signals
-class EngineTests(unittest.TestCase):
+class LegacyStrategyFixture(unittest.TestCase):
+    # Retained legacy implementation is tested only under an explicit test fixture.
+    def setUp(self):
+        import engine,execution
+        for target,name,value in [(engine,'ACTIVE',engine.LEGACY_ACTIVE),(engine,'EXECUTABLE',engine.LEGACY_EXECUTABLE),(execution,'EXECUTABLE',engine.LEGACY_EXECUTABLE)]:
+            p=patch.object(target,name,value);p.start();self.addCleanup(p.stop)
+
+class RetiredStrategiesTests(unittest.TestCase):
+    def test_no_production_strategies_or_candidates(self):
+        import engine,execution
+        self.assertEqual(engine.ACTIVE,{});self.assertEqual(execution.EXECUTABLE,set())
+        self.assertEqual(execution.eligible([{'key':'wick','h':3,'result':'Acerto','payout':85}]*100),[])
+        self.assertEqual(engine.ranking([]),[])
+    def test_no_new_signals_history_settles_without_deletion(self):
+        state={'events':[],'last':{'TEST':1740}}
+        bars=[{'from':i*60,'open':100.,'close':101.,'max':102.,'min':99.} for i in range(32)]
+        ingest(state,'TEST',bars,1921,85);self.assertEqual(state['events'],[])
+    def test_broker_process_refuses_orders_even_if_called_directly(self):
+        import types,runpy
+        fake=types.SimpleNamespace(api=object(),demo=lambda:None)
+        with patch.dict('sys.modules',{'worker':fake}):module=runpy.run_path('executor_worker.py')
+        with self.assertRaisesRegex(RuntimeError,'Nenhuma estratégia ativa'):module['dispatch']({'op':'demo_order'})
+    def test_martingale_disabled_and_executor_start_rejected(self):
+        import execution,threading
+        with self.assertRaises(ValueError):execution.config({'mg_enabled':True})
+        os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only')
+        m=importlib.import_module('app');c={'lock':threading.RLock(),'running':True,'connected':True}
+        execution.init_execution(c,{});c['exec_connected']=True;m.contexts['retired']=c
+        client=m.app.test_client()
+        with client.session_transaction() as sess:sess['owner']='retired';sess['csrf']='retired'
+        with patch.object(m.threading,'Thread') as thread:
+            r=client.post('/api/executor/start',json={},headers={'X-CSRF-Token':'retired'})
+            self.assertEqual(r.status_code,409);thread.assert_not_called()
+        m.contexts.pop('retired',None)
+
+class EngineTests(LegacyStrategyFixture):
     def fixture(self,count=30):
         return [{'from':i*60,'open':100.,'close':100.,'max':101.,'min':99.} for i in range(count)]
     def test_open_candles_invalid_values_and_gaps(self):
@@ -45,7 +80,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(archived['wins'],1)
     def test_no_order_code(self):
         s=pathlib.Path('worker.py').read_text();self.assertNotIn("op=='order'",s);self.assertNotIn('api.buy',s)
-class StrategyRevisionTests(unittest.TestCase):
+class StrategyRevisionTests(LegacyStrategyFixture):
     def test_first_aligned_sniper_only_until_trend_reverses(self):
         from engine import first_sniper_directions
         with patch('engine.xtreme_trend_series',return_value=([0,1,1,1,-1,-1],[0]*6)),patch('engine.sniper_buffers',return_value=([-1,1,-1,1,1,-1],[0]*6)):
@@ -106,7 +141,7 @@ class StrategyRevisionTests(unittest.TestCase):
         self.assertEqual(next(r for r in rows if r['name']==NAMES['sniper_first_v2'] and r['h']==1)['n'],0)
         self.assertTrue(any(r['name']==NAMES['sniper_trend'] and r['n']==1 for r in ranking([{'key':'sniper_trend','h':1,'result':'Acerto','payout':85}],archive=True)))
 
-class ResearchTests(unittest.TestCase):
+class ResearchTests(LegacyStrategyFixture):
     def trade(self,status='WIN',h=1,version=2,key='sniper_first_v2',broker_id=123):
         return {'key':key,'name':'Xtreme v2','h':h,'rule_version':version,'broker_id':broker_id,'status':status,'profit':1.7 if status=='WIN' else -2 if status=='LOSS' else 0,'finished_at':1000.}
     def test_fifth_accumulated_win_promotes_with_losses_visible(self):
@@ -145,7 +180,7 @@ class ResearchTests(unittest.TestCase):
         for i in range(10):execution.record_outcome(c,self.trade('LOSS',broker_id=i+10))
         row=execution.research_snapshot(c)[0];self.assertTrue(row['promoted']);self.assertEqual(row['losses'],10);self.assertLess(row['profit'],0)
 
-class MartingaleTests(unittest.TestCase):
+class MartingaleTests(LegacyStrategyFixture):
     def context(self):
         import execution
         c={};execution.init_execution(c,{})
@@ -207,7 +242,7 @@ class MartingaleTests(unittest.TestCase):
         c=self.run_sequence(stop_after_loss=True)
         self.assertEqual(len(c['exec_client'].orders),1)
 
-class ApiTests(unittest.TestCase):
+class ApiTests(LegacyStrategyFixture):
     @classmethod
     def setUpClass(cls):
         os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only');cls.module=importlib.import_module('app');cls.module.app.config['TESTING']=True
@@ -217,7 +252,7 @@ class ApiTests(unittest.TestCase):
         with c.session_transaction() as s:s['owner']='test';s['csrf']='test'
         self.assertEqual(c.post('/api/start',json={}).status_code,403)
         self.assertEqual(c.post('/api/start',json={},headers={'X-CSRF-Token':'test'}).status_code,409)
-class ExecutorTests(unittest.TestCase):
+class ExecutorTests(LegacyStrategyFixture):
     def test_selection_uses_exact_fifty_percent_without_sample_floor(self):
         import execution
         def sample(w,l,t=0,pending=0):

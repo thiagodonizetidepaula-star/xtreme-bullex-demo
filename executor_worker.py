@@ -1,6 +1,7 @@
 """Separate broker process. Only PRACTICE orders; analyst worker remains read-only."""
 import sys,json,contextlib,math,time
 import worker as broker
+from engine import EXECUTABLE
 MAX_ENTRY_DELAY=5
 prepared_balance=None
 prepared_balance_at=0
@@ -18,6 +19,7 @@ def dispatch(c):
         prepared_balance_at=time.time();broker.demo()
         return {'ready':True}
     if op=='demo_order':
+        if not EXECUTABLE:raise RuntimeError('Nenhuma estratégia ativa. Novas ordens bloqueadas.')
         stake=c.get('stake');h=c.get('h');candle=c.get('candle');direction=c.get('direction')
         if isinstance(stake,bool) or not isinstance(stake,(int,float)) or not math.isfinite(stake) or not 0<stake<=100:raise ValueError('Entrada demo inválida (0 a 100).')
         if isinstance(h,bool) or h not in (1,2,3,5) or not isinstance(candle,int) or candle%60 or direction not in ('call','put'):raise ValueError('Sinal inválido.')
