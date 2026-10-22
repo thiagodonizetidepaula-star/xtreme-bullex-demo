@@ -34,3 +34,14 @@ elem('execMg').checked=false;researchContext.preview();assert(dom.mgPreview.text
  state.server_now=1200;ctx.renderThiagoStatus(state);assert(nodes.thiagoStatusCards.children[0].children[1].textContent.includes('desatualizada'));
  state.thiago_checks=[];ctx.renderThiagoStatus(state);assert(nodes.thiagoSummary.textContent.includes('Aguardando dados'));console.log('Thiago diagnostics: readable waiting reason, stale data and empty state passed.');
 }
+{
+ const nodes={},keys=['patterns_v1','thiago_v1','sniper_first_v2','sniper'],ids=['choosePatterns','chooseThiago','chooseTrend','chooseSniper'];
+ ids.forEach((id,i)=>nodes[id]={checked:true,dataset:{strategy:keys[i]}});
+ const ctx={$:id=>nodes[id]||(nodes[id]={}),execBusy:false,last:null,renderExecutor(){}};vm.createContext(ctx);
+ const start=html.indexOf('const strategyIds='),end=html.indexOf("$('execStart').onclick",start);assert(start>=0&&end>start);vm.runInContext(html.slice(start,end),ctx);
+ nodes.clearStrategies.onclick();assert.equal(ctx.chosenStrategies().length,0);assert(nodes.strategySelectionSummary.textContent.includes('Nenhuma'));
+ nodes.selectAllStrategies.onclick();assert.equal(ctx.chosenStrategies().length,4);
+ ctx.renderStrategyChoices({running:true,config:{strategies:['sniper']}});assert.equal(ctx.chosenStrategies().join(','),'sniper');assert(ids.every(id=>nodes[id].disabled));assert(nodes.selectAllStrategies.disabled);
+ ctx.last={executor:{running:true}};nodes.selectAllStrategies.onclick();assert.equal(ctx.chosenStrategies().length,1);
+ console.log('Strategy selection: clear, select all, saved running selection and lock passed.');
+}

@@ -52,3 +52,26 @@ class PatternEntryTests(unittest.TestCase):
                 r=client.post('/api/executor/start',json={'strategy':pe.KEY,'expiry':1},headers={'X-CSRF-Token':'pattern-fixture'})
                 self.assertEqual(r.status_code,200);self.assertEqual(c['exec_selected'],[(pe.KEY,1)]);thread.return_value.start.assert_called_once()
         finally:m.contexts.pop('pattern-fixture',None)
+    def test_multiple_strategy_configuration_and_independent_eligibility(self):
+        keys=['patterns_v1','thiago_v1','sniper_first_v2','sniper']
+        self.assertEqual(execution.config({'strategies':keys})['strategies'],keys)
+        self.assertEqual(execution.eligible([],1,strategies=keys),[('patterns_v1',1)])
+        for invalid in ([],['sniper','sniper'],['multifilter_v1'],['retired'], 'sniper', [None], [{}]):
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):execution.config({'strategies':invalid})
+        with patch('execution.ranking',return_value=[{'name':execution.NAMES[k],'h':1,'n':2,'wins':1} for k in keys[1:]]):
+            self.assertEqual(execution.eligible([],1,strategies=keys),[(k,1) for k in keys])
+            self.assertEqual(execution.eligible([],1,strategies=['sniper']),[('sniper',1)])
+    def test_api_multiple_selection_and_empty_rejection(self):
+        import os,importlib
+        os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only');m=importlib.import_module('app')
+        c={'lock':threading.RLock(),'running':True,'connected':True,'events':[]};execution.init_execution(c,{});c['exec_connected']=True;m.contexts['multi-fixture']=c;client=m.app.test_client()
+        try:
+            with client.session_transaction() as session:session.update(owner='multi-fixture',csrf='multi-fixture')
+            with patch.object(m.threading,'Thread') as thread:
+                headers={'X-CSRF-Token':'multi-fixture'}
+                r=client.post('/api/executor/start',json={'strategies':[]},headers=headers)
+                self.assertEqual(r.status_code,400);thread.assert_not_called()
+                keys=['patterns_v1','thiago_v1','sniper_first_v2','sniper']
+                r=client.post('/api/executor/start',json={'strategies':keys,'expiry':1},headers=headers)
+                self.assertEqual(r.status_code,200);self.assertEqual(c['exec_config']['strategies'],keys);self.assertEqual(c['exec_selected'],[('patterns_v1',1)]);thread.return_value.start.assert_called_once()
+        finally:m.contexts.pop('multi-fixture',None)
