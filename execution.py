@@ -17,9 +17,9 @@ def config(data):
     out['limit']=int(out['limit']);return out
 
 def eligible(events):
-    # User threshold: >=60% of completed observations, no minimum sample size.
-    # Compare integer counts so rounding cannot promote 59.96% to 60%.
-    rs=[r for r in ranking(events) if r['n']>0 and r['wins']*100>=60*r['n']]
+    # User threshold: >=50% of completed observations, no minimum sample size.
+    # Compare integer counts so rounding cannot promote 49.96% to 50%.
+    rs=[r for r in ranking(events) if r['n']>0 and r['wins']*100>=50*r['n']]
     chosen=[]
     for r in rs[:3]:
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
@@ -48,7 +48,7 @@ def loop(c,save,checkpoint=None):
                 if selected!=c['exec_selected']:
                     if not c['exec_selected'] and selected:c['exec_started']=time.time()
                     c['exec_selected']=selected
-                if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 60% de acerto nos resultados concluídos.'
+                if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 50% de acerto nos resultados concluídos.'
                 used={(t['asset'],t['t']) for t in c['exec_trades']}
                 candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
                 if candidates:

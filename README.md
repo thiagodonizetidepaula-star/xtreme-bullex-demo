@@ -22,3 +22,6 @@ Latency fix: compact per-account order_checkpoint replaces full research save on
 
 
 Current selection rule: observed wins/completed observations >=60%, no minimum of 30 observations and no additional positive-return qualification. Ties count in completed denominator; pending/missing quotes do not. Integer comparison prevents rounding below-threshold rates up to 60%. Top three eligible combinations are reevaluated while idle, and selected sample sizes are displayed. This is a user-selected demo criterion, not a claim of statistical validation or future accuracy.
+
+
+Latest user test setting supersedes earlier thresholds: observed accuracy >=50%, exact integer comparison, no minimum result count. Continuously reevaluate idle selection; pending quotes excluded, ties included. PRACTICE-only execution guards unchanged.
