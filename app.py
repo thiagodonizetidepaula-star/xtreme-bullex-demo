@@ -1,4 +1,5 @@
 import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,hashlib,hmac
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime,timezone
 import requests
 from flask import Flask,request,jsonify,session,send_from_directory
@@ -56,20 +57,42 @@ def checkpoint(c,trade):
 
 def loop(c):
     catalog_at=0;save_at=0;assets=[]
-    try:
-        while not c['stop'].is_set():
-            if not assets or (time.time()-catalog_at>60 and time.time()%60>8):
-                assets=c['client'].call('market',payout=0,strategy='sniper')['assets'];catalog_at=time.time()
-                with c['lock']:c['assets']=assets
-            if not assets:
-                with c['lock']:c['message']='Nenhum ativo binário aberto informado pela corretora.'
-                c['stop'].wait(10);continue
-            batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
+    # Four independent discovery lanes share one broker stream and one order executor.
+    # The broker API must not be called concurrently from multiple threads.
+    lanes=4
+    def process_lane(index,items,payouts,now):
+        scanned=0
+        for item in items:
+            if c['stop'].is_set():break
             with c['lock']:
-                for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']],bars5=item.get('candles5',[]))
-                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Padrões, Thiago e Snipers em análise nos mercados abertos; Multifiltros somente em estudo.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
-            if time.time()-save_at>=60:save(c);save_at=time.time()
-            c['stop'].wait(.25)
+                ingest(c,item['asset'],item['candles'],now,payouts[item['asset']],bars5=item.get('candles5',[]))
+            scanned+=1
+        return {'id':index+1,'scanned':scanned,'assigned':len(items)}
+    try:
+        with ThreadPoolExecutor(max_workers=lanes,thread_name_prefix='xtreme-scanner') as pool:
+            while not c['stop'].is_set():
+                if not assets or (time.time()-catalog_at>60 and time.time()%60>8):
+                    market=c['client'].call('market',payout=0,strategy='sniper')['assets']
+                    # Highest payout first; prefer regular market when payouts tie.
+                    assets=sorted(market,key=lambda x:(-float(x.get('payout',0)),bool(x.get('otc',False)),x['asset']))[:32]
+                    catalog_at=time.time()
+                    with c['lock']:c['assets']=assets
+                if not assets:
+                    with c['lock']:c['message']='Nenhum ativo binário aberto informado pela corretora.'
+                    c['stop'].wait(10);continue
+                batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets])
+                payouts={x['asset']:x['payout'] for x in assets}
+                groups=[[] for _ in range(lanes)]
+                for item in batch.get('items',[]):
+                    # Stable lane ownership prevents duplicate processing of the same pair.
+                    slot=next((i%lanes for i,a in enumerate(assets) if a['asset']==item['asset']),None)
+                    if slot is not None:groups[slot].append(item)
+                futures=[pool.submit(process_lane,i,group,payouts,batch['now']) for i,group in enumerate(groups)]
+                details=[f.result() for f in futures]
+                with c['lock']:
+                    c.update(scanner_lanes=details,ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='4 motores analisando pares prioritários e encaminhando sinais ao executor PRACTICE.',errors=batch.get('errors',[])[-5:])
+                if time.time()-save_at>=60:save(c);save_at=time.time()
+                c['stop'].wait(.25)
     except Exception as e:
         with c['lock']:c['message']=str(e) if isinstance(e,RuntimeError) else 'Falha de conexão. Reconecte para continuar.';c['connected']=False
     finally:
@@ -129,7 +152,7 @@ def connect():
         if old:
             old['client'].close()
             if old.get('exec_client'):old['exec_client'].close()
-        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'xtreme_regimes':stored.get('xtreme_regimes',{}),'mf_params':stored.get('mf_params',{}),'mf_last':{},'mf_checks':{},'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
+        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'xtreme_regimes':stored.get('xtreme_regimes',{}),'mf_params':stored.get('mf_params',{}),'mf_last':{},'mf_checks':{},'assets':[],'ready':0,'total':0,'scanner_lanes':[],'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
         c.update(persist_lock=threading.Lock(),send_lock=threading.Lock())
         execution.init_execution(c,stored)
         contexts[owner]=c;session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])
@@ -142,7 +165,7 @@ def state():
     c=contexts.get(session['owner'])
     if not c:return jsonify(error='Servidor reiniciado. Reconecte à Bullex para restaurar o histórico.'),401
     with c['lock']:
-        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),pattern_checks=list(c.get('pattern_checks',{}).values())[-100:],flow_checks=list(c.get('flow_checks',{}).values())[-100:],thiago_checks=list(c.get('thiago_checks',{}).values())[-100:],multifilter_checks=list(c.get('mf_checks',{}).values())[-100:],executor=execution.snapshot(c))
+        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','scanner_lanes','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),pattern_checks=list(c.get('pattern_checks',{}).values())[-100:],flow_checks=list(c.get('flow_checks',{}).values())[-100:],thiago_checks=list(c.get('thiago_checks',{}).values())[-100:],multifilter_checks=list(c.get('mf_checks',{}).values())[-100:],executor=execution.snapshot(c))
 @app.post('/api/start')
 def start():
     c=contexts.get(session['owner'])
