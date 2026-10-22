@@ -129,7 +129,7 @@ async function req(path,body){
  return data;
 }
 async function poll(){
- try{const s=await req('/api/state');csrf=s.csrf;snapshot=s;$('loginCover').hidden=true;draw(s);}
+ try{const s=await req('/api/pulse/state');csrf=s.csrf;snapshot=s;$('loginCover').hidden=true;draw(s);}
  catch(e){if(!snapshot){$('loginCover').hidden=false;}else{$('serverStatus').textContent='Sem resposta';msg('Sem comunicação com o Render. Isso não prova que o bot parou: '+e.message,true);}}
 }
 function canStart(s){return !!(s.connected&&!s.running&&!s.uncertain&&s.history_ready!==false&&s.management?.can_trade);}
