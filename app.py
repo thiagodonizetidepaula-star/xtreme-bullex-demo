@@ -116,7 +116,7 @@ def state():
     c=contexts.get(session['owner'])
     if not c:return jsonify(error='Servidor reiniciado. Reconecte à Bullex para restaurar o histórico.'),401
     with c['lock']:
-        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',executor=execution.snapshot(c))
+        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),executor=execution.snapshot(c))
 @app.post('/api/start')
 def start():
     c=contexts.get(session['owner'])

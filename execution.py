@@ -63,7 +63,7 @@ def loop(c,save):
             if not r['sent']:
                 with c['lock']:current.update(status='IGNORADA',reason=r['reason']);c['exec_message']=r['reason']
                 save(c);continue
-            with c['lock']:current.update(status='ABERTA',broker_id=r['id'],payout=r['payout'],expiration=r['expiration']);c['exec_used']+=1;c['exec_message']='Ordem DEMO confirmada. Acompanhando resultado; analisador continua ativo.'
+            with c['lock']:current.update(status='ABERTA',confirmed_at=time.time(),broker_id=r['id'],payout=r['payout'],expiration=r['expiration']);c['exec_used']+=1;c['exec_message']='Ordem DEMO confirmada. Acompanhando resultado; analisador continua ativo.'
             save(c)
             result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'])
             with c['lock']:current.update(status=result['status'],profit=result['profit'],finished_at=time.time());c['exec_profit']+=result['profit'];c['exec_message']='Resultado confirmado pela corretora: '+result['status']

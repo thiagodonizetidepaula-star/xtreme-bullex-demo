@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync('index.html','utf8');const start=html.indexOf('function operationView('),end=html.indexOf('function renderOperationLive(',start);assert(start>0&&end>start);const c={};vm.createContext(c);vm.runInContext(html.slice(start,end)+';this.view=operationView',c);
+const s={executor:{running:true,connected:true,selected:[{name:'test',h:1}],trades:[]}};
+assert.equal(c.view(s,100).phase,'searching');
+s.executor.selected=[];assert.equal(c.view(s,100).phase,'waiting');
+s.executor.trades=[{status:'ENVIANDO',t:60,h:1}];assert.equal(c.view(s,100).phase,'sending');
+s.executor.trades=[{status:'ABERTA',broker_id:123,expiration:180,h:1}];let v=c.view(s,130);assert.equal(v.phase,'open');assert.equal(v.remaining,50);
+v=c.view(s,175);assert.equal(v.phase,'finalizing');assert.equal(v.remaining,5);
+v=c.view(s,181);assert.equal(v.remaining,0);assert.equal(v.phase,'finalizing');assert(!v.title.includes('WIN'));assert(v.subtitle.includes('confirmar'));
+assert.equal(c.view(s,130,true).phase,'offline');
+s.executor.trades=[{status:'INCERTA'}];assert.equal(c.view(s,130).phase,'uncertain');
+s.executor.trades=[{status:'WIN',finished_at:180,profit:1.7}];assert.equal(c.view(s,181).phase,'result');assert.equal(c.view(s,200).phase,'waiting');
+console.log('Live UI: search, qualification, sending, countdown, finalization, stale connection and confirmed result passed.');

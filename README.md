@@ -13,3 +13,6 @@ Free Render can sleep or restart, so overnight availability is not guaranteed. B
 
 
 When no candidate is eligible at start, executor enters waiting mode and monitors new analysis; when eligible candidates appear, it freezes their selection and waits for a fresh signal. Action feedback remains visible across polling updates. Demo guards and qualification requirements are unchanged.
+
+
+Live operation panel uses server_now plus monotonic browser elapsed time and broker-confirmed expiration. It distinguishes qualification wait, searching, sending, open, finalizing, confirmed result, uncertain and stale connection. Zero seconds never implies WIN/LOSS; stale state hides the countdown after 15s. Run node test_live_ui.cjs for display-state regression tests. No order logic changes in this display revision.
