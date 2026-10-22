@@ -110,6 +110,34 @@ class ExecutorTests(unittest.TestCase):
             r=client.post('/api/executor/start',json={},headers={'X-CSRF-Token':'fixture'})
             self.assertEqual(r.status_code,200);thread.return_value.start.assert_called_once()
         m.contexts.pop('fixture',None)
+    def test_compact_checkpoint_restores_uncertain_without_replay(self):
+        import execution
+        checkpoint={'event':'unique','asset':'TEST','status':'ENVIANDO'}
+        stored={'exec_trades':[]};execution.restore_checkpoint(stored,checkpoint)
+        c={};execution.init_execution(c,stored);self.assertEqual(c['exec_trades'][0]['status'],'INCERTA')
+        stored={'exec_trades':[{'event':'unique','status':'WIN','profit':1.7}]};execution.restore_checkpoint(stored,checkpoint)
+        self.assertEqual(stored['exec_trades'][0]['status'],'WIN')
+    def test_dispatch_uses_prevalidated_cache_and_bounded_five_second_window(self):
+        import types,runpy,contextlib
+        sent=[]
+        api=types.SimpleNamespace(api=types.SimpleNamespace(websocket=types.SimpleNamespace(send=lambda *_:None)))
+        def buy(*args):
+            api.api.websocket.send('{"msg":{"name":"binary-options.open-option"}}');sent.append(args);return True,321
+        api.buy_by_raw_expirations=buy
+        fake=types.SimpleNamespace(api=api,demo=lambda:None,broker_now=lambda:123.5,market_at=119.,market_cache={'TEST':{'open':True,'payout':85}},stage=lambda *_:contextlib.nullcontext())
+        with patch.dict('sys.modules',{'worker':fake}):module=runpy.run_path('executor_worker.py')
+        dispatch=module['dispatch'];dispatch.__globals__.update(prepared_balance=100.,prepared_balance_at=119.)
+        command={'op':'demo_order','stake':2,'h':1,'candle':60,'direction':'call','asset':'TEST','min_payout':80}
+        with patch('time.time',return_value=123.5):
+            result=dispatch(command)
+        self.assertTrue(result['sent']);self.assertEqual(result['send_delay'],3.5);self.assertEqual(len(sent),1)
+        fake.broker_now=lambda:125.1
+        with patch('time.time',return_value=125.1):result=dispatch(command)
+        self.assertFalse(result['sent']);self.assertEqual(len(sent),1)
+        fake.broker_now=lambda:123.5;dispatch.__globals__['prepared_balance_at']=0
+        with patch('time.time',return_value=123.5):result=dispatch(command)
+        self.assertFalse(result['sent']);self.assertEqual(len(sent),1)
+
     def test_config_rejects_nonfinite_and_excess_stake(self):
         import execution
         for d in ({'stake':float('nan')},{'stake':101},{'limit':1.2},{'stop_loss':1}):

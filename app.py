@@ -10,7 +10,7 @@ app.config.update(MAX_CONTENT_LENGTH=8192,SESSION_COOKIE_HTTPONLY=True,SESSION_C
 GATE=os.environ['ANALYST_GATEWAY'];KEY=os.environ['ANALYST_GATEWAY_KEY']
 contexts={};connect_lock=threading.Lock();attempts={}
 def db(op,owner,payload=None):
-    r=requests.post(GATE,headers={'X-Analyst-Key':KEY},json={'op':op,'owner_id':owner,'payload':payload},timeout=20)
+    r=requests.post(GATE,headers={'X-Analyst-Key':KEY},json={'op':op,'owner_id':owner,'payload':payload},timeout=3 if op=='checkpoint' else 20)
     r.raise_for_status();return r.json()
 class Client:
     def __init__(self,executor=False):
@@ -21,7 +21,7 @@ class Client:
             self.q.put(None)
         threading.Thread(target=read,daemon=True).start()
     def call(self,op,timeout=60,**kw):
-        allowed=('connect','demo_order','demo_result') if self.executor else ('connect','market','snapshot','candles')
+        allowed=('connect','demo_prepare','demo_order','demo_result') if self.executor else ('connect','market','snapshot','candles')
         if op not in allowed:raise ValueError('Comando não autorizado para este motor')
         with self.lock:
             self.p.stdin.write(json.dumps({'op':op,**kw})+'\n');self.p.stdin.flush()
@@ -45,6 +45,12 @@ def save(c):
         except Exception:
             with c['lock']:c['storage']='Falha ao salvar; dados recentes somente na memória'
             return False
+
+def checkpoint(c,trade):
+    try:
+        db('checkpoint',c['owner'],json.loads(json.dumps(trade)))
+        return True
+    except Exception:return False
 
 def loop(c):
     catalog_at=0;save_at=0;assets=[]
@@ -99,7 +105,8 @@ def connect():
         if old and (old.get('running') or old.get('exec_running')):
             cl.close();session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])
         # Save credentials only inside broker worker memory; never in database or cookies.
-        stored=db('read',owner).get('payload') or {}
+        restored=db('read',owner);stored=restored.get('payload') or {}
+        execution.restore_checkpoint(stored,restored.get('checkpoint'))
         if old:
             old['client'].close()
             if old.get('exec_client'):old['exec_client'].close()
@@ -183,7 +190,7 @@ def executor_start():
         except ValueError as e:return jsonify(error=str(e)),400
         selected=execution.eligible(c['events'])
         c.update(exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com 30 resultados concluídos e retorno teórico positivo.')
-        c['exec_stop'].clear();c['exec_thread']=threading.Thread(target=execution.loop,args=(c,save),daemon=True);c['exec_thread'].start()
+        c['exec_stop'].clear();c['exec_thread']=threading.Thread(target=execution.loop,args=(c,save,checkpoint),daemon=True);c['exec_thread'].start()
     return jsonify(ok=True)
 @app.post('/api/executor/stop')
 def executor_stop():
