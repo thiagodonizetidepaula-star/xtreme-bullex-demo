@@ -1,203 +1,130 @@
-import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math
-from datetime import datetime,timezone,timedelta
-from flask import Flask,request,jsonify,session,render_template
-from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
+import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,hashlib,hmac
+from datetime import datetime,timezone
+import requests
+from flask import Flask,request,jsonify,session,send_from_directory
+from engine import ingest,ranking
 ROOT=pathlib.Path(__file__).resolve().parent
-app=Flask(__name__)
-app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
-app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',SESSION_COOKIE_SECURE=os.environ.get('RENDER')=='true')
-ACCESS=os.environ.get('APP_ACCESS_KEY')
-if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
-lock=threading.RLock();stop=threading.Event();bot=None;client=None
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
-
-def log(s):
-    state['message']=s
-    state['logs'].append({'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'text':s})
-    state['logs']=state['logs'][-60:]
-
+app=Flask(__name__,static_folder=None);app.secret_key=os.environ['SESSION_SECRET']
+app.config.update(MAX_CONTENT_LENGTH=8192,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',SESSION_COOKIE_SECURE=os.getenv('RENDER')=='true')
+GATE=os.environ['ANALYST_GATEWAY'];KEY=os.environ['ANALYST_GATEWAY_KEY']
+contexts={};connect_lock=threading.Lock();attempts={}
+def db(op,owner,payload=None):
+    r=requests.post(GATE,headers={'X-Analyst-Key':KEY},json={'op':op,'owner_id':owner,'payload':payload},timeout=20)
+    r.raise_for_status();return r.json()
 class Client:
     def __init__(self):
-        self.p=subprocess.Popen([sys.executable,'-u',str(ROOT/'worker.py')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
-        self.q=queue.Queue();self.lock=threading.Lock()
+        self.p=subprocess.Popen([sys.executable,'-u',str(ROOT/'worker.py')],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1);self.q=queue.Queue();self.lock=threading.Lock()
         def read():
             for line in self.p.stdout:self.q.put(line)
             self.q.put(None)
         threading.Thread(target=read,daemon=True).start()
-    def call(self,op,timeout=35,**kwargs):
+    def call(self,op,**kw):
+        if op not in ('connect','market','snapshot','candles'):raise ValueError('Somente leitura')
         with self.lock:
-            if self.p.poll() is not None:raise RuntimeError('Integração encerrada. Reconecte.')
-            self.p.stdin.write(json.dumps({'op':op,**kwargs})+'\n');self.p.stdin.flush()
-            try: line=self.q.get(timeout=timeout)
-            except queue.Empty:
-                self.close();raise RuntimeError('Sem resposta da corretora. Sessão interrompida; não há repetição automática de ordem.')
-            if line is None:raise RuntimeError('Biblioteca encerrada. Verifique a instalação.')
+            self.p.stdin.write(json.dumps({'op':op,**kw})+'\n');self.p.stdin.flush()
+            line=self.q.get(timeout=60)
+            if line is None:raise RuntimeError('Sessão da corretora encerrada. Reconecte.')
             r=json.loads(line)
-            if not r['ok']:raise RuntimeError(r['error'])
+            if not r.get('ok'):raise RuntimeError(r.get('error','Falha na corretora'))
             return r['data']
     def close(self):
         if self.p.poll() is None:self.p.terminate()
 
-def day():return datetime.now(timezone(timedelta(hours=-3))).date().isoformat()
-def management():
-    ts=[t for t in state['trades'] if t['day']==day() and t['status']!='IGNORADA']
-    done=[t for t in ts if t['status'] in ('WIN','LOSS','EMPATE')]
-    profit=round(sum(t.get('profit',0) for t in done),2)
-    c=state['config'];wins=sum(t['status']=='WIN' for t in done);losses=sum(t['status']=='LOSS' for t in done)
-    return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'can_trade':risk_ok(c,profit,len(ts))}
-def comparison():
-    out=[]
-    for key,name in STRATEGIES.items():
-        ts=[t for t in state['trades'] if t.get('strategy_key','rejection')==key and t['status'] in ('WIN','LOSS','EMPATE')]
-        payouts=[t['payout'] for t in ts if isinstance(t.get('payout'),(int,float))]
-        out.append({'strategy':name,'operations':len(ts),'wins':sum(t['status']=='WIN' for t in ts),'losses':sum(t['status']=='LOSS' for t in ts),'ties':sum(t['status']=='EMPATE' for t in ts),'profit':round(sum(t['profit'] for t in ts),2),'payout_mean':round(sum(payouts)/len(payouts),2) if payouts else None})
-    return out
-def limits(c):
-    m=management()
-    return risk_ok(c,m['profit'],m['used'])
+def save(c):
+    with c['lock']:payload={'events':list(c['events']),'last':dict(c['last'])}
+    try:
+        db('write',c['owner'],payload)
+        with c['lock']:c['saved_at']=time.time();c['storage']='Supabase sincronizado'
+    except Exception:
+        with c['lock']:c['storage']='Falha ao salvar; dados recentes somente na memória'
 
 def loop(c):
-    last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
-    candidates=[];cursor=0;catalog_at=0;seen=set()
+    catalog_at=0;save_at=0;assets=[]
     try:
-        while not stop.is_set():
-            if not limits(c):log('Limite diário atingido. Robô parado.');break
-            if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
-                candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
-                state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
-            if not candidates:
-                stop.wait(2);continue
-            batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
-            for error in batch.get('errors',[]):log(error)
-            selected=None
-            for item in batch['items']:
-                try:
-                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
-                except (ValueError,KeyError,TypeError) as e:
-                    invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
-                    if invalid_key not in seen:
-                        seen.add(invalid_key);log(item['asset']+': dados inválidos; ativo ignorado ('+str(e)+').')
-                    continue
-                key=(item['asset'],analysis.get('candle'))
-                if key not in seen:
-                    seen.add(key);state['analyzed_count']+=1
-                    log(item['asset']+' · '+analysis['reason'])
-                if selected is None or (analysis.get('direction') and not selected[1].get('direction')):
-                    selected=(item,analysis)
-            state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
-            if selected is None:
-                state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
-                stop.wait(.15);continue
-            item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
-            # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
-            if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
-            state['analysis']=a;state['candles']=data['candles'][-50:]
-            if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
-                evaluated=(c['asset'],a['candle'])
-                checks=a.get('checks',{})
-                closed=datetime.fromtimestamp(a['candle']+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
-                log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
-            state['message']=a['reason']
-            if (c['asset'],a.get('candle'))!=last and a.get('direction'):
-                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'],c.get('strategy','rejection'))
-                if not allowed:
-                    log(c['asset']+': '+reason);stop.wait(.2);continue
-                last=(c['asset'],a['candle']);state['last_candle']=last
-                with lock:
-                    if stop.is_set():break
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
-                    state['trades'].append(trade)
-                    state['uncertain']=True
-                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
-                if not order['sent']:
-                    trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;log(order['reason'])
-                else:
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'));
-                    if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
-                    log('Ordem confirmada na DEMO. Aguardando resultado.')
-                    result=client.call('result',timeout=150,id=order['id'])
-                    trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
-                    trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
-                    state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status'])
-            stop.wait(.15)
+        while not c['stop'].is_set():
+            if time.time()-catalog_at>60:
+                assets=c['client'].call('market',payout=0,strategy='sniper')['assets'];catalog_at=time.time()
+                with c['lock']:c['assets']=assets
+            if not assets:
+                with c['lock']:c['message']='Nenhum ativo binário aberto informado pela corretora.'
+                c['stop'].wait(10);continue
+            batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
+            with c['lock']:
+                for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']])
+                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Observando velas fechadas. Resultados teóricos, sem ordens.',errors=batch.get('errors',[])[-5:])
+            if time.time()-save_at>=60:save(c);save_at=time.time()
+            c['stop'].wait(2)
     except Exception as e:
-        log(str(e));state['connected']=False
-        if client:client.close()
-        if state['uncertain']:
-            state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
-    finally:state['running']=False
+        with c['lock']:c['message']=str(e) if isinstance(e,RuntimeError) else 'Falha de conexão. Reconecte para continuar.';c['connected']=False
+    finally:
+        with c['lock']:c['running']=False
+        save(c)
 
 @app.before_request
 def auth():
-    if request.path in ['/','/health','/api/access']:return
-    if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
-    if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
-
+    if request.path in ('/','/health','/api/connect'):return
+    if not session.get('owner'):return jsonify(error='Conecte sua conta demo primeiro.'),401
+    if request.method=='POST' and not secrets.compare_digest(request.headers.get('X-CSRF-Token',''),session.get('csrf','!')):return jsonify(error='Sessão inválida.'),403
 @app.after_request
 def security(r):
-    r.headers['Cache-Control']='no-store';r.headers['X-Content-Type-Options']='nosniff';r.headers['X-Frame-Options']='DENY';r.headers['Referrer-Policy']='no-referrer'
-    r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
-    return r
-
+    r.headers.update({'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; form-action 'self'"});return r
 @app.get('/')
-def home():return render_template('index.html')
+def home():return send_from_directory(ROOT,'index.html')
 @app.get('/health')
-def health():return jsonify(status='ok')
-@app.post('/api/access')
-def access():
-    data=request.get_json(silent=True) or {}
-    if not secrets.compare_digest(str(data.get('key','')),ACCESS):return jsonify(error='Chave inválida.'),401
-    session.clear();session['owner']=True;session['csrf']=secrets.token_hex(24)
-    return jsonify(csrf=session['csrf'])
-@app.get('/api/state')
-def status():
-    with lock:return jsonify(**state,management=management(),comparison=comparison(),server_now=time.time(),csrf=session['csrf'])
+def health():return jsonify(status='ok',mode='READ_ONLY',orders_enabled=False)
 @app.post('/api/connect')
 def connect():
-    global client
-    data=request.get_json() or {}
-    with lock:
-        if state['running']:return jsonify(error='Pare o robô antes de reconectar.'),409
-        if state['uncertain'] and data.get('reviewed') is not True:return jsonify(error='Confira as ordens na corretora e marque a revisão antes de reconectar.'),409
-        if client:client.close()
-        state['connected']=False
-        if not data.get('email') or not data.get('password'):return jsonify(error='Informe email e senha dentro do app.'),400
-        try:
-            client=Client();r=client.call('connect',timeout=55,email=data['email'],password=data['password'])
-            client.call('candles',asset=state['config']['asset'])
-            state.update(connected=True,balance=r['balance'],currency=r['currency'],assets=r['assets'],uncertain=False)
-            log('Conexão e leitura de velas verificadas na conta PRACTICE.');return jsonify(ok=True)
-        except Exception as e:
-            client.close();log(str(e));return jsonify(error=str(e)),502
-@app.post('/api/config')
-def config():
-    with lock:
-        if state['running']:return jsonify(error='Pare o robô para editar.'),409
-        try:state['config']=validate_config(request.get_json());return jsonify(ok=True)
-        except Exception as e:return jsonify(error=str(e)),400
+    if request.headers.get('Origin') and request.headers['Origin']!=request.host_url.rstrip('/'):return jsonify(error='Origem inválida'),403
+    ip=request.remote_addr;now=time.time();attempts[ip]=[x for x in attempts.get(ip,[]) if now-x<300]
+    if len(attempts[ip])>=5:return jsonify(error='Aguarde cinco minutos antes de tentar novamente.'),429
+    attempts[ip].append(now)
+    if not connect_lock.acquire(blocking=False):return jsonify(error='Uma conexão está em andamento. Aguarde.'),409
+    cl=None
+    try:
+        data=request.get_json(silent=True) or {};email=str(data.get('email','')).strip().lower();password=data.get('password','')
+        if not email or not isinstance(password,str) or not password:return jsonify(error='Informe email e senha da Bullex.'),400
+        owner=hmac.new(app.secret_key.encode(),email.encode(),hashlib.sha256).hexdigest()
+        if len(contexts)>=2 and owner not in contexts:return jsonify(error='Capacidade de sessões atingida.'),429
+        old=contexts.get(owner)
+        cl=Client();r=cl.call('connect',email=email,password=password)
+        if r.get('mode')!='PRACTICE':raise RuntimeError('Não foi possível confirmar a conta demo.')
+        if old and old.get('running'):
+            cl.close();session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])
+        # Save credentials only inside broker worker memory; never in database or cookies.
+        stored=db('read',owner).get('payload') or {}
+        if old:old['client'].close()
+        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
+        contexts[owner]=c;session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])
+    except Exception as e:
+        if cl:cl.close()
+        return jsonify(error=str(e) if isinstance(e,RuntimeError) else 'Conexão ou armazenamento indisponível. Tente novamente.'),502
+    finally:connect_lock.release()
+@app.get('/api/state')
+def state():
+    c=contexts.get(session['owner'])
+    if not c:return jsonify(error='Servidor reiniciado. Reconecte à Bullex para restaurar o histórico.'),401
+    with c['lock']:
+        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / SOMENTE LEITURA')
 @app.post('/api/start')
 def start():
-    global bot
-    with lock:
-        if state['running']:return jsonify(ok=True)
-        if bot and bot.is_alive():return jsonify(error='Aguarde o encerramento da operação anterior.'),409
-        if not state['connected'] or state['uncertain']:return jsonify(error='Conecte e valide a demo primeiro.'),409
-        c=dict(state['config'])
-        if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
-        if not limits(c):return jsonify(error='Limites do dia atingidos.'),409
-        stop.clear();state['running']=True;bot=threading.Thread(target=loop,args=(c,),daemon=True);bot.start()
-        return jsonify(ok=True)
+    c=contexts.get(session['owner'])
+    if not c or not c['connected']:return jsonify(error='Reconecte à corretora.'),409
+    with c['lock']:
+        if c['running']:return jsonify(ok=True)
+        if c.get('thread') and c['thread'].is_alive():return jsonify(error='Aguarde a parada concluir.'),409
+        c['stop'].clear();c['running']=True;c['thread']=threading.Thread(target=loop,args=(c,),daemon=True);c['thread'].start()
+    return jsonify(ok=True)
 @app.post('/api/stop')
-def halt():
-    with lock:stop.set();log('Parada solicitada. Uma ordem já enviada será acompanhada até o resultado.')
+def stop():
+    c=contexts.get(session['owner'])
+    if c:c['stop'].set()
     return jsonify(ok=True)
 @app.post('/api/logout')
 def logout():
-    global client
-    with lock:
-        if state['running'] or state['uncertain']:return jsonify(error='Pare e aguarde ou revise a operação antes de sair.'),409
-        if client:client.close()
-        state['connected']=False;session.clear()
-    return jsonify(ok=True)
-if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
+    c=contexts.get(session['owner'])
+    if c:
+        c['stop'].set()
+        if c.get('thread'):c['thread'].join(timeout=65)
+        if c.get('thread') and c['thread'].is_alive():return jsonify(error='Parada em andamento. Aguarde.'),409
+        save(c);c['client'].close();contexts.pop(session['owner'],None)
+    session.clear();return jsonify(ok=True)

@@ -30,3 +30,4 @@ tree=Patch().visit(tree);ast.fix_missing_locations(tree);p.write_text(ast.unpars
 p=ROOT/'vendor/bullexapi/stable_api.py';tree=Patch().visit(ast.parse(p.read_text()));ast.fix_missing_locations(tree);p.write_text(ast.unparse(tree))
 assert 'CERT_NONE' not in (ROOT/'vendor/bullexapi/api.py').read_text()
 print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout.')
+
