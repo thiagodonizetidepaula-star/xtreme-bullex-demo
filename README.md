@@ -25,3 +25,5 @@ Current selection rule: observed wins/completed observations >=60%, no minimum o
 
 
 Latest user test setting supersedes earlier thresholds: observed accuracy >=50%, exact integer comparison, no minimum result count. Continuously reevaluate idle selection; pending quotes excluded, ties included. PRACTICE-only execution guards unchanged.
+
+Storage outages now pause/retry rather than terminating after confirmed outcomes. Pre-send failure skips that signal, never replays it; confirmed outcomes must save before new orders. Explicit limit stop reasons and prominent retained-history WIN/LOSS/EMPATE/net-profit scoreboard. Regression tests cover consecutive WIN/LOSS and save outage recovery.

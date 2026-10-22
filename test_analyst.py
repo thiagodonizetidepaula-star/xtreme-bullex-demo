@@ -90,7 +90,7 @@ class ExecutorTests(unittest.TestCase):
         c['exec_stop'].clear();c['exec_running']=True;c['exec_used']=0;c['exec_client'].calls=[]
         # A new run with unavailable durable storage must not reach the broker.
         c['exec_trades']=[]
-        with patch('execution.time.time',return_value=120.5):execution.loop(c,lambda c:False)
+        with patch('execution.time.time',return_value=120.5), patch.object(c['exec_stop'],'wait',side_effect=lambda *_:c['exec_stop'].set()):execution.loop(c,lambda c:False)
         self.assertEqual(c['exec_client'].calls,[]);self.assertEqual(c['exec_trades'][0]['status'],'IGNORADA')
     def test_empty_selection_waits_without_sending_orders(self):
         import execution,threading
@@ -140,6 +140,47 @@ class ExecutorTests(unittest.TestCase):
         fake.broker_now=lambda:123.5;dispatch.__globals__['prepared_balance_at']=0
         with patch('time.time',return_value=123.5):result=dispatch(command)
         self.assertFalse(result['sent']);self.assertEqual(len(sent),1)
+
+    def test_confirmed_result_save_retries_without_resending(self):
+        import execution,threading
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[{'id':'e','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'},{'key':'wick','h':3,'result':'Acerto','payout':80}]}
+        execution.init_execution(c,{})
+        class Broker:
+            calls=[]
+            def call(self,op,**kw):
+                self.calls.append(op)
+                return {'sent':True,'id':1,'payout':85,'expiration':300} if op=='demo_order' else {'status':'LOSS','profit':-2}
+        c.update(exec_client=Broker(),exec_selected=[('wick',3)],exec_started=120,exec_running=True)
+        attempts=[]
+        def save(c):
+            attempts.append(1)
+            if len(attempts)==1:return False
+            c['exec_stop'].set();return True
+        with patch('execution.time.time',return_value=120.5),patch.object(c['exec_stop'],'wait',return_value=False):execution.loop(c,save,lambda *_:True)
+        self.assertGreaterEqual(len(attempts),2);self.assertEqual(c['exec_client'].calls,['demo_order','demo_result']);self.assertEqual(execution.scoreboard(c['exec_trades']),{'wins':0,'losses':1,'ties':0,'profit':-2,'settled':1})
+    def test_loop_continues_from_win_to_loss(self):
+        import execution,threading
+        clock=[120.5]
+        def event(t):return {'id':str(t),'asset':'TEST','t':t,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'}
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[event(60),{'key':'wick','h':3,'result':'Acerto','payout':80}]}
+        execution.init_execution(c,{})
+        class Broker:
+            calls=[]
+            count=0
+            def call(self,op,**kw):
+                self.calls.append(op)
+                if op=='demo_order':self.count+=1;return {'sent':True,'id':self.count,'payout':85,'expiration':300}
+                if self.count==1:
+                    clock[0]=360.5;c['events'].append(event(300));return {'status':'WIN','profit':1.7}
+                c['exec_stop'].set();return {'status':'LOSS','profit':-2}
+        c.update(exec_client=Broker(),exec_selected=[('wick',3)],exec_started=120,exec_running=True)
+        with patch('execution.time.time',side_effect=lambda:clock[0]):execution.loop(c,lambda _:True,lambda *_:True)
+        self.assertEqual(c['exec_client'].calls,['demo_order','demo_result']*2)
+        self.assertEqual([t['status'] for t in c['exec_trades']],['WIN','LOSS']);self.assertEqual(c['exec_used'],2)
+    def test_scoreboard_excludes_pending_and_ignored(self):
+        import execution
+        trades=[{'status':s,'profit':p} for s,p in [('WIN',1.7),('LOSS',-2),('EMPATE',0),('ABERTA',100),('IGNORADA',100)]]
+        self.assertEqual(execution.scoreboard(trades),{'wins':1,'losses':1,'ties':1,'profit':-.3,'settled':3})
 
     def test_config_rejects_nonfinite_and_excess_stake(self):
         import execution

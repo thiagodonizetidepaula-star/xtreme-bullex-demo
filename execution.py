@@ -25,8 +25,12 @@ def eligible(events):
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
     return chosen
 
+def scoreboard(trades):
+    done=[t for t in trades if t.get('status') in ('WIN','LOSS','EMPATE')]
+    return {'wins':sum(t['status']=='WIN' for t in done),'losses':sum(t['status']=='LOSS' for t in done),'ties':sum(t['status']=='EMPATE' for t in done),'profit':round(sum(t.get('profit',0) for t in done),2),'settled':len(done)}
+
 def snapshot(c):
-    return {'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
+    return {'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
@@ -43,7 +47,9 @@ def loop(c,save,checkpoint=None):
             with c['lock']:
                 cfg=dict(c['exec_config'])
                 if not c['running'] or not c['connected']:c['exec_message']='Analisador parado/desconectado; executor pausado.';break
-                if c['exec_used']>=cfg['limit'] or c['exec_profit']-cfg['stake'] < -cfg['stop_loss'] or c['exec_profit']>=cfg['stop_win']:c['exec_message']='Limite desta execução atingido.';break
+                if c['exec_used']>=cfg['limit']:c['exec_message']='Máximo de ordens atingido. Ajuste o limite e inicie uma nova execução.';break
+                if c['exec_profit']-cfg['stake'] < -cfg['stop_loss']:c['exec_message']='Stop loss atingido: saldo insuficiente no limite para a próxima entrada.';break
+                if c['exec_profit']>=cfg['stop_win']:c['exec_message']='Stop win atingido. Inicie uma nova execução para continuar o teste.';break
                 selected=eligible(c['events'])
                 if selected!=c['exec_selected']:
                     if not c['exec_selected'] and selected:c['exec_started']=time.time()
@@ -61,8 +67,10 @@ def loop(c,save,checkpoint=None):
             if current is None:c['exec_stop'].wait(.25 if c['exec_selected'] else 2);continue
             # Durable pre-send record: on ambiguity never retry automatically.
             if not checkpoint(c,current):
-                with c['lock']:current['status']='IGNORADA';c['exec_message']='Armazenamento indisponível; nenhuma ordem enviada.'
-                break
+                with c['lock']:current.update(status='IGNORADA',reason='Armazenamento indisponível antes do envio');c['exec_message']='Aguardando armazenamento. Nenhuma ordem enviada; nova tentativa em 5 segundos.'
+                c['exec_stop'].wait(5)
+                current=None
+                continue
             with c['send_lock']:
                 if c['exec_stop'].is_set() or c['stop'].is_set():
                     with c['lock']:current['status']='IGNORADA'
@@ -75,7 +83,10 @@ def loop(c,save,checkpoint=None):
             checkpoint(c,current)
             result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'])
             with c['lock']:current.update(status=result['status'],profit=result['profit'],finished_at=time.time());c['exec_profit']+=result['profit'];c['exec_message']='Resultado confirmado pela corretora: '+result['status']
-            if not save(c):break
+            while not save(c):
+                with c['lock']:c['exec_message']='Resultado '+result['status']+' confirmado. Aguardando salvar para retomar a busca; nenhuma nova ordem será enviada.'
+                if c['exec_stop'].wait(5):return
+            with c['lock']:c['exec_message']='Resultado '+result['status']+' salvo. Procurando a próxima entrada.'
             current=None
     except Exception:
         with c['lock']:
