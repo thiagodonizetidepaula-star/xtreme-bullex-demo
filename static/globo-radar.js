@@ -2,23 +2,13 @@
 (()=>{
 "use strict";
 const $=id=>document.getElementById(id);
-const scene=`<section class=\"scanner-floor\" id=\"scanner\" data-mode=\"idle\" aria-label=\"Globo radar com cinco sondas de mercado\">\n<div class=\"scanner-header\"><h2>MERCADO EM TEMPO REAL · RADAR GLOBAL</h2><span class=\"scanner-state\" id=\"radarState\">AGUARDANDO CONEXÃO DEMO</span></div>\n<div class=\"scanner-scene\">\n<div class=\"scanner-grid\" aria-hidden=\"true\"></div><div class=\"radar-pole\" aria-hidden=\"true\"></div><div class=\"radar-ground\" aria-hidden=\"true\"></div>\n<div class=\"radar-ring r1\" aria-hidden=\"true\"></div><div class=\"radar-ring r2\" aria-hidden=\"true\"></div><div class=\"radar-ring r3\" aria-hidden=\"true\"></div>\n<div class=\"globe-wrap\"><img class=\"globe-image\" src=\"/static/globo-radar.svg\" alt=\"Globo dourado digital girando e rastreando o mercado\" draggable=\"false\"></div>\n<div class=\"radar-orbit o1\" id=\"orbit0\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o2\" id=\"orbit1\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o3\" id=\"orbit2\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o4\" id=\"orbit3\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o5\" id=\"orbit4\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o6\" id=\"orbit5\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<svg class=\"radar-eye\" viewBox=\"0 0 200 120\" aria-hidden=\"true\"><path d=\"M9 60 Q100 -16 191 60 Q100 136 9 60 Z\"/><circle cx=\"100\" cy=\"60\" r=\"33\"/><circle class=\"pupil\" cx=\"100\" cy=\"60\" r=\"15\"/><path d=\"M100 8 V25 M100 95 V112 M25 60 H42 M158 60 H175\" opacity=\".68\"/></svg>\n<div class=\"scanner-hud hud-left\"><strong>PARES M1 ABERTOS</strong><div class=\"value\" id=\"radarPairs\">—</div><div class=\"tiny\" id=\"radarPayout\">Aguardando catálogo</div></div>\n<div class=\"scanner-hud hud-right\"><strong>CANDLES DISPONÍVEIS</strong><div class=\"value\" id=\"radarStream\">—</div><div class=\"tiny\" id=\"radarAsset\">Nenhum ativo selecionado</div></div>\n<div class=\"scanner-banner\" role=\"status\" aria-live=\"polite\"><span class=\"banner-main\" id=\"radarMessage\">RADAR EM ESPERA</span><span class=\"banner-sub\" id=\"radarDetail\">Seis filtros internos aguardam dados da conta DEMO.</span></div>\n<div id=\"tradeCountdown\" class=\"trade-countdown\" hidden aria-label=\"Contador da operação demo\"><div class=\"countdown-title\">TEMPO PARA FINALIZAR</div><div id=\"tradeClock\" class=\"countdown-clock\">01:00</div><div id=\"tradeClockDetail\" class=\"countdown-sub\">Operação PRACTICE em andamento</div></div>\n<div id=\"resultFx\" class=\"result-fx\" role=\"status\" aria-live=\"polite\" hidden><div id=\"resultFxParticles\" class=\"confetti-wrap\" aria-hidden=\"true\"></div><div class=\"result-symbol\" id=\"resultSymbol\" aria-hidden=\"true\"></div><div id=\"resultLabel\" class=\"result-label\"></div></div>\n</div>\n<div class=\"radar-positions\" id=\"radarPositions\" aria-label=\"Três operações DEMO\">
- <div class=\"radar-positions-heading\" id=\"radarPositionsHeading\">OPERAÇÕES XTREME · 0/3</div>
- <div id=\"radarPositionsList\" class=\"radar-positions-list\">Aguardando sinais Xtreme confirmados.</div>
-</div>\n<div class=\"scanner-controls\" aria-label=\"Controles principais do robô\">\n <div class=\"scanner-control-fields\">\n   <label for=\"quickStake\">Valor de entrada\n     <input id=\"quickStake\" type=\"number\" min=\"0.01\" step=\"0.01\" inputmode=\"decimal\" value=\"2\" autocomplete=\"off\" aria-describedby=\"quickFeedback\">\n   </label>\n   <label for=\"quickExpiry\">Tempo de expiração\n     <select id=\"quickExpiry\" title=\"Análise M1, escolha duração da ordem PRACTICE\">
-       <option value=\"60\">1 minuto</option>
-       <option value=\"120\">2 minutos</option>
-       <option value=\"180\">3 minutos</option>
-       <option value=\"300\">5 minutos</option>
-     </select>\n   </label>\n </div>\n <div class=\"scanner-control-actions\">\n   <button type=\"button\" id=\"quickSave\" class=\"scanner-button save\">Salvar</button>\n   <button type=\"button\" id=\"quickStart\" class=\"scanner-button start\" disabled>▶ Iniciar bot</button>\n   <button type=\"button\" id=\"quickStop\" class=\"scanner-button stop\" hidden>■ Parar bot</button>\n </div>\n <p class=\"scanner-control-help\">Gráfico e sinal em M1 · vencimento selecionável de 1 a 5 minutos. Somente PRACTICE.</p>\n <p id=\"quickFeedback\" class=\"scanner-feedback\" role=\"status\" aria-live=\"polite\">Configure o valor e clique em Salvar.</p>\n</div></section>`;
+const scene="<section class=\"scanner-floor\" id=\"scanner\" data-mode=\"idle\" aria-label=\"Globo radar com cinco sondas de mercado\">\n<div class=\"scanner-header\"><h2>MERCADO EM TEMPO REAL · RADAR GLOBAL</h2><span class=\"scanner-state\" id=\"radarState\">AGUARDANDO CONEXÃO DEMO</span></div>\n<div class=\"scanner-scene\">\n<div class=\"scanner-grid\" aria-hidden=\"true\"></div><div class=\"radar-pole\" aria-hidden=\"true\"></div><div class=\"radar-ground\" aria-hidden=\"true\"></div>\n<div class=\"radar-ring r1\" aria-hidden=\"true\"></div><div class=\"radar-ring r2\" aria-hidden=\"true\"></div><div class=\"radar-ring r3\" aria-hidden=\"true\"></div>\n<div class=\"globe-wrap\"><img class=\"globe-image\" src=\"/static/globo-radar.svg\" alt=\"Globo dourado digital girando e rastreando o mercado\" draggable=\"false\"></div>\n<div class=\"radar-orbit o1\" id=\"orbit0\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o2\" id=\"orbit1\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o3\" id=\"orbit2\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o4\" id=\"orbit3\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o5\" id=\"orbit4\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<div class=\"radar-orbit o6\" id=\"orbit5\" aria-hidden=\"true\"><span class=\"probe-route\"><span class=\"probe\"></span></span></div>\n<svg class=\"radar-eye\" viewBox=\"0 0 200 120\" aria-hidden=\"true\"><path d=\"M9 60 Q100 -16 191 60 Q100 136 9 60 Z\"/><circle cx=\"100\" cy=\"60\" r=\"33\"/><circle class=\"pupil\" cx=\"100\" cy=\"60\" r=\"15\"/><path d=\"M100 8 V25 M100 95 V112 M25 60 H42 M158 60 H175\" opacity=\".68\"/></svg>\n<div class=\"scanner-hud hud-left\"><strong>PARES M1 ABERTOS</strong><div class=\"value\" id=\"radarPairs\">—</div><div class=\"tiny\" id=\"radarPayout\">Aguardando catálogo</div></div>\n<div class=\"scanner-hud hud-right\"><strong>CANDLES DISPONÍVEIS</strong><div class=\"value\" id=\"radarStream\">—</div><div class=\"tiny\" id=\"radarAsset\">Nenhum ativo selecionado</div></div>\n<div class=\"scanner-banner\" role=\"status\" aria-live=\"polite\"><span class=\"banner-main\" id=\"radarMessage\">RADAR EM ESPERA</span><span class=\"banner-sub\" id=\"radarDetail\">Seis filtros internos aguardam dados da conta DEMO.</span></div>\n<div id=\"tradeCountdown\" class=\"trade-countdown\" hidden aria-label=\"Contador da operação demo\"><div class=\"countdown-title\">TEMPO PARA FINALIZAR</div><div id=\"tradeClock\" class=\"countdown-clock\">01:00</div><div id=\"tradeClockDetail\" class=\"countdown-sub\">Operação PRACTICE em andamento</div></div>\n<div id=\"resultFx\" class=\"result-fx\" role=\"status\" aria-live=\"polite\" hidden><div id=\"resultFxParticles\" class=\"confetti-wrap\" aria-hidden=\"true\"></div><div class=\"result-symbol\" id=\"resultSymbol\" aria-hidden=\"true\"></div><div id=\"resultLabel\" class=\"result-label\"></div></div>\n</div>\n<div class=\"scanner-controls\" aria-label=\"Controles principais do robô\">\n <div class=\"scanner-control-fields\">\n   <label for=\"quickStake\">Valor de entrada\n     <input id=\"quickStake\" type=\"number\" min=\"0.01\" step=\"0.01\" inputmode=\"decimal\" value=\"2\" autocomplete=\"off\" aria-describedby=\"quickFeedback\">\n   </label>\n   <label for=\"quickExpiry\">Tempo de expiração\n     <select id=\"quickExpiry\" title=\"Expiração fixa: próxima vela M1\">\n       <option value=\"60\">1 minuto · M1</option>\n     </select>\n   </label>\n </div>\n <div class=\"scanner-control-actions\">\n   <button type=\"button\" id=\"quickSave\" class=\"scanner-button save\">Salvar</button>\n   <button type=\"button\" id=\"quickStart\" class=\"scanner-button start\" disabled>▶ Iniciar bot</button>\n   <button type=\"button\" id=\"quickStop\" class=\"scanner-button stop\" hidden>■ Parar bot</button>\n </div>\n <p class=\"scanner-control-help\">Expiração M1 fixa: cerca de 1 minuto. Operações somente na PRACTICE.</p>\n <p id=\"quickFeedback\" class=\"scanner-feedback\" role=\"status\" aria-live=\"polite\">Configure o valor e clique em Salvar.</p>\n</div></section>";
 function setup(){
  const mount=$("radarMount");
  if(!mount||$("scanner"))return;
  mount.innerHTML=scene;
  const quickStake=$("quickStake");
- const quickExpiry=$("quickExpiry");
  quickStake.addEventListener("input",()=>{quickStake.dataset.edited="true";});
- quickExpiry.addEventListener("change",()=>{quickExpiry.dataset.edited="true";});
  function forward(id){
    const stake=Number(quickStake.value);
    const note=$("quickFeedback");
@@ -26,21 +16,14 @@ function setup(){
      note.textContent="Informe um valor de entrada válido.";
      note.classList.add("error");return;
    }
-   const mins=Number($("quickExpiry").value)/60;
-   if(id!=="stop"&&![1,2,3,5].includes(mins)){
-     note.textContent="Escolha 1, 2, 3 ou 5 minutos para expiração.";
-     note.classList.add("error");return;
-   }
-   if(id==="start" && Number(confirmedExpiry)!==mins){
-     note.textContent="Você mudou a expiração. Clique Salvar antes de iniciar o bot.";
+   if(id!=="stop"&&$("quickExpiry").value!=="60"){
+     note.textContent="Somente expiração M1 é suportada na conta demo.";
      note.classList.add("error");return;
    }
    if(id!=="stop"){
      const original=$("stake");
      if(!original)return;
      original.value=String(stake);
-     const settingsExpiry=$("expiryMinutes");
-     if(settingsExpiry)settingsExpiry.value=String(mins);
    }
    const src=$(id);
    if(!src||src.disabled)return;
@@ -54,7 +37,7 @@ function setup(){
  $("quickStop").addEventListener("click",()=>forward("stop"));
 }
 
-let hasInitialOutcome=false,lastFinishedKey="",animationTimer=null,clockExpiry=null,confirmedExpiry=1;
+let hasInitialOutcome=false,lastFinishedKey="",animationTimer=null,clockExpiry=null;
 let serverBase=0,localClockBase=0;
 const resultKey=t=>String(t.id||t.time||"")+":"+String(t.status||"")+":"+String(t.result_time||t.candle||"");
 function showResult(t){
@@ -92,11 +75,6 @@ function updateTradeCountdown(){
  const mm=String(Math.floor(seconds/60)).padStart(2,"0"),ss=String(seconds%60).padStart(2,"0");
  $("tradeClock").textContent=mm+":"+ss;
  $("tradeClockDetail").textContent=seconds>0?"Aguardando vencimento da operação DEMO":"Tempo encerrado · aguardando confirmação";
- document.querySelectorAll("[data-radar-expiry]").forEach(el=>{
-   const exp=Number(el.getAttribute("data-radar-expiry"));
-   const remaining=Math.max(0,Math.ceil(exp-clockNow));
-   el.textContent=Math.floor(remaining/60)+":"+String(remaining%60).padStart(2,"0");
- });
 }
 setInterval(updateTradeCountdown,250);
 window.updateGlobeRadar=function(s){
@@ -120,16 +98,6 @@ window.updateGlobeRadar=function(s){
  const expires=Number(open&&open.expiration);
  clockExpiry=(open&&open.status==="ABERTA"&&Number.isFinite(expires)&&expires>0)?expires:null;
  updateTradeCountdown();
- const positions=Array.isArray(s.open_trades)?s.open_trades:[];
- $("radarPositionsHeading").textContent="OPERAÇÕES XTREME · "+positions.length+"/"+String(s.config&&s.config.max_open_trades||1);
- $("radarPositionsList").innerHTML=positions.length?positions.map(t=>{
-   const remain=Math.max(0,Math.ceil(Number(t.expiration||0)-now));
-   const safeName=String(t.asset||"").replace(/[<>&"'\u0000-\u001f]/g,"");
-   const side=String(t.direction||"").toUpperCase().replace(/[<>&"'\u0000-\u001f]/g,"");
-   return '<div class="radar-open-item"><b>'+safeName+' · '+side+'</b>'+
-     '<span data-radar-expiry="'+Number(t.expiration||0)+'">'+
-     Math.floor(remain/60)+':'+String(remain%60).padStart(2,"0")+'</span></div>';
- }).join(""):'<span class="radar-no-positions">Aguardando sinal Xtreme confirmado.</span>';
  const detected=(s.running&&recent)?last:null;
  const side=open?open.direction:detected?detected.side:null;
  const mode=side==="call"?"call":side==="put"?"put":s.running&&s.connected?"scan":"idle";
@@ -137,9 +105,6 @@ window.updateGlobeRadar=function(s){
  $("radarPairs").textContent=Array.isArray(s.scan_assets)?String(s.scan_assets.length):"—";
  $("radarStream").textContent=Number.isFinite(s.stream_ready)&&Number.isFinite(s.stream_total)?s.stream_ready+"/"+s.stream_total:"—";
  $("radarPayout").textContent="Payout mínimo: "+(s.config?s.config.payout:"—")+"%";
- confirmedExpiry=Number(s.config&&s.config.expiry_minutes)||1;
- const e=$("quickExpiry");
- if(e&&e.dataset.edited!=="true")e.value=String(confirmedExpiry*60);
  $("radarAsset").textContent=String(open?open.asset:detected?detected.asset:(s.analysis_asset||(s.config&&s.config.asset)||"—"));
  let status="",message="",detail="";
  if(s.uncertain&&!(open&&open.status==="ABERTA")){
@@ -158,16 +123,11 @@ window.updateGlobeRadar=function(s){
   message=side==="call"?"COMPRA · CALL":"VENDA · PUT";
   detail="Sinal em "+detected.asset+"; envio sujeito às validações da DEMO.";
  } else if(s.running&&s.connected){
-  if(s.run_state==="retrying_feed"){
-    status="RECUPERANDO FEED DEMO";message="AGUARDANDO DADOS DA BULLEX";
-    detail="Tentativa "+String(s.feed_retry_count||1)+" · scanner permanece ligado; nenhuma ordem com informação vencida.";
-  }else{
-    status="BUSCANDO OPORTUNIDADES";message="PROCURANDO OPORTUNIDADE";
-    detail=s.config&&s.config.strategy==="mesa"?"Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.":"Xtreme Tendência ATR 18 × 2 · aguardando a próxima seta Sniper alinhada no fechamento M1.";
-  }
+  status="BUSCANDO OPORTUNIDADES";message="PROCURANDO OPORTUNIDADE";
+  detail=s.config&&s.config.strategy==="mesa"?"Seis filtros de tendência · M1/M5 · mínimo 5/6 confirmações.":"Xtreme Tendência ATR 18 × 2 · aguardando a próxima seta Sniper alinhada no fechamento M1.";
  } else if(s.connected){
-  status="DEMO CONECTADA · PARADO";message="RADAR PRONTO";
-  detail=s.last_stop_reason||"Clique Iniciar robô DEMO para procurar oportunidades.";
+  status="DEMO CONECTADA · PAUSADO";message="RADAR PRONTO";
+  detail="Clique Iniciar robô DEMO para procurar oportunidades.";
  } else {
   status="DEMO DESCONECTADA";message="RADAR EM ESPERA";
   detail="Conecte a PRACTICE. Não são gerados sinais aleatórios.";
@@ -187,24 +147,7 @@ window.updateGlobeRadar=function(s){
    if(Number.isFinite(Number(current)))quick.value=String(current);
  }
  $("quickSave").disabled=!!s.running;
- if($("quickExpiry"))$("quickExpiry").disabled=!!s.running;
- // Compartilhe o motivo real do bloqueio com o botão principal do painel.
- // Não acenda o atalho quando a API recusaria a partida (histórico/limites).
- const originalStart=$("start");
- $("quickStart").disabled=originalStart?originalStart.disabled:
-   !s.connected||!!s.running||!!s.uncertain||!s.history_ready||(s.management&&s.management.can_trade===false);
- $("quickStart").title=originalStart?originalStart.title:"Conecte à PRACTICE e valide os limites";
- const reason=window.getDemoStartBlockReason?window.getDemoStartBlockReason(s):"";
- const quickMessage=$("quickFeedback");
- if(quickMessage&&!s.running&&!s.connected){
-   quickMessage.textContent="Conecte a conta PRACTICE em Configurações para ativar o radar.";
- }else if(quickMessage&&!s.running){
-   quickMessage.textContent=reason||s.last_stop_reason||"Radar pronto. Clique Iniciar para buscar sinais.";
- }else if(quickMessage&&s.run_state==="retrying_feed"){
-   quickMessage.textContent="Aguardando recuperação do feed · tentativa "+String(s.feed_retry_count||1)+". Sem novas ordens durante falhas.";
- }else if(quickMessage&&s.running){
-   quickMessage.textContent="Scanner ativo · analisando candles M1 e procurando sinais válidos.";
- }
+ $("quickStart").disabled=!s.connected||!!s.running||!!s.uncertain||(s.management&&s.management.can_trade===false);
  $("quickStop").hidden=!s.running;
  $("quickStop").disabled=!s.running;
  $("quickStart").hidden=!!s.running;

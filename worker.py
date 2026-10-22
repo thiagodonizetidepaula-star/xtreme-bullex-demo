@@ -3,7 +3,6 @@ sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
 from mesa_chart import WATCH_FILE,LIVE_FILE,valid_bar
-from mesa_market_capture import capture_snapshot,capture_payout,CAPTURE_STATS
 # A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
 # Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
 from bullexapi.ws.objects.timesync import TimeSync
@@ -31,50 +30,10 @@ def broker_now():
     return max(now,time.time())
 
 api=None
-market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None;_capture_slot=None
+market_cache={};market_at=0;market_requested_at=0;market_duration=0;preflight_minute=None
 stream_assets=set();stream_retry={};stream_seed_at=0
-# Keep expensive research spool serialization away from the first two
-# seconds after a candle closes. All closed bars stay in the streaming buffer.
-_capture_slot=None
-
-def capture_due(now, last_slot):
-    """Collect research samples off the M1 trading critical path.
-
-    Every 10 seconds, only between seconds 4 and 45 of the broker minute.
-    This keeps recording M1/M5 throughout the day, including when not trading,
-    without synchronously serializing 80+ pairs during the entry window.
-    """
-    second=float(now)%60
-    slot=int(float(now)//10)
-    return 4 <= second < 46 and slot != last_slot
 balance_cache=None;balance_at=0
 live_monitor_started=False
-# Confirmed PRACTICE orders are settled asynchronously, so the main IPC loop
-# keeps answering market/snapshot/order while 1-3 options are open.
-settlement_lock=threading.RLock()
-settlement_pending={}
-settlement_finished={}
-
-def track_confirmed_order(order_id,expiry,stake):
-    key=str(order_id)
-    def settle():
-        try:
-            result,profit=api.check_win_v4(order_id)
-            amount=float(profit)
-            if not math.isfinite(amount):
-                raise RuntimeError('Resultado não numérico fornecido pela corretora.')
-            payload={'id':key,'profit':amount,'result':result,'status':'settled'}
-        except Exception as exc:
-            payload={'id':key,'status':'uncertain',
-                     'reason':'Não foi possível confirmar resultado da ordem: '+str(exc)[:150]}
-        with settlement_lock:
-            settlement_pending.pop(key,None)
-            settlement_finished[key]=payload
-    with settlement_lock:
-        if key in settlement_pending or key in settlement_finished:
-            raise RuntimeError('Ordem repetida na fila de acompanhamento.')
-        settlement_pending[key]={'id':key,'expiration':expiry,'stake':stake}
-    threading.Thread(target=settle,name='demo_result_'+key[:15],daemon=True).start()
 
 def _live_chart_publisher():
     """Purely visual: snapshots the already-subscribed current candle once a second.
@@ -146,29 +105,10 @@ def market(force=False):
         fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
     market_cache=fresh;market_at=received_at
-    capture_payout(fresh,received_at)
     return fresh
 
-def closed_m1_at_boundary(snapshot,current):
-    """Return only broker-received closed M1 candles; reject a stale stream.
-
-    A fresh M1 opening tick is not required, but the last observed closed
-    candle must end EXACTLY on this minute boundary. Never fabricate data.
-    """
-    if not isinstance(snapshot,list):return []
-    closed=[]
-    for candle in snapshot:
-        try:
-            if not isinstance(candle,dict):continue
-            start=int(candle['from'])
-            if start%60==0 and start+60<=current:closed.append(dict(candle))
-        except (ValueError,KeyError,TypeError,OverflowError):
-            continue
-    if not closed or max(x['from'] for x in closed)!=current-60:return []
-    return closed
-
 def dispatch(c):
-    global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute,_capture_slot
+    global api,stream_seed_at,balance_cache,balance_at,market_cache,market_at,market_requested_at,market_duration,preflight_minute
     op=c['op']
     if op=='connect':
         stream_assets.clear();stream_retry.clear();stream_seed_at=0
@@ -187,12 +127,8 @@ def dispatch(c):
         return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
     if op=='market':
-        # Discovery is intentionally broader than trade approval. Scan ALL
-        # open turbo (including OTC) pairs; enforce configured payout again
-        # just before every live PRACTICE order.
         available=market(force=True)
-        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open']],
-                'open_count':sum(v['open'] for v in available.values())}
+        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else v['payout']>max(80,c['payout']))]}
     if op=='snapshot':
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.
@@ -200,7 +136,7 @@ def dispatch(c):
         # Uma preparação por virada M1, perto do fechamento (sem consulta
         # repetida que deixe a ordem vencer). Não busca catálogo dentro de 'order'.
         minute=int(now//60)
-        if 59<=now%60<60 and preflight_minute!=minute:
+        if 58<=now%60<60 and preflight_minute!=minute:
             preflight_minute=minute
             try:
                 market(force=True)
@@ -225,23 +161,16 @@ def dispatch(c):
                 api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
-        now=broker_now();items=[];observed_closed=[]
-        do_capture=capture_due(now,_capture_slot)
+        now=broker_now();items=[]
         for asset in wanted:
             if asset not in stream_assets:continue
-            # Copiar: o websocket atualiza em outra thread.
+            # Copiar: o receptor websocket atualiza o dicionário em outra thread.
             snapshot=list(api.api.real_time_candles[asset][60].copy().values())
             current=int(now//60)*60
-            closed=closed_m1_at_boundary(snapshot,current)
-            # The newest CLOSED candle is sufficient. Requiring a tick from
-            # the new (incomplete) candle misses Sniper crosses at rollover.
-            if do_capture and closed:observed_closed.append({'asset':asset,'candles':closed})
-            if not closed:continue
+            if not any(b.get('from')==current for b in snapshot):continue
+            closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
             items.append({'asset':asset,'candles':closed})
-        if do_capture:
-            _capture_slot=int(now//10)
-            capture_snapshot(observed_closed,now)
-        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors,'capture':dict(CAPTURE_STATS)}
+        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
     if op=='candles':
         now=broker_now()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
@@ -250,10 +179,6 @@ def dispatch(c):
         if not isinstance(bars,list): raise RuntimeError('Corretora não forneceu velas')
         return {'candles':bars,'now':now}
     if op=='order':
-        expiry=c.get('expiry_minutes',1)
-        if type(expiry) is not int or expiry not in (1,2,3,5):
-            return {'sent':False,'reason':'Expiração inválida. Permitidos 1, 2, 3 ou 5 minutos.'}
-        expiration=int(c['candle']+60*(expiry+1))
         started=broker_now()
         window=2 if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else 5
         if not 0<=started-c['candle']-60<=window:return {'sent':False,'reason':'Janela de entrada encerrada antes da validação.'}
@@ -290,27 +215,16 @@ def dispatch(c):
                     sent_at=current;send_catalog_age=time.time()-market_at
                 return original(payload,*args,**kwargs)
             ws.send=guarded_send
-            try:ok,order_id=api.buy_by_raw_expirations(c['stake'],c['asset'],c['direction'],'turbo',expiration)
+            try:ok,order_id=api.buy_by_raw_expirations(c['stake'],c['asset'],c['direction'],'turbo',int(c['candle']+120))
             finally:ws.send=original
         else:
-            ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],expiry)
+            ok,order_id=api.buy(c['stake'],c['asset'],c['direction'],1)
         if not ok or not isinstance(order_id,(str,int)) or isinstance(order_id,bool): raise RuntimeError('Confirmação da ordem incerta. Verifique o histórico na corretora; não repetir automaticamente.')
         balance_cache-=c['stake']
-        track_confirmed_order(order_id,expiration,float(c['stake']))
-        return {'sent':True,'id':order_id,'payout':payout,'expiration':expiration,'expiry_minutes':expiry,
+        return {'sent':True,'id':order_id,'payout':payout,'expiration':int(c['candle']+120),
                 'catalog_age':round(send_catalog_age,3),'catalog_latency':round(market_duration,3),
                 'send_delay':round((sent_at or broker_now())-c['candle']-60,3),
                 'sent_at':sent_at if c.get('strategy') in ('repetition','resumption','sniper','retest','mesa') else api.get_server_timestamp()}
-    if op=='results':
-        # Acknowledgment removes only results already durably saved in Supabase.
-        ack=c.get('ack',[])
-        if not isinstance(ack,list) or len(ack)>50:
-            raise ValueError('Confirmações de resultados inválidas.')
-        with settlement_lock:
-            for key in ack:
-                if isinstance(key,(int,str)):settlement_finished.pop(str(key),None)
-            return {'finished':list(settlement_finished.values()),
-                    'pending':list(settlement_pending.values())}
     if op=='result':
         result,profit=api.check_win_v4(c['id'])
         if not math.isfinite(float(profit)): raise RuntimeError('Resultado inválido')

@@ -13,7 +13,7 @@ class StreamingTests(unittest.TestCase):
     def test_batch_ignores_open_and_stale_assets(self):
         worker.stream_assets.update(['A','B']);self.api.api.real_time_candles['A'][60].update({5940:{'from':5940},6000:{'from':6000}})
         self.api.api.real_time_candles['B'][60][5940]={'from':5940}
-        r=self.snapshot();self.assertEqual(r['ready'],2);self.assertTrue(all(item['candles']==[{'from':5940}] for item in r['items']));self.api.get_candles.assert_not_called()
+        r=self.snapshot();self.assertEqual(r['ready'],1);self.assertEqual(r['items'][0]['candles'],[{'from':5940}]);self.api.get_candles.assert_not_called()
     def test_no_bootstrap_request_during_entry_window(self):
         self.assertEqual(self.snapshot()['items'],[]);self.api.get_candles.assert_not_called();self.api.api.subscribe.assert_not_called()
     def test_bootstrap_one_subscription_outside_entry_window(self):
@@ -23,7 +23,7 @@ class StreamingTests(unittest.TestCase):
         with patch.object(worker.time,'time',return_value=6020):
             with self.assertRaises(RuntimeError):worker.dispatch({'op':'snapshot','assets':['A']})
     def test_batch_prioritizes_later_asset_signal(self):
-        c={**app.state['config'],'pattern_only':False,'strategy':'resumption'};client=MagicMock();app.stop.clear()
+        c={**app.state['config'],'strategy':'resumption'};client=MagicMock();app.stop.clear()
         def rpc(op,**kwargs):
             if op=='market':return {'assets':[{'asset':'A','payout':85},{'asset':'B','payout':85}]}
             if op=='snapshot':return {'items':[{'asset':'A','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]},{'asset':'B','candles':[{'from':5940,'open':100,'max':101,'min':99,'close':100.5}]}],'now':6001,'ready':2,'total':2}

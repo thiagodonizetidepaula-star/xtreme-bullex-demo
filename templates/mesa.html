@@ -5,12 +5,6 @@
 <meta name="theme-color" content="#090f1f">
 <title>Mesa de Traders · Bullex DEMO</title>
 <style>
-.chart-on-home{margin:20px auto;max-width:1180px}
-.chart-on-home>.panel{padding:16px}
-.xtreme-filter-switch{padding:7px 0}
-.xtreme-filter-switch input{accent-color:#49daa3}
-.xtreme-rsi-status{font-size:13px;padding:8px 10px;background:#122340;border-radius:8px;border:1px solid #35577a;margin:8px 0;color:#e9d69a;font-weight:750}
-
 :root{color-scheme:dark;--bg:#090f1f;--panel:#121d31;--panel2:#172840;--line:#2b3a58;--fg:#eaf2ff;--muted:#93a6c5;--green:#40e0a5;--red:#ff7078;--yellow:#ffcf73;--blue:#6baaff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse 70% 30% at 45% 0%,#20375b 0%,transparent 88%),var(--bg);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;color:var(--fg);font-size:14px}
 header{padding:17px max(18px,calc((100% - 1420px)/2));display:flex;justify-content:space-between;align-items:center;gap:15px;border-bottom:1px solid var(--line);background:#090f1fde;flex-wrap:wrap;position:sticky;top:0;z-index:5;backdrop-filter:blur(12px)}
@@ -35,66 +29,16 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 @media(max-width:1120px){.desk{grid-template-columns:repeat(3,minmax(0,1fr))}.two{grid-template-columns:1fr 1fr}}@media(max-width:760px){.desk{grid-template-columns:repeat(2,minmax(0,1fr))}.two,.bottom{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.fields{grid-template-columns:repeat(2,minmax(0,1fr))}header{position:static}.stat .value{font-size:23px}}
 @media(max-width:420px){.desk{grid-template-columns:1fr 1fr;gap:8px}.agent{padding:9px}.avatar{height:99px}.station{height:150px}.agent-heading span{font-size:9px}.floor{padding:12px 9px}.fields{grid-template-columns:1fr 1fr}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-
-.connection-pill{border:1px solid #5b6d8b;padding:8px 10px;border-radius:10px;line-height:1.35;max-width:280px}
-.connection-pill.online{border-color:#2bc78e;background:#11443470;color:#95fbd1;font-weight:750}
-.connection-pill.pending{border-color:#d8a055;background:#53370d5b;color:#f8d99c}
-.bullex-connection-status{padding:12px 14px;margin:10px 0 12px;background:#0d192c;border:1px solid #536786;border-radius:12px;color:#baccdf;font-weight:650;line-height:1.5}
-.bullex-connection-status.online{border-color:#2cd994;background:#0d3025;color:#a2f8d6}
-.bullex-connection-status.warn{border-color:#d7a859;color:#ffe0ad;background:#322615}
-.start-guidance{padding:10px 13px;margin:13px 0 0;background:#121d32;border:1px solid #445472;border-radius:11px;color:#f1d49d;line-height:1.5}
-.start-guidance.ready{border-color:#31b68a;background:#0c3027;color:#a2f8d6}
-#start:not(:disabled),#quickStart:not(:disabled){box-shadow:0 0 14px #1be19b55}
-@media(max-width:760px){.connection-pill{max-width:none}.headside{width:100%;justify-content:space-between;flex-wrap:wrap}}
-.open-slots{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-top:12px}
-.open-slot{background:#0d192c;border:1px solid #375072;border-radius:12px;padding:12px}
-.open-slot b{font-size:1rem}.open-slot small{display:block;color:#9bb1d1;margin-top:5px}
-.open-slot .remaining{font-weight:800;color:#e7c67d;font-variant-numeric:tabular-nums;font-size:1.35rem}
 </style>
-<link rel="stylesheet" href="/static/globo-radar.css?v=three-open-20261021">
-<link rel="stylesheet" href="/static/mesa-voice.css?v=voice1">
-<script src="/static/globo-radar.js?v=three-open-20261021" defer></script>
-<script src="/static/mesa-voice.js?v=voice1" defer></script>
-<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive4-confluence"><script src="/static/xtreme-live-chart.js?v=xtlive4-confluence" defer></script><link rel="stylesheet" href="/static/mesa-pattern-dashboard.css?v=learn1"><script src="/static/mesa-pattern-dashboard.js?v=learn1" defer></script></head>
+<link rel="stylesheet" href="/static/globo-radar.css?v=20261020trend6">
+<script src="/static/globo-radar.js?v=xtfollow1" defer></script>
+<link rel="stylesheet" href="/static/mesa-performance.css?v=quant1"><script src="/static/mesa-performance.js?v=quant1" defer></script><link rel="stylesheet" href="/static/xtreme-live-chart.css?v=xtlive3"><script src="/static/xtreme-live-chart.js?v=xtlive3" defer></script></head>
 <body>
 <header><div class="logo"><div class="orb">M</div><div><h1>MESA DE TRADERS <span class="tag">DEMO</span></h1><div class="small" id="currentStrategyLabel">Xtreme Sniper + Tendência · Bullex PRACTICE · M1</div></div></div>
-<div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small connection-pill" role="status" aria-live="polite">Corretora desconectada</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Sair encerra a conexão PRACTICE e o login deste navegador">Sair da conta</button></div></header>
+<div class="headside"><span class="indicator" id="led"></span><span id="connection" class="small">Desconectado</span><button class="btn secondary" type="button" id="settingsToggle" aria-expanded="false" aria-controls="advancedSettings">⚙ Configurações</button><button class="btn secondary" id="logout" title="Encerra o acesso neste celular">Sair</button></div></header>
 <main>
 <div id="radarMount"></div>
-<section class="mesa-voice" aria-label="Assistente de voz da Mesa Trader">
-  <div class="mesa-voice-head">
-    <h2 class="mesa-voice-heading">🎙 Assistente de voz · PRACTICE</h2>
-    <div class="mesa-voice-buttons">
-      <button type="button" id="mesaVoiceToggle" aria-pressed="false">🔈 Ativar voz</button>
-      <button type="button" id="mesaVoiceTest">▶ Testar voz</button>
-    </div>
-  </div>
-  <div class="mesa-voice-bottom">
-    <label for="mesaVoiceVolume">Volume
-      <input id="mesaVoiceVolume" type="range" min="0" max="100" step="5" value="80" />
-      <span id="mesaVoiceVolumeValue">80%</span>
-    </label>
-    <div id="mesaVoiceStatus" class="mesa-voice-status" role="status" aria-live="polite">Toque em Ativar voz para anunciar novas entradas e resultados WIN/LOSS confirmados.</div>
-  </div>
-  <div class="mesa-voice-foot">Voz gratuita do Android em português. Mantenha a página aberta para ouvir; o navegador pode silenciar quando estiver em segundo plano.</div>
-</section>
 <p class="small" style="max-width:1180px;margin:10px auto 0;line-height:1.5">O celular pode fechar a página sem tocar em Sair: enquanto o servidor estiver ativo, o robô continua nele. No Render gratuito, a execução não é contínua: o serviço pode hibernar após 15 minutos sem acesso.</p>
-<section class="chart-on-home" id="chartHome" aria-label="Gráfico de candles ao vivo">
-<section class="panel">
- <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
- <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
- <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
- <div class="xtreme-legend">
- <label><input id="xtremeShowTrend" type="checkbox" checked> Xtreme Tendência (ATR 18 × 2) <span class="xtreme-key" style="background:#3ef4a1"></span>Alta <span class="xtreme-key" style="background:#ff657d"></span>Baixa</label>
- <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT (S = alinhado)</label>
- <label><input id="xtremeShowBollinger" type="checkbox" checked> Bandas Bollinger 20 × 2 <span class="xtreme-key" style="background:#e3adff"></span></label>
- </div>
- <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
- <div id="xtremeRSIState" class="xtreme-rsi-status">RSI 14: aguardando histórico</div>
- <p id="xtremeTrendState" class="xtreme-chart-status" style="font-weight:800">SEM TENDÊNCIA CONFIRMADA</p><p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
- <p id="xtremeDescription" class="xtreme-chart-caption">A seta Sniper é confirmada após o fechamento da vela. A operação pode começar na vela M1 seguinte, somente se estiver alinhada ao Xtreme Tendência e às demais travas DEMO.</p>
- </section>
-</section>
 <section class="settings-drawer" id="advancedSettings" hidden aria-label="Configurações avançadas do robô">
 <div class="headline"><div><h2>Central de operações</h2><div class="small">Gerenciamento, gráficos e histórico · somente PRACTICE</div></div><span class="tag" id="modeLabel">CONTA PRACTICE</span></div>
 <div class="stats">
@@ -103,18 +47,25 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  <div class="stat"><div class="small">Taxa de acerto</div><div class="value" id="winrate">—</div><div class="sub" id="record">Sem ordens encerradas</div></div>
  <div class="stat"><div class="small">Operações hoje</div><div class="value" id="trades">0/5</div><div class="sub" id="status">Aguardando conexão</div></div>
 </div>
-<section class="panel" aria-label="Operações simultâneas PRACTICE">
-  <div class="headline"><h2>Operações simultâneas · Xtreme</h2><span id="openCount" class="tag">0/3</span></div>
-  <div class="small">Cada par possui seu próprio vencimento e resultado. No máximo três ordens PRACTICE e nenhuma duplicada.</div>
-  <div id="openSlots" class="open-slots" role="status" aria-live="polite">Nenhuma operação aberta.</div>
-</section>
+<div class="two">
+<section class="panel">
+ <div class="xtreme-chart-header"><h2>Gráfico ao vivo · Xtreme Sniper + Tendência · M1</h2><span class="small">Somente DEMO</span></div>
+ <div class="xtreme-market-head"><div><div id="xtremeAsset" class="small">Aguardando ativo</div><div id="xtremePrice" class="xtreme-price">—</div></div>
+ <div><div id="xtremePreview" class="xtreme-preview">Aguardando preços</div><div id="xtremeClock" class="small" style="margin-top:7px;text-align:right">Aguardando vela em formação</div></div></div>
+ <div class="xtreme-legend">
+ <label><input id="xtremeShowTrend" type="checkbox" checked> Xtreme Tendência (ATR 18 × 2) <span class="xtreme-key" style="background:#3ef4a1"></span>Alta <span class="xtreme-key" style="background:#ff657d"></span>Baixa</label>
+ <label><input id="xtremeShowSniper" type="checkbox" checked> Xtreme Sniper: ▲ CALL / ▼ PUT (S = alinhado)</label>
+ </div>
+ <div class="xtreme-chart-shell"><canvas id="chart" width="1000" height="470" aria-label="Candles M1 da Bullex em formação, EMAs e sinais Xtreme Sniper confirmados"></canvas></div>
+ <p id="xtremeTrendState" class="xtreme-chart-status" style="font-weight:800">SEM TENDÊNCIA CONFIRMADA</p><p id="marketInfo" class="xtreme-chart-status">Conecte a PRACTICE para visualizar os candles reais.</p>
+ <p id="xtremeDescription" class="xtreme-chart-caption">A seta Sniper é confirmada após o fechamento da vela. A operação pode começar na vela M1 seguinte, somente se estiver alinhada ao Xtreme Tendência e às demais travas DEMO.</p>
+ </section>
+
+</div>
 <div class="two">
 <section class="panel"><h2>Conexão e gerenciamento</h2>
 <div class="controls">
- <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3>
-<div id="bullexConnectionStatus" class="bullex-connection-status" role="status" aria-live="polite">Aguardando conexão segura com a conta PRACTICE.</div>
-<div id="bullexConnectFields"><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao backend; não armazenadas no navegador nem no GitHub. Se o servidor reiniciar, a Bullex precisará ser reconectada.</div></div>
-<button type="button" class="btn secondary" id="switchBullex" hidden style="margin-top:12px">Trocar ou reconectar conta</button>
+ <div class="controlbox"><h3>1 · Conectar à Bullex, somente PRACTICE</h3><div class="fields"><div><label for="email">E-mail Bullex</label><input id="email" type="email" autocomplete="username" placeholder="Seu e-mail"></div><div><label for="password">Senha Bullex</label><input id="password" type="password" autocomplete="current-password" placeholder="Senha"></div><div style="display:flex;align-items:end"><button class="btn full" id="connect">Conectar demo</button></div></div><div class="small" style="margin-top:7px">Credenciais enviadas por HTTPS ao backend; não armazenadas no navegador nem no GitHub. Se o servidor reiniciar, a Bullex precisará ser reconectada.</div>
 <div class="small" style="margin-top:12px">
  <label><input id="reviewedOrders" type="checkbox" style="width:auto;margin-right:6px">Conferi operações incertas no histórico da Bullex DEMO.</label>
  <button type="button" class="btn secondary" id="reviewOrders">Confirmar revisão</button>
@@ -127,67 +78,19 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
    <option value="mesa">Mesa Tendência 6 (estratégia anterior)</option>
   </select>
   <div class="small" style="margin-top:5px">Só entra após fechamento de nova seta do Sniper na direção do Xtreme Tendência. Sem martingale; controle de risco mantido.</div></div>
-  <div style="grid-column:1/-1;border:1px solid #bc8d40;border-radius:12px;padding:12px;background:#1d170e">
-    <label for="demoUnlimited" style="display:flex;align-items:center;gap:10px;font-weight:800">
-      <input id="demoUnlimited" type="checkbox" checked style="width:auto;accent-color:#26dda0">
-      DEMO CONTÍNUA · sem stops e sem limite diário
-    </label>
-    <div id="demoModeLabel" class="small" style="margin-top:7px;line-height:1.5">
-      Exclusivamente PRACTICE. Permite continuar após LOSS, sem stop win/loss nem pausa por 50 operações. Entrada fixa até 2% da banca, payout mínimo, ordens únicas e segurança de dados permanecem.
-    </div>
-  </div>
-  <div style="grid-column:1/-1;padding:12px;border:1px solid #3a7388;border-radius:10px">
-    <label><input id="patternOnly" type="checkbox" style="width:auto">
-       Exigir padrões estatisticamente APROVADOS antes das entradas (modo aprendizado)</label>
-    <p class="small">A coleta M1/M5 continua nos dois modos quando a PRACTICE estiver conectada. Ativar esta exigência desativa a DEMO Contínua; sem padrões aprovados não envia ordens.</p>
-  </div>
   <div><label for="asset">Ativo inicial · scanner multirpares</label><select id="asset"><option value="EURUSD">EURUSD</option></select></div>
   <div><label for="stake">Valor fixo por entrada</label><input id="stake" type="number" min="1" step=".01" value="2"></div>
   <div><label for="payout">Payout mínimo (%)</label><input id="payout" type="number" min="0" max="100" value="80" step=".1"></div>
-  <div style="grid-column:1/-1"><strong>Confluências adicionais Xtreme (experimentais)</strong>
-   <div class="xtreme-filter-switch"><label><input type="checkbox" id="confluenceRSI" checked> Exigir RSI 14 na direção do sinal (CALL: 50–70 / PUT: 30–50)</label></div>
-   <div class="xtreme-filter-switch"><label><input type="checkbox" id="confluenceBollinger" checked> Exigir fechamento do lado correto da média Bollinger 20 × 2 sem tocar na banda extrema</label></div>
-   <div id="confluenceStatus" class="small" style="margin-top:7px">Os filtros são medidos individualmente; mais filtros não garantem mais WIN.</div>
-  </div>
-  <div><label for="expiryMinutes">Tempo de expiração</label>
-    <select id="expiryMinutes" title="Candles analisados em M1; vencimento escolhido na Bullex PRACTICE">
-      <option value="1">1 minuto</option><option value="2">2 minutos</option>
-      <option value="3">3 minutos</option><option value="5">5 minutos</option>
-    </select></div>
-  <div><label for="maxOpenTrades">Operações simultâneas</label>
-    <select id="maxOpenTrades" title="No máximo uma ordem por par, somente PRACTICE">
-      <option value="1">1 operação</option>
-      <option value="2">2 operações</option>
-      <option value="3" selected>3 operações</option>
-    </select></div>
   <div><label for="limit">Máximo de entradas por dia</label><input id="limit" type="number" min="1" max="100" value="5"></div>
   <div><label for="stopwin">Stop win</label><input id="stopwin" type="number" min=".01" step=".01" value="20"></div>
   <div><label for="stoploss">Stop loss</label><input id="stoploss" type="number" min="2" step=".01" value="10"></div>
  </div>
  <div class="switches"><label><input type="checkbox" id="usewin" disabled checked> Ativar stop win</label><label><input type="checkbox" id="useloss" disabled checked> Ativar stop loss</label></div>
- <div class="actions"><button class="btn secondary" id="save">Salvar limites</button><button class="btn" id="start" disabled>▶ Iniciar robô DEMO</button><button class="btn stop" id="stop" disabled>■ Parar</button></div><p class="start-guidance" id="startBlockReason" role="status" aria-live="polite">Conecte à PRACTICE para iniciar.</p></div>
+ <div class="actions"><button class="btn secondary" id="save">Salvar limites</button><button class="btn" id="start" disabled>▶ Iniciar robô DEMO</button><button class="btn stop" id="stop" disabled>■ Parar</button></div></div>
  <div class="small" id="feedback" role="status">Aguardando.</div>
 </div></section>
 <section class="panel"><h2>Ordens enviadas e resultados</h2><p class="empty">Operações são recuperadas do Supabase mesmo após reinício do Render. Registros anteriores à integração podem não estar disponíveis.</p><div class="small" id="historyStatus" role="status" style="margin-bottom:10px">Carregando histórico...</div><div class="orderlist" id="orders"><div class="empty">Ainda não há operações.</div></div></section>
 </div>
-<section class="pattern-panel" id="patternPanel" aria-label="Aprendizado de padrões auditável">
- <div class="pattern-head"><div><h2>Aprendizado de padrões · DEMO</h2>
- <p class="small">Candles M1/M5, árvore rasa e random forest; aprovação walk-forward com 300+ sinais fora da amostra.</p></div>
- <button type="button" class="btn secondary" id="patternRefresh">Atualizar padrões</button></div>
- <div class="pattern-stats">
-  <div class="pattern-stat"><span>Padrões aprovados</span><b id="patternActiveCount">0</b></div>
-  <div class="pattern-stat"><span>Candles no Supabase</span><b id="patternCandleCount">—</b></div>
-  <div class="pattern-stat"><span>Uso do banco</span><b id="patternStorage">—</b></div>
- </div>
- <p class="pattern-warning" id="patternMessage" role="status">Amostra insuficiente. Sem regras aprovadas, o robô de aprendizado não envia ordens.</p>
- <p class="small" id="patternCollection">Conecte a conta PRACTICE para ativar a coleta de candles, mesmo sem operar.</p>
- <div class="pattern-table-scroll"><table class="pattern-table">
-  <thead><tr><th>Padrão</th><th>Direção</th><th>Teste N</th><th>Acerto backtest</th>
-   <th>IC95% inferior</th><th>Equilíbrio</th><th>Operações PRACTICE</th>
-   <th>Acerto ao vivo</th><th>Expectativa</th></tr></thead><tbody id="patternRows">
-  <tr><td colspan="9">Sem padrões validados.</td></tr></tbody></table></div>
- <p class="small">Retenção: 7 dias. Sem martingale. Stops e limites são obrigatórios no modo aprendido. Nenhum ganho garantido.</p>
-</section>
 <section class="performance-panel" aria-label="Painel de desempenho estatístico" id="performancePanel">
  <div class="performance-header"><div><h2>Desempenho · evidência mensurável</h2>
  <p class="small">Resultados reais DEMO, sem otimização na amostra de teste. Exige 300 operações e limite inferior IC95% acima do equilíbrio.</p></div>
@@ -211,7 +114,7 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
  </div>
  <p class="small">AVISO: SOMENTE DEMO. Resultados passados não garantem ganhos. Os filtros experimentais não executam ordens automaticamente.</p>
 </section>
-<div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p id="execRules" class="small" style="line-height:1.8">Carregando as regras da estratégia ativa...</p></section></div>
+<div class="bottom"><section class="panel"><h2>Diário da mesa</h2><div class="feed" id="feed">Aguardando login.</div></section><section class="panel"><h2>Regras de execução</h2><p class="small" style="line-height:1.8">Seis filtros internos analisam os pares: EMA20/50/100 em M1, alinhamento M5, força ADX/DI, momentum MACD, RSI direcional e recuo com vela de retomada. Exige 5 de 6 confirmações e o alinhamento obrigatório da tendência M1/M5, ADX e entrada técnica; limita reentradas por par por três velas. Mantém janela de dois segundos, verificação de payout, ativo habilitado, stops e conta PRACTICE. Os votos não representam probabilidade de acerto.</p></section></div>
 <p class="foot">AVISO: opções binárias têm alto risco. Este painel utiliza integração não oficial da Bullex, cuja compatibilidade precisa ser confirmada em conta demo. Não envia ordens reais, não promete ganhos e não demonstra vantagem estatística. Não execute a versão de teste com credenciais de uma conta real.</p>
 </section>
 </main>
@@ -222,16 +125,11 @@ main{max-width:1420px;margin:auto;padding:20px 18px 60px}.headline{display:flex;
 const $=id=>document.getElementById(id);
 const safe=x=>String(x==null?"":x).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-let csrf="", connected=false, running=false, ready=false, syncing=false, historyLoading=false, first=true, busy=false, lastAssets="", lastState=null, wantChangeAccount=false;
+let csrf="", connected=false, running=false, ready=false, syncing=false, historyLoading=false, first=true, busy=false, lastAssets="", lastState=null;
 const cash=n=>Number.isFinite(Number(n))?Number(n).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
 function feedback(x,error=false){$("feedback").textContent=x;$("feedback").style.color=error?"var(--red)":"var(--muted)";const quick=$("quickFeedback");if(quick){quick.textContent=x;quick.classList.toggle("error",!!error);}}
 async function api(url,data){const opts={credentials:"same-origin",cache:"no-store"};if(data!==undefined){opts.method="POST";opts.headers={"Content-Type":"application/json","X-CSRF-Token":csrf};opts.body=JSON.stringify(data);}const res=await fetch(url,opts);const r=await res.json().catch(()=>({error:"Resposta inválida do servidor"}));if(!res.ok)throw Error(r.error||"Falha "+res.status);return r;}
-async function login(key){
- const r=await api("/api/access",{key});
- csrf=r.csrf;$("key").value="";
- // Reload: a fresh session must load ALL CSS/JS that were requested before login.
- window.location.replace("/");
-}
+async function login(key){const r=await api("/api/access",{key});csrf=r.csrf;$("key").value="";$("loginLayer").classList.add("hidden");await poll();}
 async function poll(){
  if(syncing)return;syncing=true;
  try{let s=await api("/api/state");csrf=s.csrf||csrf;
@@ -245,29 +143,10 @@ async function poll(){
  catch(e){if(String(e.message).includes("Entre com a chave")){$("loginLayer").classList.remove("hidden");}else feedback(e.message,true);}
  finally{syncing=false;}
 }
-function updateDemoModeLabel(){
- const unlimited=$("demoUnlimited").checked;
- const learning=$("patternOnly").checked;
- const label=$("demoModeLabel");
- label.textContent=unlimited?
-  "TESTE CONTÍNUO PRACTICE: envia ordens DEMO sem stop win/loss, limite diário ou pausa por LOSS. Sem martingale; valor fixo até 2%, payout e 1 ordem aberta continuam obrigatórios. Salve as configurações para aplicar.":
-  learning?
-  "MODO APRENDIZADO: só entra com padrões aprovados; stops e limites diários continuam ativos. Salve as configurações para aplicar.":
-  "MODO PROTEGIDO: estratégia original com stops e limites diários. Salve as configurações para aplicar.";
- for(const id of ["limit","stopwin","stoploss"])
-    $(id).disabled=unlimited||running;
-}
 function setConfig(c){
- $("stake").value=c.stake;$("payout").value=c.payout;$("expiryMinutes").value=String(c.expiry_minutes||1);$("maxOpenTrades").value=String(c.max_open_trades||1);
- $("confluenceRSI").checked=c.confluence_rsi!==false;
- $("confluenceBollinger").checked=c.confluence_bollinger!==false;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
+ $("stake").value=c.stake;$("payout").value=c.payout;$("stopwin").value=c.stop_win;$("stoploss").value=c.stop_loss;$("limit").value=c.limit;
  $("usewin").checked=c.stop_win_enabled!==false;$("useloss").checked=c.stop_loss_enabled!==false;
  $("strategy").value=c.strategy==="mesa"?"mesa":"sniper";
- $("patternOnly").checked=c.pattern_only===true;
- $("demoUnlimited").checked=c.demo_unlimited===true;
- $("patternOnly").disabled=running;
- $("demoUnlimited").disabled=running;
- updateDemoModeLabel();
 }
 function assets(s){
  const opts=(s.assets||[]).slice(0,400);
@@ -279,91 +158,29 @@ function assets(s){
  $("asset").innerHTML=opts.map(x=>'<option value="'+safe(x)+'">'+safe(x)+'</option>').join("");
  $("asset").value=opts.includes(selected)?selected:(opts.includes(s.config.asset)?s.config.asset:opts[0]);
 }
-function startBlockReason(s){
- if(!s.connected)return "Conecte a conta Bullex PRACTICE nas Configurações.";
- if(s.running)return "";
- if(s.uncertain)return "Existe ordem incerta: confira o histórico da Bullex e confirme a revisão nas Configurações.";
- if(!s.history_ready)return s.history_error||"Aguardando recuperação do histórico permanente do Supabase.";
- if(s.config&&s.config.pattern_only===true &&
-    (!s.pattern_learning||!s.pattern_learning.active_count))
-    return "AMOSTRA INSUFICIENTE: sem padrões aprovados; a coleta continuará com a PRACTICE conectada.";
- if(s.management&&s.management.can_trade===false)return s.management.block_reason||"Limite de risco da DEMO atingido. Confira o resultado do dia e os stops.";
- const balance=Number(s.balance),stake=Number(s.config&&s.config.stake);
- if(!Number.isFinite(balance)||balance<=0)return "Saldo DEMO indisponível: confira a conexão.";
- if(!Number.isFinite(stake)||stake<=0)return "Configure um valor de entrada válido.";
- if(stake>balance*.02+0.000001)return "Valor de entrada acima de 2% da banca DEMO. Reduza e salve os limites.";
- return "";
-}
-window.getDemoStartBlockReason=startBlockReason;
-let openPositionExpiry=[];
-function positionTick(){
- const now=(Number(lastState&&lastState.server_now)||0)+(Date.now()-positionBaseAt)/1000;
- document.querySelectorAll("[data-expire-utc]").forEach(el=>{
-   const remain=Math.max(0,Math.ceil(Number(el.dataset.expireUtc)-now));
-   el.textContent=Math.floor(remain/60)+":"+String(remain%60).padStart(2,"0");
- });
-}
-let positionBaseAt=Date.now();
 function render(s){
  connected=!!s.connected;running=!!s.running;assets(s);
  if(first){setConfig(s.config);first=false;}
  const mg=s.management||{};
- const stats=s.confluence_stats||{};
- const checked=stats.checked||0;
- $("confluenceStatus").textContent="Sinais Sniper/Tendência avaliados: "+checked+
-   " · passaram: "+(stats.passed||0)+" · RSI rejeitou: "+(stats.rsi_rejected||0)+
-   " · Bollinger rejeitou: "+(stats.bb_rejected||0)+". São contagens, não taxa de acerto.";
- positionBaseAt=Date.now();
- const positions=Array.isArray(s.open_trades)?s.open_trades:[];
- $("openCount").textContent=positions.length+"/"+String(s.config.max_open_trades||1);
- $("openSlots").innerHTML=positions.length?positions.map(t=>
-  '<div class="open-slot"><b>'+safe(t.asset)+' · '+safe((t.direction||"").toUpperCase())+'</b>'+
-  '<small>'+safe(t.status)+' · Entrada '+cash(t.stake)+' DEMO</small>'+
-  '<small>Vence em</small><div class="remaining" data-expire-utc="'+Number(t.expiration||0)+'">--:--</div></div>'
- ).join(""):'<div class="small">Nenhuma operação aberta. Scanner aguardando sinais Xtreme válidos.</div>';
- positionTick();
  $("currentStrategyLabel").textContent=s.config&&s.config.strategy==="mesa"?"Mesa Tendência 6 · Bullex PRACTICE · M1/M5":"Xtreme Sniper + Tendência · Bullex PRACTICE · M1";
- $("execRules").textContent=s.config&&s.config.strategy==="mesa"?
-   "Mesa Tendência 6: EMA20/50/100, M1/M5, ADX/DI, MACD, RSI e recuo. Exige 5/6 confirmações mais alinhamentos obrigatórios. Valida payout, janela de até 2 segundos e conta PRACTICE.":
-   "Xtreme Sniper + Tendência + confluências configuráveis RSI14/Bollinger20x2: até "+String(s.config.max_open_trades||1)+" operações simultâneas em pares distintos, somente após cruzamento Sniper confirmado no fechamento M1 e alinhado ao Xtreme Tendência ATR18 × 2. Expiração escolhida: "+String(s.config&&s.config.expiry_minutes||1)+" minuto(s). Mantém payout válido, janela de até 2 segundos, até 2% da banca, ordens únicas, sem martingale; sem stops diários no modo DEMO Contínua.";
  const hs=$("historyStatus");if(hs)hs.textContent=s.history_ready?"Histórico permanente conectado ao Supabase":(s.history_error||"Carregando histórico permanente...");
  $("led").className="indicator"+(running?" active":connected?" warn":"");
- const connection=$("connection"),connectionStatus=$("bullexConnectionStatus");
- connection.textContent=running?"🟢 ROBÔ DEMO ATIVO":connected?"✓ PRACTICE CONECTADA":"Corretora desconectada";
- connection.className="small connection-pill"+(connected?" online":"");
- connectionStatus.textContent=running?"✓ Bullex PRACTICE conectada · robô automático ativo.":connected?
-   "✓ Conta PRACTICE conectada e verificada. Saldo DEMO: "+cash(s.balance)+". "+(s.uncertain?"Existe uma ordem incerta para revisar.":"Pronto para configurar e iniciar o radar."):
-   "Sem conexão com a Bullex. Preencha e-mail e senha somente no formulário seguro.";
- connectionStatus.className="bullex-connection-status"+(connected?" online":"");
- $("bullexConnectFields").hidden=connected&&!wantChangeAccount;
- $("switchBullex").hidden=!connected;
- $("switchBullex").disabled=running;
- $("connect").disabled=running;
- $("connect").textContent=connected?"Reconectar demo":"Conectar demo";
+ $("connection").textContent=running?"ROBÔ AUTOMÁTICO ATIVO":connected?"PRACTICE conectada":"Corretora desconectada";
  $("balance").textContent=cash(s.balance);$("currency").textContent=connected?(s.currency||"Saldo PRACTICE"):"Aguardando conexão";
  const p=mg.profit||0;$("profit").textContent=(p>0?"+":"")+cash(p);$("profit").className="value "+(p>=0?"good":"bad");
  const closed=(mg.wins||0)+(mg.losses||0);
  $("winrate").textContent=closed?(100*(mg.wins||0)/closed).toFixed(1)+"%":"—";
  $("record").textContent=(mg.wins||0)+" WIN · "+(mg.losses||0)+" LOSS · "+(mg.ties||0)+" EMPATE";
- $("trades").textContent=s.config.demo_unlimited===true?String(mg.used||0)+" · DEMO SEM LIMITE":String(mg.used||0)+"/"+String(s.config.limit||5);
- $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running&&s.run_state==="retrying_feed"?"FEED INSTÁVEL · AGUARDANDO RECUPERAÇÃO":running?"Procurando oportunidade":s.last_stop_reason?"Parado: "+s.last_stop_reason:connected&&mg.can_trade===false?(mg.block_reason||"Pausa por limite de risco"):connected?"Pronto para iniciar":"Aguardando conexão";
- const blockReason=startBlockReason(s);
- $("start").disabled=running||!!blockReason;
- $("start").title=blockReason||"Robô DEMO pronto para iniciar";
- $("startBlockReason").textContent=running?"Robô DEMO operando. Acompanhe os resultados na tela.":blockReason||(s.config.demo_unlimited===true?"✓ Modo DEMO CONTÍNUO: PRACTICE verificada; sem pausa diária por LOSS.":"✓ Conta PRACTICE pronta para iniciar no modo protegido.");
- $("startBlockReason").className="start-guidance"+(running||!blockReason?" ready":"");
- $("stop").disabled=!running;
- ["asset","strategy","stake","payout","expiryMinutes","maxOpenTrades","confluenceRSI","confluenceBollinger","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
- $("demoUnlimited").disabled=running;
- $("patternOnly").disabled=running;
- updateDemoModeLabel();
+ $("trades").textContent=String(mg.used||0)+"/"+String(s.config.limit||5);
+ $("status").textContent=s.uncertain?"Ordem incerta — revisão obrigatória":running?"Procurando oportunidade":connected?"Pronto para iniciar":"Aguardando conexão";
+ $("connect").disabled=running;$("start").disabled=!connected||running||s.uncertain||mg.can_trade===false;$("stop").disabled=!running;
+ ["asset","strategy","stake","payout","limit","stopwin","stoploss","usewin","useloss","save"].forEach(id=>$(id).disabled=running);
  $("marketInfo").textContent=connected?((s.analysis_asset||s.config.asset)+" · "+(s.candles||[]).length+" candles no painel · feed da corretora"):"Não há gráfico sintético: conecte sua PRACTICE para ver dados.";
  $("orders").innerHTML=(s.trades||[]).length?(s.trades||[]).slice().reverse().slice(0,30).map(t=>
  '<div class="item"><div><b>'+safe(t.asset||"")+" · "+safe((t.direction||"").toUpperCase())+'</b><small>'+safe(t.time||"")+" · "+safe(t.strategy||"")+'</small>'+(t.reason?'<small>'+safe(t.reason)+'</small>':'')+'</div><div style="text-align:right"><b class="'+(t.status==="WIN"?"good":t.status==="LOSS"?"bad":"")+'">'+safe(t.status||"")+'</b><small>'+cash(t.stake)+" / "+(t.profit==null?"—":cash(t.profit))+'</small></div></div>').join(""):'<div class="empty">Sem ordens nesta sessão.</div>';
  $("feed").innerHTML=(s.logs||[]).slice().reverse().slice(0,25).map(e=>'<div>'+safe((e.time||"").slice(11,19))+" · "+safe(e.text||"")+'</div>').join("")||"Sem registros.";
  if(window.XtremeChart)window.XtremeChart.update(s);else drawCandles(s.candles||[]);
  if(window.updateGlobeRadar)window.updateGlobeRadar(s);
- if(window.MesaVoice)window.MesaVoice.update(s);
 }
 function drawCandles(bars){
  const canvas=$("chart"),ctx=canvas.getContext("2d"),w=canvas.width=900,h=canvas.height=400;
@@ -378,34 +195,15 @@ function drawCandles(bars){
  ctx.fillStyle="#97aec9";ctx.fillText("M1 · candles fechados · preço da corretora",12,h-12);
 }
 async function act(which,body,success){if(busy)return;busy=true;feedback("Executando...");try{const v=await api(which,body);feedback(success||"Operação concluída");await poll();return v;}catch(e){feedback(e.message,true);}finally{busy=false;}}
-function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),expiry_minutes:num("expiryMinutes"),max_open_trades:num("maxOpenTrades"),confluence_rsi:$("confluenceRSI").checked,confluence_bollinger:$("confluenceBollinger").checked,stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),pattern_only:$("patternOnly").checked,demo_unlimited:$("demoUnlimited").checked,stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
+function config(){const num=id=>Number($(id).value);return{asset:$("asset").value,stake:num("stake"),payout:num("payout"),stop_win:num("stopwin"),stop_loss:num("stoploss"),limit:num("limit"),stop_win_enabled:$("usewin").checked,stop_loss_enabled:$("useloss").checked,strategy:$("strategy").value,sniper_source:"hl2"};}
 $("loginForm").addEventListener("submit",async e=>{e.preventDefault();$("loginError").textContent="";try{await login($("key").value);}catch(err){$("loginError").textContent=err.message;}});
 $("reviewOrders").onclick=async()=>{if(!$("reviewedOrders").checked){feedback("Confira as ordens incertas na Bullex e marque a revisão.",true);return;}await act("/api/review",{confirmed:true},"Revisão confirmada.");};
-$("switchBullex").onclick=()=>{wantChangeAccount=!wantChangeAccount;$("bullexConnectFields").hidden=!wantChangeAccount;$("switchBullex").textContent=wantChangeAccount?"Cancelar troca de conta":"Trocar ou reconectar conta";};
-$("connect").onclick=async()=>{
- const email=$("email").value.trim(),password=$("password").value;
- if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}
- const result=await act("/api/connect",{email,password},"✓ Conta Bullex PRACTICE conectada e verificada.");
- $("password").value="";
- if(result&&result.ok){wantChangeAccount=false;feedback("✓ Bullex PRACTICE conectada. Confira os limites e inicie o robô DEMO.");await poll();}
-};
-$("demoUnlimited").addEventListener("change",()=>{
- if($("demoUnlimited").checked)$("patternOnly").checked=false;
- updateDemoModeLabel();
-});
-$("patternOnly").addEventListener("change",()=>{
- if($("patternOnly").checked)$("demoUnlimited").checked=false;
- updateDemoModeLabel();
-});
+$("connect").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){feedback("Digite e-mail e senha da Bullex.",true);return;}await act("/api/connect",{email,password},"Conexão DEMO solicitada");$("password").value="";};
 $("save").onclick=()=>act("/api/config",config(),"Configuração salva.");
 $("start").onclick=async()=>{if(busy)return;const cfg=config();const saved=await act("/api/config",cfg,"Limites atualizados.");if(saved&&lastState&&!running&&connected)await act("/api/start",{},"Robô DEMO iniciado. Aguarde candles reais.");};
 $("stop").onclick=()=>act("/api/stop",{},"Parada solicitada. Ordens abertas serão acompanhadas.");
-$("logout").onclick=async()=>{
- if(!window.confirm("Sair da conta DESCONECTA a Bullex PRACTICE e encerra o login no celular. Para apenas sair da tela e voltar depois, feche a aba SEM clicar neste botão. Deseja realmente sair?"))return;
- const result=await act("/api/logout",{},"Sessão encerrada.");
- if(result)window.location.replace("/");
-};
+$("logout").onclick=async()=>{if(!window.confirm("Quer encerrar a sessão neste celular? Para sair e voltar sem fazer login, apenas feche a aba. Este botão faz logout."))return;const result=await act("/api/logout",{},"Acesso encerrado");if(result)location.reload();};
 $("settingsToggle").onclick=()=>{const drawer=$("advancedSettings");drawer.hidden=!drawer.hidden;$("settingsToggle").setAttribute("aria-expanded",String(!drawer.hidden));$("settingsToggle").textContent=drawer.hidden?"⚙ Configurações":"✕ Fechar configurações";if(!drawer.hidden)drawer.scrollIntoView({behavior:"smooth",block:"start"});};
-drawCandles([]);poll();setInterval(poll,2500);setInterval(positionTick,500);
+drawCandles([]);poll();setInterval(poll,2500);
 })();
 </script></body></html>
