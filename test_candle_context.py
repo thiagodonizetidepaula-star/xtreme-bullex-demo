@@ -27,3 +27,21 @@ class CandleContextTests(unittest.TestCase):
     def test_missing_or_gapped_data_never_produces_confirmation(self):
         a=self.bars();a[-1]['t']+=60;self.assertEqual(cc.decision(a,1)['direction'],0)
         self.assertEqual(cc.decision(a[:20],1)['direction'],0)
+
+    def pattern_bars(self,up=False,upper=False):
+        a=self.bars()
+        for j,b in enumerate(a[-5:-1]):
+            c=108.-2*j if not up else 92.+2*j
+            b.update(o=c+.1,c=c,h=c+.5,l=c-.5)
+        a[-1].update(o=100.2,c=100.4,h=101.6 if upper else 100.5,l=100.1 if upper else 99.)
+        return a
+    def test_named_patterns_depend_on_price_context(self):
+        self.assertEqual(cc.identify(self.pattern_bars())['candle_name'],'Martelo')
+        self.assertEqual(cc.identify(self.pattern_bars(upper=True))['candle_name'],'Martelo invertido')
+        self.assertEqual(cc.identify(self.pattern_bars(up=True))['candle_name'],'Enforcado')
+        self.assertEqual(cc.identify(self.pattern_bars(up=True,upper=True))['candle_name'],'Estrela cadente')
+        a=self.pattern_bars();a[-1]['c']=a[-1]['o'];self.assertEqual(cc.identify(a)['candle_name'],'Doji')
+    def test_named_patterns_never_authorize_a_standalone_trade(self):
+        a=self.pattern_bars();d=cc.decision(a,0)
+        self.assertEqual(d['direction'],0);self.assertEqual(d['indicators']['candle_name'],'Martelo')
+        self.assertTrue(d['params']['pattern_identification']['diagnostic_only'])
