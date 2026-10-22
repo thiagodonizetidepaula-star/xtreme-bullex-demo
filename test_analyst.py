@@ -11,9 +11,9 @@ class LegacyStrategyFixture(unittest.TestCase):
 class RetiredStrategiesTests(unittest.TestCase):
     def test_no_production_strategies_or_candidates(self):
         import engine,execution
-        self.assertEqual(engine.ACTIVE,{});self.assertEqual(execution.EXECUTABLE,set())
+        self.assertEqual(set(engine.ACTIVE),{'multifilter_v1'});self.assertEqual(execution.EXECUTABLE,{'multifilter_v1'})
         self.assertEqual(execution.eligible([{'key':'wick','h':3,'result':'Acerto','payout':85}]*100),[])
-        self.assertEqual(engine.ranking([]),[])
+        self.assertEqual(len(engine.ranking([])),4)
     def test_no_new_signals_history_settles_without_deletion(self):
         state={'events':[],'last':{'TEST':1740}}
         bars=[{'from':i*60,'open':100.,'close':101.,'max':102.,'min':99.} for i in range(32)]
@@ -21,19 +21,19 @@ class RetiredStrategiesTests(unittest.TestCase):
     def test_broker_process_refuses_orders_even_if_called_directly(self):
         import types,runpy
         fake=types.SimpleNamespace(api=object(),demo=lambda:None)
-        with patch.dict('sys.modules',{'worker':fake}):module=runpy.run_path('executor_worker.py')
+        with patch.dict('sys.modules',{'worker':fake}),patch('engine.EXECUTABLE',set()):module=runpy.run_path('executor_worker.py')
         with self.assertRaisesRegex(RuntimeError,'Nenhuma estratégia ativa'):module['dispatch']({'op':'demo_order'})
     def test_martingale_disabled_and_executor_start_rejected(self):
         import execution,threading
         with self.assertRaises(ValueError):execution.config({'mg_enabled':True})
         os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only')
-        m=importlib.import_module('app');c={'lock':threading.RLock(),'running':True,'connected':True}
+        m=importlib.import_module('app');c={'lock':threading.RLock(),'running':True,'connected':True,'events':[]}
         execution.init_execution(c,{});c['exec_connected']=True;m.contexts['retired']=c
         client=m.app.test_client()
         with client.session_transaction() as sess:sess['owner']='retired';sess['csrf']='retired'
         with patch.object(m.threading,'Thread') as thread:
             r=client.post('/api/executor/start',json={},headers={'X-CSRF-Token':'retired'})
-            self.assertEqual(r.status_code,409);thread.assert_not_called()
+            self.assertEqual(r.status_code,200);thread.return_value.start.assert_called_once();self.assertEqual(c['exec_selected'],[])
         m.contexts.pop('retired',None)
 
 class EngineTests(LegacyStrategyFixture):
@@ -385,4 +385,5 @@ class ExecutorTests(LegacyStrategyFixture):
             with self.assertRaises(ValueError):execution.config(d)
 
 from test_multifilter import MultifilterTests,PaperApiTests
+from test_mf_live import LiveTests
 if __name__=='__main__':unittest.main()

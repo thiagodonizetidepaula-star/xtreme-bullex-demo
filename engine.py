@@ -1,15 +1,15 @@
 import math
 from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
-NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência'}
+NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
 LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
 # Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
 LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
 
 # Retired by owner: no strategy may produce new signals or demo entries.
-ACTIVE={}
-EXECUTABLE=set()
+ACTIVE={'multifilter_v1':(1,2,3,5)}
+EXECUTABLE={'multifilter_v1'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
@@ -90,7 +90,10 @@ def signals(a):
         elif trend==-1 and c['c']<low20 and c['c']<c['o']:add('channel_break',-1)
     return out
 
-def ingest(state,asset,bars,now,payout):
+def ingest(state,asset,bars,now,payout,bars5=None):
+    if 'multifilter_v1' in ACTIVE:
+        from mf_live import ingest_live
+        return ingest_live(state,asset,bars,bars5,now,payout)
     a=normalized(bars,now)
     if not a:return
     bytime={x['t']:x for x in a}

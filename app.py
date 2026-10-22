@@ -39,7 +39,7 @@ class Client:
 
 def save(c):
     with c['persist_lock']:
-        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[]),'xtreme_regimes':c.get('xtreme_regimes',{}),'exec_research':c.get('exec_research',{})}))
+        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[]),'xtreme_regimes':c.get('xtreme_regimes',{}),'exec_research':c.get('exec_research',{}),'mf_params':c.get('mf_params',{}),'mf_last':c.get('mf_last',{})}))
         try:
             db('write',c['owner'],payload)
             with c['lock']:c['saved_at']=time.time();c['storage']='Supabase sincronizado'
@@ -58,7 +58,7 @@ def loop(c):
     catalog_at=0;save_at=0;assets=[]
     try:
         while not c['stop'].is_set():
-            if time.time()-catalog_at>60:
+            if not assets or (time.time()-catalog_at>60 and time.time()%60>8):
                 assets=c['client'].call('market',payout=0,strategy='sniper')['assets'];catalog_at=time.time()
                 with c['lock']:c['assets']=assets
             if not assets:
@@ -66,8 +66,8 @@ def loop(c):
                 c['stop'].wait(10);continue
             batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
             with c['lock']:
-                for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']])
-                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Observando velas fechadas. Resultados teóricos, sem ordens.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
+                for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']],bars5=item.get('candles5',[]))
+                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Multifiltros ativa: analisando M1 + M5 nativos; aguardando confluência dos filtros.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
             if time.time()-save_at>=60:save(c);save_at=time.time()
             c['stop'].wait(.25)
     except Exception as e:
@@ -129,7 +129,7 @@ def connect():
         if old:
             old['client'].close()
             if old.get('exec_client'):old['exec_client'].close()
-        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'xtreme_regimes':stored.get('xtreme_regimes',{}),'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
+        c={'owner':owner,'client':cl,'lock':threading.RLock(),'stop':threading.Event(),'connected':True,'running':False,'events':stored.get('events',[]),'last':stored.get('last',{}),'xtreme_regimes':stored.get('xtreme_regimes',{}),'mf_params':stored.get('mf_params',{}),'mf_last':{},'mf_checks':{},'assets':[],'ready':0,'total':0,'message':'Conta demo confirmada. Inicie a análise.','storage':'Supabase conectado','saved_at':None,'last_poll':None,'chart':{},'errors':[]}
         c.update(persist_lock=threading.Lock(),send_lock=threading.Lock())
         execution.init_execution(c,stored)
         contexts[owner]=c;session.clear();session.update(owner=owner,csrf=secrets.token_hex(24));return jsonify(ok=True,csrf=session['csrf'])
@@ -142,7 +142,7 @@ def state():
     c=contexts.get(session['owner'])
     if not c:return jsonify(error='Servidor reiniciado. Reconecte à Bullex para restaurar o histórico.'),401
     with c['lock']:
-        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),executor=execution.snapshot(c))
+        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),multifilter_checks=list(c.get('mf_checks',{}).values())[-100:],executor=execution.snapshot(c))
 @app.post('/api/start')
 def start():
     c=contexts.get(session['owner'])
@@ -150,7 +150,9 @@ def start():
     with c['lock']:
         if c['running']:return jsonify(ok=True)
         if c.get('thread') and c['thread'].is_alive():return jsonify(error='Aguarde a parada concluir.'),409
-        c['stop'].clear();c['running']=True;c['thread']=threading.Thread(target=loop,args=(c,),daemon=True);c['thread'].start()
+        try:c['mf_params']=multifilter.asdict(multifilter.parameters((request.get_json(silent=True) or {}).get('strategy_params',{})))
+        except ValueError as e:return jsonify(error=str(e)),400
+        c['mf_last']={};c['stop'].clear();c['running']=True;c['thread']=threading.Thread(target=loop,args=(c,),daemon=True);c['thread'].start()
     return jsonify(ok=True)
 @app.post('/api/stop')
 def stop():
@@ -208,7 +210,7 @@ def executor_start():
         if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
         try:cfg=execution.config(request.get_json(silent=True) or {})
         except ValueError as e:return jsonify(error=str(e)),400
-        selected=execution.eligible(c['events'])
+        selected=execution.eligible(c['events'],cfg['expiry'] if 'multifilter_v1' in execution.EXECUTABLE else None)
         c.update(exec_mg={},exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com pelo menos 50% de acerto nos resultados concluídos.')
         c['exec_stop'].clear();c['exec_thread']=threading.Thread(target=execution.loop,args=(c,save,checkpoint),daemon=True);c['exec_thread'].start()
     return jsonify(ok=True)

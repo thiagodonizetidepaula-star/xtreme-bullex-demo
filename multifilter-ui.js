@@ -32,5 +32,6 @@ get('paperDemo').onclick=()=>{
  get('paperAsset').value='FICTICIO';get('paperSource').value='DADOS FICTÍCIOS — teste da interface, sem evidência de mercado';get('paperModel').checked=true;get('paperCutoff').value='';get('paperMessage').textContent='Demonstração FICTÍCIA carregada. Nenhum preço de mercado ou resultado real.';get('paperForm').requestSubmit();
 };
 get('paperExport').onclick=()=>{if(!result)return;const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='multifiltros-paper-'+result.data_hash.slice(0,12)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-showPanel('paper');
+for(const [key,label,value,step] of fields.slice(0,11)){const l=document.createElement('label'),input=document.createElement('input');l.textContent=label;input.type='number';input.dataset.param=key;input.value=value;input.step=step;l.append(input);get('mfLiveParams').append(l)}
+showPanel('analysis');
 })();

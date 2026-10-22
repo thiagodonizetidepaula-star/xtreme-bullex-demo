@@ -30,6 +30,7 @@ def broker_now():
 
 api=None
 market_cache={};market_at=0
+context_assets=set();context_retry={}
 stream_assets=set();stream_retry={};stream_seed_at=0
 balance_cache=None;balance_at=0
 
@@ -72,7 +73,7 @@ def dispatch(c):
     global api,stream_seed_at,balance_cache,balance_at
     op=c['op']
     if op=='connect':
-        stream_assets.clear();stream_retry.clear();stream_seed_at=0
+        stream_assets.clear();stream_retry.clear();context_assets.clear();context_retry.clear();stream_seed_at=0
         api=Bullex(c['email'],c['password'])
         with stage('autenticação e abertura da sessão',35):
             ok,reason=api.connect()
@@ -90,26 +91,31 @@ def dispatch(c):
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.
         wanted=c['assets'];errors=[]
-        # Pré-validar antes da virada; a ordem não espera catálogo HTTP/RPC.
-        if 57<=now%60<60 and time.time()-market_at>1:
-            try:
-                with stage('saldo antes da virada',3):balance_cache=api.get_balance();balance_at=time.time()
-                market(force=True)
-            except RuntimeError:errors.append('Payout não atualizado antes da virada; sinais serão bloqueados.')
         # Nunca inicializar histórico durante a janela de entrada; uma assinatura por vez.
         pending=[a for a in wanted if a not in stream_assets and time.time()-stream_retry.get(a,0)>60]
-        if pending and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
+        if pending and not any(a in stream_assets and a not in context_assets and time.time()-context_retry.get(a,0)>60 for a in wanted) and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
             asset=pending[0];stream_seed_at=time.time();stream_retry[asset]=time.time()
             try:
-                with stage('histórico inicial do streaming M1',8):bars=api.get_candles(asset,60,120,int(now))
+                with stage('histórico inicial do streaming M1',8):bars=api.get_candles(asset,60,200,int(now))
                 if not isinstance(bars,list):raise ValueError('Histórico indisponível')
-                api.api.real_time_candles_maxdict_table[asset][60]=150
+                api.api.real_time_candles_maxdict_table[asset][60]=200
                 for b in bars:api.api.real_time_candles[asset][60][b['from']]=dict(b)
                 # A função start_candles_stream bloqueia aguardando dados. Assinar diretamente
                 # mantém o receptor da biblioteca ativo sem bloquear a janela seguinte.
                 api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
+        # Native M5 subscription is independent; never aggregate M1 as a substitute.
+        pending5=[a for a in wanted if a in stream_assets and a not in context_assets and time.time()-context_retry.get(a,0)>60]
+        if pending5 and 8<=now%60<=35 and time.time()-stream_seed_at>=1:
+            asset=pending5[0];stream_seed_at=time.time();context_retry[asset]=time.time()
+            try:
+                with stage('histórico nativo M5 Multifiltros',8):history5=api.get_candles(asset,300,200,int(now))
+                if not isinstance(history5,list):raise ValueError('M5 indisponível')
+                api.api.real_time_candles_maxdict_table[asset][300]=200
+                for bar in history5:api.api.real_time_candles[asset][300][bar['from']]=dict(bar)
+                api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],300);context_assets.add(asset)
+            except (RuntimeError,ValueError,KeyError):errors.append(asset+': M5 nativo indisponível; Multifiltros sem entrada.')
         now=broker_now();items=[]
         for asset in wanted:
             if asset not in stream_assets:continue
@@ -118,7 +124,9 @@ def dispatch(c):
             current=int(now//60)*60
             if not any(b.get('from')==current for b in snapshot):continue
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
-            items.append({'asset':asset,'candles':closed})
+            context=list(api.api.real_time_candles[asset][300].copy().values()) if asset in context_assets else []
+            closed5=[dict(b) for b in context if b.get('from',now)%300==0 and b.get('from',now)+300<=now]
+            items.append({'asset':asset,'candles':closed,'candles5':closed5})
         return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
     if op=='candles':
         now=broker_now()
