@@ -3,6 +3,7 @@ Numerical thresholds are implementation proposals, not values from the PDF.
 Only completed OHLC bars are consumed; no volume/institutional-flow inference.
 """
 from statistics import median
+from candlestick_catalog import detect,PARAMS as CATALOG_PARAMS,SOURCE as CATALOG_SOURCE
 PARAMS={'force_body_ratio':.55,'force_relative_body':1.20,'force_close_location':.75,'doji_ratio':.10,'small_relative_body':.35,'rejection_wick_body':2.,'rejection_wick_ratio':.50,'recovery_body_ratio':.25,'recovery_close_location':.65,'weakening_ratio':.60,'exhaustion_relative_body':2.,'exhaustion_atr':3.,'gap_atr':.10}
 SOURCE={'title':'A PSICOLOGIA DOS CANDLES','pages':[1,2,3,4,5,6,7,8],'additional_materials':[{'title':'AULA 3 - PADRÕES DE VELAS','pages':[2,3,4,5],'use':'Identificação descritiva de doji, martelo, martelo invertido, enforcado e estrela cadente.'}],'scope':'Hipóteses experimentais baseadas no corpo, pavios e contexto; sem confirmação de volume.'}
 def shape(b):
@@ -12,7 +13,7 @@ def identify(a):
     """Name hypotheses using preceding price context, never future pivots.
     This is diagnostic only and cannot independently authorize an order.
     """
-    out={'candle_name':'Sem padrão definido','candle_zone':'indefinida','pattern_bias':0}
+    out={'candle_name':'Sem padrão definido','candle_zone':'indefinida','pattern_bias':0,'catalog_patterns':detect(a)}
     if len(a)<6 or any(y['t']-x['t']!=60 for x,y in zip(a[-6:],a[-5:])):return out
     b=a[-1];s=shape(b);prior=a[-5:-1];scale=median(x['h']-x['l'] for x in prior)
     approach=prior[-1]['c']-prior[0]['c']
@@ -31,7 +32,7 @@ def identify(a):
     return out
 
 def decision(a,direction):
-    out={'direction':0,'filters':{},'indicators':identify(a),'params':{**PARAMS,'pattern_identification':{'diagnostic_only':True,'max_body_ratio':.35,'min_wick_body':2.,'context_min_range':.25}},'source':SOURCE,'reason':'Aguardando primeiro sinal atual de reversão com fluxo.'}
+    out={'direction':0,'filters':{},'indicators':identify(a),'params':{**PARAMS,'visual_catalog':CATALOG_PARAMS,'pattern_identification':{'diagnostic_only':True,'max_body_ratio':.35,'min_wick_body':2.,'context_min_range':.25}},'source':{**SOURCE,'visual_catalog':CATALOG_SOURCE},'reason':'Aguardando primeiro sinal atual de reversão com fluxo.'}
     if direction not in (-1,1):return out
     if len(a)<30 or any(y['t']-x['t']!=60 for x,y in zip(a,a[1:])):out['reason']='Leitura de candles indisponível: dados incompletos.';return out
     b,p=a[-1],a[-2];s=shape(b);prior=a[-11:-1];typical=median(shape(x)['body'] for x in prior)
