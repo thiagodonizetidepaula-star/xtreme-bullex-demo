@@ -4,12 +4,12 @@ from mesa_history import TradeHistory,HistoryError
 
 class HistoryTests(unittest.TestCase):
     def setUp(self):
-        self.store=TradeHistory('https://example.supabase.co/functions/v1/mesa-history','test_'+'1'*50)
+        self.store=TradeHistory('https://example.supabase.co/functions/v1/pulse-history','test_'+'1'*50)
     def test_restore_prior_records(self):
         response=MagicMock();response.json.return_value={'trades':[{'status':'WIN','profit':1.6}]}
         with patch('mesa_history.requests.get',return_value=response) as getter:
             self.assertEqual(self.store.load()[0]['status'],'WIN')
-            self.assertEqual(getter.call_args.kwargs['headers']['x-mesa-secret'],self.store.token)
+            self.assertEqual(getter.call_args.kwargs['headers']['x-pulse-secret'],self.store.token)
     def test_same_event_key_is_idempotent(self):
         response=MagicMock();response.json.return_value={'ok':True}
         trade={'event_key':str(uuid.uuid4()),'status':'WIN','day':'2026-10-20'}
