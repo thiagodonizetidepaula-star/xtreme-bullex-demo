@@ -89,6 +89,27 @@ class ExecutorTests(unittest.TestCase):
         c['exec_trades']=[]
         with patch('execution.time.time',return_value=120.5):execution.loop(c,lambda c:False)
         self.assertEqual(c['exec_client'].calls,[]);self.assertEqual(c['exec_trades'][0]['status'],'IGNORADA')
+    def test_empty_selection_waits_without_sending_orders(self):
+        import execution,threading
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[]}
+        execution.init_execution(c,{})
+        c.update(exec_running=True,exec_selected=[])
+        with patch.object(c['exec_stop'],'wait',side_effect=lambda *_:c['exec_stop'].set()):execution.loop(c,lambda _:True)
+        self.assertIn('EM ESPERA',c['exec_message']);self.assertEqual(c['exec_trades'],[])
+    def test_start_accepts_waiting_mode_and_is_idempotent(self):
+        import execution,threading
+        os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only')
+        m=importlib.import_module('app')
+        c={'owner':'fixture','lock':threading.RLock(),'running':True,'connected':True,'events':[]}
+        execution.init_execution(c,{});c['exec_connected']=True;m.contexts['fixture']=c
+        client=m.app.test_client()
+        with client.session_transaction() as sess:sess['owner']='fixture';sess['csrf']='fixture'
+        with patch.object(m.threading,'Thread') as thread:
+            r=client.post('/api/executor/start',json={},headers={'X-CSRF-Token':'fixture'})
+            self.assertEqual(r.status_code,200);self.assertEqual(c['exec_selected'],[]);self.assertTrue(c['exec_running']);self.assertIn('Aguardando',c['exec_message']);thread.return_value.start.assert_called_once()
+            r=client.post('/api/executor/start',json={},headers={'X-CSRF-Token':'fixture'})
+            self.assertEqual(r.status_code,200);thread.return_value.start.assert_called_once()
+        m.contexts.pop('fixture',None)
     def test_config_rejects_nonfinite_and_excess_stake(self):
         import execution
         for d in ({'stake':float('nan')},{'stake':101},{'limit':1.2},{'stop_loss':1}):

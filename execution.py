@@ -34,14 +34,23 @@ def loop(c,save):
                 cfg=dict(c['exec_config'])
                 if not c['running'] or not c['connected']:c['exec_message']='Analisador parado/desconectado; executor pausado.';break
                 if c['exec_used']>=cfg['limit'] or c['exec_profit']-cfg['stake'] < -cfg['stop_loss'] or c['exec_profit']>=cfg['stop_win']:c['exec_message']='Limite desta execução atingido.';break
+                if not c['exec_selected']:
+                    selected=eligible(c['events'])
+                    if selected:
+                        c['exec_selected']=selected;c['exec_started']=time.time()
+                        c['exec_message']='Candidatas elegíveis selecionadas. Aguardando um sinal novo.'
+                    else:
+                        c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com 30 resultados e retorno teórico positivo. O analisador continua trabalhando.'
                 used={(t['asset'],t['t']) for t in c['exec_trades']}
                 candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=2 and (e['asset'],e['t']) not in used]
                 if candidates:
                     selected=next((e for pair in c['exec_selected'] for e in candidates if (e['key'],e['h'])==pair),None)
                     current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':cfg['stake'],'status':'ENVIANDO','created_at':time.time()}
                     c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
-                else:current=None;c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 2 segundos.'
-            if current is None:c['exec_stop'].wait(.1);continue
+                else:
+                    current=None
+                    if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 2 segundos.'
+            if current is None:c['exec_stop'].wait(.25 if c['exec_selected'] else 2);continue
             # Durable pre-send record: on ambiguity never retry automatically.
             if not save(c):
                 with c['lock']:current['status']='IGNORADA';c['exec_message']='Armazenamento indisponível; nenhuma ordem enviada.'
