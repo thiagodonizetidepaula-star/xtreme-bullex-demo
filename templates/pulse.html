@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#f7f9fc">
+<title>Xtreme Pulse • Trading PRACTICE</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#17233a;background:#f5f7fb;--ink:#152039;--muted:#7b879e;--line:#e1e7f1;--blue:#345cfa;--teal:#03aa96;--rose:#e84e70;--white:#fff}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.48;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #345cfa;outline-offset:2px}
+.layout{min-height:100vh;display:grid;grid-template-columns:226px 1fr}
+aside{background:#101a2c;color:#bdc8dc;padding:26px 15px;display:flex;flex-direction:column;gap:30px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:9px;font-weight:860;letter-spacing:-.05em;font-size:22px;color:#fff;padding:5px 8px}
+.brand-mark{width:34px;height:34px;border-radius:13px;background:linear-gradient(135deg,#4275ff,#59e3b7);display:grid;place-items:center;font-weight:900;color:#06102a}
+.brand small{color:#a7b5cb;font-size:9px;letter-spacing:.18em;display:block;font-weight:800;margin-top:2px}
+.nav{display:grid;gap:6px}.nav a,.nav button{border:0;background:transparent;color:#9eafc7;text-decoration:none;text-align:left;padding:12px;border-radius:10px;font-weight:670;font-size:13px}
+.nav .active{background:#253453;color:#fff}.nav a:hover,.nav button:hover{background:#22304a;color:#fff}
+.side-bottom{margin-top:auto;padding:14px;background:#202f4c;border-radius:13px;font-size:12px;line-height:1.5}.side-bottom strong{color:#9cf2d7}
+main{padding:25px clamp(14px,3vw,35px) 40px;max-width:1550px;width:100%;margin:auto;min-width:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin-bottom:24px}
+.crumb{color:#92a0b2;font-size:12px;font-weight:700}.top h1{font-size:clamp(25px,3vw,33px);letter-spacing:-.048em;margin:4px 0}.topRight{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:9px 12px;border-radius:999px;background:#e8ebf2;color:#4c5b71;font-size:12px;font-weight:750}
+.pill:before{content:"";width:8px;height:8px;border-radius:50%;background:#8d9bad}
+.pill.good{background:#e0f7ee;color:#087a66}.pill.good:before{background:#02b392}
+.pill.warn{background:#fff1d7;color:#9c6400}.pill.warn:before{background:#f3a400}
+.pill.bad{background:#ffe4ea;color:#bd304f}.pill.bad:before{background:#e84e70}
+.card{background:#fff;border:1px solid var(--line);border-radius:19px;box-shadow:0 10px 27px #1d346908}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:18px}
+.stack{display:grid;gap:18px}.cards4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:17px 0 20px}
+.metric{padding:17px}.metric .m-label{font-size:12px;color:#7b8aa1;font-weight:720}.metric strong{display:block;font-size:clamp(20px,2.6vw,28px);font-weight:800;letter-spacing:-.04em;margin:9px 0 3px}.metric small{font-size:11px;color:#96a2b4}
+.sectionHead{display:flex;justify-content:space-between;align-items:center;padding:19px 20px;border-bottom:1px solid #eef1f6;gap:12px}.sectionHead h2{font-size:16px;letter-spacing:-.03em;margin:0}.sectionHead span{font-size:11px;color:#8b9ab0}
+.heroChart{padding:16px 20px 20px}.pairTitle{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px}.pairTitle strong{font-size:19px;letter-spacing:-.04em}.ticker{font-size:11px;background:#f0f5ff;color:#325beb;border-radius:999px;padding:6px 9px;font-weight:800}canvas{width:100%;height:320px;display:block;border-radius:12px;background:#fbfcff;border:1px solid #e6ebf3}
+.hint{color:#8b97ab;font-size:12px;margin:12px 0 0;line-height:1.45}
+.signal{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:11px;background:#f5f8fc;border:1px solid #e7edf5;border-radius:13px;padding:12px;margin-bottom:16px}
+.signalSymbol{width:45px;height:45px;border-radius:13px;background:#dde9fa;color:#3155a0;display:grid;place-items:center;font-size:21px;font-weight:900}
+.signalSymbol.call{background:#daf7ed;color:#049b79}.signalSymbol.put{background:#ffe0e7;color:#d63560}
+.signal small{display:block;font-size:11px;color:#8190a6;margin-bottom:2px}.signal b{display:block;font-size:14px}
+.controls{padding:19px}.controls h2{font-size:16px;margin:0 0 15px}.field{display:grid;gap:6px;margin:12px 0}.field label{font-size:12px;font-weight:780;color:#65748b}.field input,.field select{height:43px;width:100%;border:1px solid #d8e2ed;border-radius:10px;background:#fff;padding:0 12px;color:#1f324b;font-size:14px}
+.fieldRow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary,.danger,.secondary{min-height:46px;border-radius:11px;font-weight:810;padding:12px 14px;border:0;font-size:13px;transition:filter .15s}
+.primary{background:#365df4;color:white}.danger{background:#fae4e9;color:#c43155}.secondary{background:#f0f4fa;color:#395074;border:1px solid #dae3ef}
+.primary:hover,.secondary:hover,.danger:hover{filter:brightness(.96)}
+.actions{display:flex;gap:8px;margin-top:14px}.actions>button{flex:1}
+.help{margin-top:13px;color:#8390a4;font-size:11px;line-height:1.6}
+.sheet{padding:18px}.sheet h2{margin:0 0 14px;font-size:16px}
+.log{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #edf1f6;font-size:12px}.log:last-child{border:0}.log strong{font-weight:750}.log small{color:#8392a8;font-size:11px}.tag{display:inline-block;font-size:10px;border-radius:999px;padding:6px 8px;font-weight:850;white-space:nowrap}
+.tag.win{background:#e0faee;color:#06966e}.tag.loss{background:#ffe7ec;color:#d04d66}.tag.wait{background:#f0f3fa;color:#7384a4}
+.markets{max-height:330px;overflow:auto}.market{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border-bottom:1px solid #edf1f6;padding:11px 0;font-size:13px}.market:last-child{border:0}
+.market b{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.market small{font-size:10px;color:#8390a4}.payout{font-size:12px;font-weight:900;color:#199f7f}
+#feedback{margin-top:13px;min-height:18px;color:#59718e;font-size:12px;line-height:1.5}#feedback.err{color:#c72e54}
+.accountRow{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:9px 0;color:#566880;font-size:12px}.accountRow b{color:#182841}
+.link{border:0;background:transparent;color:#365df4;font-weight:700;padding:4px 0;font-size:12px;text-align:left}
+.loginCover{position:fixed;inset:0;background:#101b32f2;z-index:30;display:flex;align-items:center;justify-content:center;padding:18px}
+.loginBox{max-width:410px;width:100%;border-radius:24px;padding:28px;background:#fff;box-shadow:0 20px 80px #0913297c}.loginBox h2{margin:10px 0;font-size:27px;letter-spacing:-.05em}.loginBox p{color:#75849a;font-size:13px;line-height:1.55}
+.loginBox input{width:100%;padding:14px;border:1px solid #ccd8e8;border-radius:12px;margin:10px 0}.loginBox button{width:100%;margin-top:7px}
+[hidden]{display:none!important}.empty{font-size:12px;color:#99a8ba;padding:6px 0}
+footer{padding:17px 2px;font-size:11px;color:#8b9aab;line-height:1.6}
+@media(max-width:1120px){.layout{grid-template-columns:74px 1fr}.brand{font-size:0;padding:0;justify-content:center}.brand-mark{font-size:22px}.brand small{display:none}.nav a,.nav button{font-size:0;text-align:center}.nav a:before,.nav button:before{content:"◌";font-size:20px}.nav .active:before{content:"◉"}.side-bottom{font-size:0}.side-bottom strong{font-size:11px}}
+@media(max-width:860px){.grid{grid-template-columns:1fr}.right{display:grid;grid-template-columns:1fr 1fr;gap:13px;align-items:start}.right>.card{margin:0}canvas{height:290px}.cards4{gap:9px}}
+@media(max-width:600px){.layout{display:block}aside{height:auto;position:static;padding:12px 15px;flex-direction:row;align-items:center;justify-content:space-between;gap:15px}.brand{font-size:17px}.brand small{display:block;font-size:8px}.nav{display:flex;gap:0}.nav a,.nav button{padding:9px}.side-bottom{display:none}main{padding:15px 11px 35px}.top{gap:8px;margin-bottom:15px}.top h1{font-size:23px}.topRight{width:100%;justify-content:space-between}.cards4{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:11px 0 15px}.metric{padding:14px}.grid{gap:12px}.right{display:grid;grid-template-columns:1fr}.sectionHead{padding:16px}.heroChart{padding:13px}canvas{height:240px}.fieldRow{gap:9px}footer{padding:14px 2px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside>
+<div class="brand"><span class="brand-mark">P</span><span>XTREME <span style="color:#82a9ff">PULSE</span><small>TRADING LAB</small></span></div>
+<nav class="nav" aria-label="Navegação"><a href="#dashboard" class="active">◉ &nbsp; Visão geral</a><a href="#mercados">▤ &nbsp; Mercados</a><a href="#historico">◷ &nbsp; Operações</a></nav>
+<div class="side-bottom"><strong>● Modo PRACTICE</strong><div style="margin-top:8px">Estratégia Xtreme Sniper + Tendência. Sem operações em conta REAL.</div></div>
+</aside>
+<main id="dashboard">
+<div class="top"><div><div class="crumb">PAINEL / AUTOMAÇÃO DEMO</div><h1>Trading Dashboard</h1></div><div class="topRight"><span id="connectionPill" class="pill">Desconectado</span><span id="botPill" class="pill warn">Bot desligado</span></div></div>
+<div class="cards4" aria-label="Resultados do dia">
+<div class="card metric"><span class="m-label">Banca virtual</span><strong id="balance">—</strong><small>Bullex PRACTICE</small></div>
+<div class="card metric"><span class="m-label">Vitórias</span><strong style="color:#04a680" id="wins">0</strong><small>WIN confirmado</small></div>
+<div class="card metric"><span class="m-label">Derrotas</span><strong style="color:#e85c7b" id="losses">0</strong><small>LOSS confirmado</small></div>
+<div class="card metric"><span class="m-label">Resultado do dia</span><strong id="profit">—</strong><small>Lucro/prejuízo virtual</small></div>
+</div>
+<div class="grid">
+<div class="stack">
+<section class="card"><div class="sectionHead"><h2>Gráfico de mercado <span class="tag wait">M1</span></h2><span id="chartFreshness">Aguardando dados</span></div>
+<div class="heroChart"><div class="pairTitle"><strong id="chartPair">—</strong><span class="ticker">Xtreme Sniper + Tendência</span></div><canvas id="chart" role="img" width="980" height="320" aria-label="Gráfico de velas M1"></canvas><p class="hint" id="chartNote">Conecte a PRACTICE e inicie o scanner para receber candles da corretora. Sem dados fictícios.</p></div></section>
+<section class="card sheet" id="mercados"><div class="sectionHead" style="padding:0 0 13px"><h2>Pares monitorados</h2><span id="marketCount">0 pares</span></div><div id="markets" class="markets"><div class="empty">Sem catálogo ainda.</div></div></section>
+<section class="card sheet" id="historico"><div class="sectionHead" style="padding:0 0 13px"><h2>Últimas operações</h2><span id="ordersCount">0 entradas</span></div><div id="orders"><div class="empty">Nenhuma operação registrada.</div></div></section>
+</div>
+<div class="stack right">
+<section class="card controls"><h2>Robô automático</h2>
+<div class="signal"><div class="signalSymbol" id="signalIcon">◎</div><div><small>Último sinal Xtreme</small><b id="signalLabel">Procurando oportunidades</b><small id="signalSubtitle">Aguardando velas fechadas</small></div></div>
+<div class="fieldRow">
+<div class="field"><label for="stake">Valor por entrada</label><input type="number" step="0.01" min="0.01" id="stake" value="2" inputmode="decimal"></div>
+<div class="field"><label for="payout">Payout mínimo</label><select id="payout"><option value="80">80%</option><option value="85">85%</option><option value="90">90%</option></select></div></div>
+<div class="fieldRow">
+<div class="field"><label for="stopWin">Stop WIN</label><input type="number" step="1" min="1" value="20" id="stopWin"></div>
+<div class="field"><label for="stopLoss">Stop LOSS</label><input type="number" step="1" min="1" value="10" id="stopLoss"></div></div>
+<div class="field"><label for="limit">Máximo de entradas no dia</label><select id="limit"><option value="3">3 operações</option><option value="5" selected>5 operações</option><option value="10">10 operações</option><option value="20">20 operações</option></select></div>
+<div class="actions"><button type="button" id="saveBtn" class="secondary">Salvar</button><button type="button" id="startBtn" class="primary">▶ Iniciar DEMO</button></div>
+<div class="actions"><button type="button" id="stopBtn" class="danger">■ Parar robô</button></div>
+<div class="help">Apenas uma operação por vez e expiração M1. O motor valida sinais, payout, saldo e limites antes da ordem. Nenhuma promessa de rentabilidade.</div>
+<div id="feedback" role="status" aria-live="polite"></div>
+</section>
+<section class="card controls"><h2>Minha conexão</h2><div class="accountRow"><span>Ambiente</span><b>PRACTICE</b></div><div class="accountRow"><span>Servidor</span><b id="serverStatus">Aguardando</b></div>
+<div class="field"><label for="email">E-mail da Bullex</label><input type="email" id="email" placeholder="conta da corretora" autocomplete="username"></div>
+<div class="field"><label for="password">Senha da Bullex</label><input type="password" id="password" placeholder="Senha" autocomplete="current-password"></div>
+<button id="connectBtn" class="primary" style="width:100%" type="button">Conectar PRACTICE</button><div class="help">Credenciais enviadas diretamente ao servidor; não são armazenadas no navegador.</div>
+<button id="reviewBtn" type="button" class="link" hidden>Confirmar revisão após verificar operações incertas</button>
+<button id="logoutBtn" type="button" class="link">Sair do painel</button>
+</section>
+<section class="card sheet"><h2 style="margin:0 0 12px">Monitor do sistema</h2><div id="statusMessage" class="hint" style="margin:0">Sem dados ainda.</div><div class="hint" style="margin-top:10px" id="storageMessage">Histórico permanente: verificando...</div></section>
+</div>
+</div>
+<footer>XTREME PULSE • Aplicativo independente, somente Bullex PRACTICE. Gráficos e resultados vêm do servidor da corretora, não são simulados. A execução automática exige histórico permanente configurado e verificado. Este é um projeto experimental de alto risco.</footer>
+</main>
+</div>
+<div id="loginCover" class="loginCover" hidden><form id="loginForm" class="loginBox">
+<div class="brand-mark" style="width:47px;height:47px;font-size:23px">P</div><h2>Entrar no Xtreme Pulse</h2>
+<p>Digite a chave de acesso do novo bot. O painel é separado da Mesa Trader antiga.</p>
+<input id="accessKey" type="password" required autocomplete="current-password" placeholder="Chave de acesso">
+<button class="primary">Entrar</button><p id="loginError" style="color:#dd4064"></p>
+</form></div>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),format=n=>Number.isFinite(Number(n))?Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+let csrf='',snapshot=null,busy=false,initialized=false;
+function msg(s,error=false){$('feedback').textContent=s;$('feedback').className=error?'err':'';}
+async function req(path,body){
+ const r=await fetch(path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:body===undefined?undefined:JSON.stringify(body),credentials:'same-origin',cache:'no-store'});
+ const data=await r.json().catch(()=>({error:'Resposta inválida do servidor'}));
+ if(r.status===401){$('loginCover').hidden=false;}
+ if(!r.ok)throw Error(data.error||'HTTP '+r.status);
+ return data;
+}
+async function poll(){
+ try{const s=await req('/api/state');csrf=s.csrf;snapshot=s;$('loginCover').hidden=true;draw(s);}
+ catch(e){if(!snapshot){$('loginCover').hidden=false;}else{$('serverStatus').textContent='Sem resposta';msg('Sem comunicação com o Render. Isso não prova que o bot parou: '+e.message,true);}}
+}
+function canStart(s){return !!(s.connected&&!s.running&&!s.uncertain&&s.history_ready!==false&&s.management?.can_trade);}
+function controls(s){
+ const running=!!s.running;
+ $('startBtn').disabled=busy||!canStart(s);
+ $('stopBtn').disabled=!running;
+ $('saveBtn').disabled=busy||running;
+ $('connectBtn').disabled=busy||running;
+ for(const id of ['stake','payout','stopWin','stopLoss','limit'])$(id).disabled=running||busy;
+ $('reviewBtn').hidden=!(s.uncertain||s.trades?.some(t=>t.status==='INCERTA'&&!t.reviewed));
+}
+function draw(s){
+ $('connectionPill').className='pill '+(s.connected?'good':'');
+ $('connectionPill').textContent=s.connected?'Bullex conectada':'Desconectado';
+ $('botPill').className='pill '+(s.running?'good':s.uncertain?'bad':'warn');
+ $('botPill').textContent=s.uncertain?'Revisão necessária':s.running?'Scanner ativo':'Bot desligado';
+ $('serverStatus').textContent=s.connected?'Online':'Offline';
+ $('balance').textContent=format(s.balance);
+ const m=s.management||{};
+ $('wins').textContent=m.wins||0;$('losses').textContent=m.losses||0;$('profit').textContent=format(m.profit||0);
+ $('profit').style.color=Number(m.profit||0)>=0?'#009e76':'#d94a6c';
+ $('statusMessage').textContent=s.message||'Aguardando conexão.';
+ $('storageMessage').textContent=s.history_ready?'Histórico permanente verificado':s.history_error||'Histórico não carregado: início automático bloqueado';
+ const last=s.last_signal||{},active=last.side==='call'?'CALL':last.side==='put'?'PUT':null;
+ $('signalLabel').textContent=active?(last.asset+' · '+active):'Procurando oportunidades';
+ $('signalSubtitle').textContent=active?('Última detecção · '+(last.status||'aguardando confirmação')):'Xtreme Sniper + Tendência M1';
+ $('signalIcon').className='signalSymbol'+(active==='CALL'?' call':active==='PUT'?' put':'');
+ $('signalIcon').textContent=active==='CALL'?'↗':active==='PUT'?'↘':'◎';
+ const assets=Array.isArray(s.scan_assets)?s.scan_assets:[];
+ $('marketCount').textContent=assets.length+' pares';
+ $('markets').replaceChildren();
+ for(const a of assets.slice(0,40)){
+  const div=document.createElement('div');div.className='market';
+  const left=document.createElement('div'),name=document.createElement('b'),sub=document.createElement('small'),right=document.createElement('div');
+  name.textContent=String(a.asset||'');sub.textContent=' · '+(Number(a.payout)||0)+'% payout';
+  right.className='payout';right.textContent='Monitorando';left.append(name,sub);div.append(left,right);$('markets').append(div);
+ }
+ if(!assets.length)$('markets').textContent='Sem pares ainda. Conecte a PRACTICE e inicie o scanner.';
+ const trades=Array.isArray(s.trades)?s.trades:[];
+ $('ordersCount').textContent=trades.length+' registros';
+ $('orders').replaceChildren();
+ for(const t of [...trades].reverse().slice(0,9)){
+  const row=document.createElement('div');row.className='log';
+  const left=document.createElement('div'),a=document.createElement('strong'),sub=document.createElement('small'),tag=document.createElement('span');
+  a.textContent=(t.asset||'—')+' · '+String(t.direction||'').toUpperCase();sub.textContent=' · '+(t.time||'');
+  left.append(a,sub);tag.className='tag '+(t.status==='WIN'?'win':t.status==='LOSS'?'loss':'wait');
+  tag.textContent=t.status||'—';row.append(left,tag);$('orders').append(row);
+ }
+ if(!trades.length)$('orders').textContent='Nenhuma operação confirmada.';
+ if(s.config&&!initialized){for(const [id,key] of [['stake','stake'],['payout','payout'],['stopWin','stop_win'],['stopLoss','stop_loss'],['limit','limit']]){
+   const el=$(id);el.value=String(s.config[key]);}initialized=true;}
+ const candles=Array.isArray(s.candles)?s.candles:[];
+ $('chartPair').textContent=s.analysis_asset||s.config?.asset||'Nenhum par selecionado';
+ drawCandles(candles);
+ controls(s);
+}
+function drawCandles(candles){
+ const clean=candles.filter(c=>['open','close','max','min'].every(k=>Number.isFinite(Number(c[k]))));
+ const canvas=$('chart'),dpr=window.devicePixelRatio||1,w=Math.max(300,canvas.clientWidth),h=canvas.clientHeight||320;
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ ctx.scale(dpr,dpr);ctx.fillStyle='#fbfcff';ctx.fillRect(0,0,w,h);
+ ctx.strokeStyle='#e9eef5';ctx.lineWidth=1;
+ for(let i=1;i<=4;i++){const y=h*i/5;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+ if(clean.length<3){ctx.fillStyle='#8290a6';ctx.font='14px system-ui';ctx.textAlign='center';ctx.fillText('Aguardando candles reais da PRACTICE',w/2,h/2);$('chartNote').textContent='Sem candles confirmados disponíveis. Nenhum preço fictício será exibido.';return;}
+ const bars=clean.slice(-48),low=Math.min(...bars.map(c=>Number(c.min))),high=Math.max(...bars.map(c=>Number(c.max))),rng=high-low||1,pad=rng*.07;
+ const y=v=>h-17-(Number(v)-low+pad)/(rng+2*pad)*(h-32),cw=w/bars.length;
+ bars.forEach((c,i)=>{
+  const x=cw*(i+.5),color=Number(c.close)>=Number(c.open)?'#0aae95':'#e25e7e';
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1.4;
+  ctx.beginPath();ctx.moveTo(x,y(c.max));ctx.lineTo(x,y(c.min));ctx.stroke();
+  ctx.fillRect(x-Math.max(2,cw*.27),Math.min(y(c.open),y(c.close)),Math.max(3,cw*.54),Math.max(1,Math.abs(y(c.open)-y(c.close))));
+ });
+ $('chartNote').textContent=bars.length+' candles M1 recebidos. Sinais somente após confirmação da vela fechada.';
+}
+function config(){const c={...(snapshot?.config||{})};
+ Object.assign(c,{strategy:'sniper',sniper_source:'hl2',
+  stake:Number($('stake').value),payout:Number($('payout').value),
+  stop_win:Number($('stopWin').value),stop_loss:Number($('stopLoss').value),
+  limit:Number($('limit').value),stop_win_enabled:true,stop_loss_enabled:true});
+ return c;
+}
+async function save(){
+ if(!snapshot)throw Error('Conecte-se ao painel primeiro.');
+ const result=await req('/api/config',config());
+ msg('Configuração salva com segurança: Xtreme Sniper + Tendência.');
+ return result;
+}
+async function action(work){
+ if(busy)return;busy=true;if(snapshot)controls(snapshot);
+ try{await work();}catch(e){msg(e.message,true);}finally{busy=false;await poll();}
+}
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();$('loginError').textContent='';
+ try{const result=await req('/api/access',{key:$('accessKey').value});csrf=result.csrf;$('accessKey').value='';await poll();}
+ catch(e){$('loginError').textContent=e.message;}
+});
+$('saveBtn').addEventListener('click',()=>action(save));
+$('startBtn').addEventListener('click',()=>action(async()=>{
+ await save();await req('/api/start',{});msg('Robô PRACTICE iniciado. Aguardando sinal confirmado.');
+}));
+$('stopBtn').addEventListener('click',async()=>{
+ $('stopBtn').disabled=true;msg('Enviando PARAR...');
+ try{await req('/api/stop',{});msg('Parada solicitada; qualquer ordem já enviada será acompanhada até o resultado.');}
+ catch(e){msg('Não foi possível confirmar a parada: '+e.message,true);}
+ await poll();
+});
+$('connectBtn').addEventListener('click',()=>action(async()=>{
+ const email=$('email').value.trim(),password=$('password').value;
+ if(!email||!password)throw Error('Informe seu e-mail e senha da Bullex.');
+ await req('/api/connect',{email,password});$('password').value='';msg('Bullex PRACTICE conectada.');
+}));
+$('reviewBtn').addEventListener('click',()=>action(async()=>{
+ if(!confirm('Você já conferiu todas as ordens incertas diretamente na Bullex PRACTICE?'))return;
+ await req('/api/review',{confirmed:true});msg('Revisão registrada no histórico.');
+}));
+$('logoutBtn').addEventListener('click',()=>action(async()=>{
+ if(!confirm('Encerrar a sessão deste painel?'))return;
+ await req('/api/logout',{});snapshot=null;$('loginCover').hidden=false;
+}));
+poll();setInterval(poll,3000);
+})();
+</script>
+</body>
+</html>
