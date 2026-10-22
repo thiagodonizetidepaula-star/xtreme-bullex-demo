@@ -3,7 +3,7 @@ from engine import ranking,ACTIVE,NAMES,EXECUTABLE
 MAX_ENTRY_DELAY=5
 DEFAULT={'stake':2.,'limit':10,'min_payout':80.,'stop_loss':10.,'stop_win':20.,'expiry':1,'mg_levels':1,'mg_multiplier':2.}
 def init_execution(c,stored):
-    c.update(exec_client=None,exec_connected=False,exec_running=False,exec_stop=threading.Event(),exec_thread=None,exec_message='Executor demo desconectado.',exec_trades=stored.get('exec_trades',[]),exec_config={**DEFAULT,'mg_enabled':False},exec_used=0,exec_profit=0.,exec_started=0,exec_mg={})
+    c.update(exec_client=None,exec_connected=False,exec_running=False,exec_stop=threading.Event(),exec_thread=None,exec_message='Executor demo desconectado.',exec_trades=stored.get('exec_trades',[]),exec_config={**DEFAULT,'mg_enabled':False,'strategy':'all'},exec_used=0,exec_profit=0.,exec_started=0,exec_mg={})
     c['exec_research']=stored.get('exec_research',{})
     for t in c['exec_trades']:
         if t['status'] in ('ENVIANDO','ABERTA'):t['status']='INCERTA'
@@ -19,11 +19,13 @@ def config(data):
     if out['expiry'] not in (1,2,3,5):raise ValueError('Escolha expiração de 1, 2, 3 ou 5 minutos.')
     out['expiry']=int(out['expiry'])
     enabled=data.get('mg_enabled',False)
-    if enabled and (not EXECUTABLE or 'sniper' in EXECUTABLE or 'multifilter_v1' in EXECUTABLE):raise ValueError('Martingale desativado na Multifiltros.')
+    if enabled and (not EXECUTABLE or 'sniper' in EXECUTABLE or 'multifilter_v1' in EXECUTABLE):raise ValueError('Martingale desativado nesta versão.')
     if not isinstance(enabled,bool):raise ValueError('Ativação do martingale inválida.')
     if int(out['mg_levels'])!=out['mg_levels'] or not 1<=out['mg_levels']<=3 or not 1<out['mg_multiplier']<=3:raise ValueError('Martingale: 1 a 3 níveis e multiplicador maior que 1 até 3.')
     if enabled and round(out['stake']*out['mg_multiplier']**int(out['mg_levels']),2)>100:raise ValueError('O maior gale ultrapassa 100 na moeda da demo. Reduza valor, níveis ou multiplicador.')
-    out.update(mg_enabled=enabled,mg_levels=int(out['mg_levels']),limit=int(out['limit']));return out
+    strategy=data.get('strategy','all')
+    if strategy!='all' and strategy not in EXECUTABLE:raise ValueError('Estratégia de execução inválida.')
+    out.update(strategy=strategy,mg_enabled=enabled,mg_levels=int(out['mg_levels']),limit=int(out['limit']));return out
 
 def bet_for(c,key,h):
     # Fresh strategy signals always start a new base order; gales are chained separately.
@@ -37,12 +39,12 @@ def gale_after(c,t):
     level+=1
     return {'event':f"gale:{t['broker_id']}:{level}:{expiration}",'asset':t['asset'],'t':expiration-60,'key':t['key'],'name':t['name'],'h':t['h'],'direction':t['direction'],'stake':round(cfg['stake']*cfg['mg_multiplier']**level,2),'mg_level':level,'mg_multiplier':cfg['mg_multiplier'],'parent_broker_id':t['broker_id'],'root_event':t.get('root_event',t['event']),'status':'ENVIANDO','signal_closed_at':t.get('signal_closed_at',t['t']+60),'entry_at':expiration,'rule_version':t.get('rule_version',1),'created_at':time.time()}
 
-def eligible(events,expiry=None):
+def eligible(events,expiry=None,strategy='all'):
     # User threshold: >=50% of completed observations, no minimum sample size.
     # Compare integer counts so rounding cannot promote 49.96% to 50%.
-    rs=[r for r in ranking(events) if (expiry is None or r['h']==expiry) and r['name'] in {NAMES[k] for k in EXECUTABLE} and r['n']>0 and r['wins']*100>=50*r['n']]
+    rs=[r for r in ranking(events) if (expiry is None or r['h']==expiry) and r['name'] in {NAMES[k] for k in EXECUTABLE if strategy=='all' or k==strategy} and r['n']>0 and r['wins']*100>=50*r['n']]
     # Prefer the corrected Xtreme when it qualifies, preserving the user's 50% floor.
-    rs.sort(key=lambda r:r['name']!=NAMES['sniper_first_v2'])
+    rs.sort(key=lambda r:0 if r['name']==NAMES['thiago_v1'] else 1 if r['name']==NAMES['sniper_first_v2'] else 2)
     chosen=[]
     for r in rs[:3]:
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
@@ -106,7 +108,7 @@ def loop(c,save,checkpoint=None):
                         elif c['exec_profit']-current['stake'] < -cfg['stop_loss']:
                             c['exec_message']='Próximo gale ultrapassaria o stop loss. Execução encerrada.';break
                 else:
-                    selected=eligible(c['events'],cfg['expiry'] if 'sniper' in EXECUTABLE else None)
+                    selected=eligible(c['events'],cfg['expiry'] if 'sniper' in EXECUTABLE else None,cfg.get('strategy','all'))
                     if selected!=c['exec_selected']:
                         if not c['exec_selected'] and selected:c['exec_started']=time.time()
                         c['exec_selected']=selected
@@ -118,7 +120,7 @@ def loop(c,save,checkpoint=None):
                         stake,mg_level=cfg['stake'],0
                         if c['exec_profit']-stake < -cfg['stop_loss']:
                             c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
-                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'created_at':time.time()}
+                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'levels':selected.get('levels',[]),'params':selected.get('params',{}),'created_at':time.time()}
                     else:
                         current=None
                         if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 5 segundos.'

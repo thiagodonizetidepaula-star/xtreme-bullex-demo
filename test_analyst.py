@@ -11,9 +11,9 @@ class LegacyStrategyFixture(unittest.TestCase):
 class RetiredStrategiesTests(unittest.TestCase):
     def test_no_production_strategies_or_candidates(self):
         import engine,execution
-        self.assertEqual(set(engine.ACTIVE),{'sniper','sniper_first_v2','multifilter_v1'});self.assertEqual(execution.EXECUTABLE,{'sniper','sniper_first_v2'})
+        self.assertEqual(set(engine.ACTIVE),{'sniper','sniper_first_v2','thiago_v1','multifilter_v1'});self.assertEqual(execution.EXECUTABLE,{'sniper','sniper_first_v2','thiago_v1'})
         self.assertEqual(execution.eligible([{'key':'wick','h':3,'result':'Acerto','payout':85}]*100),[])
-        self.assertEqual(len(engine.ranking([])),12)
+        self.assertEqual(len(engine.ranking([])),16)
     def test_no_new_signals_history_settles_without_deletion(self):
         state={'events':[],'last':{'TEST':1740}}
         bars=[{'from':i*60,'open':100.,'close':101.,'max':102.,'min':99.} for i in range(32)]
@@ -386,4 +386,5 @@ class ExecutorTests(LegacyStrategyFixture):
 
 from test_multifilter import MultifilterTests,PaperApiTests
 from test_mf_live import LiveTests
+from test_thiago import ThiagoTests
 if __name__=='__main__':unittest.main()
