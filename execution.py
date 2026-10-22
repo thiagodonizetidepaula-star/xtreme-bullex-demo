@@ -4,8 +4,10 @@ MAX_ENTRY_DELAY=5
 DEFAULT={'stake':2.,'limit':10,'min_payout':80.,'stop_loss':10.,'stop_win':20.}
 def init_execution(c,stored):
     c.update(exec_client=None,exec_connected=False,exec_running=False,exec_stop=threading.Event(),exec_thread=None,exec_message='Executor demo desconectado.',exec_trades=stored.get('exec_trades',[]),exec_config=dict(DEFAULT),exec_used=0,exec_profit=0.,exec_started=0)
+    c['exec_research']=stored.get('exec_research',{})
     for t in c['exec_trades']:
         if t['status'] in ('ENVIANDO','ABERTA'):t['status']='INCERTA'
+        record_outcome(c,t)
 
 def config(data):
     out={}
@@ -31,8 +33,26 @@ def scoreboard(trades):
     done=[t for t in trades if t.get('status') in ('WIN','LOSS','EMPATE')]
     return {'wins':sum(t['status']=='WIN' for t in done),'losses':sum(t['status']=='LOSS' for t in done),'ties':sum(t['status']=='EMPATE' for t in done),'profit':round(sum(t.get('profit',0) for t in done),2),'settled':len(done)}
 
+def record_outcome(c,t):
+    # Count only final broker-confirmed orders once, never theoretical observations.
+    if t.get('research_counted') or t.get('status') not in ('WIN','LOSS','EMPATE') or not t.get('broker_id') or not t.get('key') or t.get('h') not in (1,2,3,5):return
+    version=t.get('rule_version',2 if t['key']=='sniper_first_v2' else 1)
+    identity=f"{t['key']}:{t['h']}:{version}"
+    row=c.setdefault('exec_research',{}).setdefault(identity,{'id':identity,'key':t['key'],'name':t.get('name',NAMES.get(t['key'],t['key'])),'h':t['h'],'version':version,'wins':0,'losses':0,'ties':0,'profit':0.,'promoted_at':None})
+    field={'WIN':'wins','LOSS':'losses','EMPATE':'ties'}[t['status']]
+    row[field]+=1;row['profit']=round(row['profit']+t.get('profit',0),8)
+    if row['wins']>=5 and row['promoted_at'] is None:row['promoted_at']=t.get('finished_at',t.get('created_at',time.time()))
+    row['updated_at']=t.get('finished_at',t.get('created_at',time.time()));t['research_counted']=True
+
+def research_snapshot(c):
+    rows=[]
+    for row in c.get('exec_research',{}).values():
+        n=row['wins']+row['losses']+row['ties']
+        rows.append({**row,'profit':round(row['profit'],2),'settled':n,'rate':round(100*row['wins']/n,1) if n else None,'remaining':max(0,5-row['wins']),'promoted':row['wins']>=5})
+    return sorted(rows,key=lambda r:(r['promoted'],r['profit'],r['wins']),reverse=True)
+
 def snapshot(c):
-    return {'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
+    return {'research':research_snapshot(c),'scoreboard':scoreboard(c['exec_trades']),'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
@@ -85,6 +105,7 @@ def loop(c,save,checkpoint=None):
             checkpoint(c,current)
             result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'])
             with c['lock']:current.update(status=result['status'],profit=result['profit'],finished_at=time.time());c['exec_profit']+=result['profit'];c['exec_message']='Resultado confirmado pela corretora: '+result['status']
+            with c['lock']:record_outcome(c,current)
             while not save(c):
                 with c['lock']:c['exec_message']='Resultado '+result['status']+' confirmado. Aguardando salvar para retomar a busca; nenhuma nova ordem será enviada.'
                 if c['exec_stop'].wait(5):return

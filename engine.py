@@ -4,8 +4,8 @@ from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
 NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper · HL2','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme · Primeiro Sniper + Tendência v2','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
 ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
-# Raw Sniper and the three new hypotheses are analysis-only.
-EXECUTABLE={'wick','cross','engulf','sniper_first_v2'}
+# Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
+EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)

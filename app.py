@@ -37,7 +37,7 @@ class Client:
 
 def save(c):
     with c['persist_lock']:
-        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[]),'xtreme_regimes':c.get('xtreme_regimes',{})}))
+        with c['lock']:payload=json.loads(json.dumps({'events':c['events'],'last':c['last'],'exec_trades':c.get('exec_trades',[]),'xtreme_regimes':c.get('xtreme_regimes',{}),'exec_research':c.get('exec_research',{})}))
         try:
             db('write',c['owner'],payload)
             with c['lock']:c['saved_at']=time.time();c['storage']='Supabase sincronizado'

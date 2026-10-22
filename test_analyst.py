@@ -50,12 +50,15 @@ class StrategyRevisionTests(unittest.TestCase):
         from engine import first_sniper_directions
         with patch('engine.xtreme_trend_series',return_value=([0,1,1,1,-1,-1],[0]*6)),patch('engine.sniper_buffers',return_value=([-1,1,-1,1,1,-1],[0]*6)):
             self.assertEqual(first_sniper_directions([{}]*6),[0,1,0,0,0,-1])
-    def test_raw_sniper_and_analysis_only_hypotheses_never_execute(self):
+    def test_raw_sniper_never_executes_new_candidates_qualify_at_fifty(self):
         import execution
-        events=[{'key':key,'h':1,'result':'Acerto','payout':85} for key in ['sniper','sniper_trend','ema_pullback','rsi_bands','channel_break'] for _ in range(100)]
+        events=[{'key':key,'h':1,'result':'Acerto','payout':85} for key in ['sniper','sniper_trend'] for _ in range(100)]
         self.assertEqual(execution.eligible(events),[])
-        events.append({'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85})
-        self.assertEqual(execution.eligible(events),[('sniper_first_v2',1)])
+        for key in ['ema_pullback','rsi_bands','channel_break']:
+            sample=[{'key':key,'h':1,'result':r,'payout':85} for r in ['Acerto','Erro']]
+            self.assertIn((key,1),execution.eligible(sample))
+            sample.append({'key':key,'h':1,'result':'Erro','payout':85})
+            self.assertNotIn((key,1),execution.eligible(sample))
     def test_new_rules_buy_sell_and_gap_guard(self):
         cases=[('ema_pullback',[100+i*.1 for i in range(100)]),('rsi_bands',[100.]*98+[80.,100.]),('channel_break',[100.]*99+[110.])]
         for key,values in cases:
@@ -102,6 +105,45 @@ class StrategyRevisionTests(unittest.TestCase):
         rows=ranking([{'key':'sniper_trend','h':1,'result':'Acerto','payout':85}])
         self.assertEqual(next(r for r in rows if r['name']==NAMES['sniper_first_v2'] and r['h']==1)['n'],0)
         self.assertTrue(any(r['name']==NAMES['sniper_trend'] and r['n']==1 for r in ranking([{'key':'sniper_trend','h':1,'result':'Acerto','payout':85}],archive=True)))
+
+class ResearchTests(unittest.TestCase):
+    def trade(self,status='WIN',h=1,version=2,key='sniper_first_v2',broker_id=123):
+        return {'key':key,'name':'Xtreme v2','h':h,'rule_version':version,'broker_id':broker_id,'status':status,'profit':1.7 if status=='WIN' else -2 if status=='LOSS' else 0,'finished_at':1000.}
+    def test_fifth_accumulated_win_promotes_with_losses_visible(self):
+        import execution
+        c={}
+        for i in range(4):execution.record_outcome(c,self.trade(broker_id=i+1))
+        execution.record_outcome(c,self.trade('LOSS',broker_id=10))
+        row=execution.research_snapshot(c)[0];self.assertFalse(row['promoted']);self.assertEqual(row['remaining'],1)
+        execution.record_outcome(c,self.trade(broker_id=11))
+        row=execution.research_snapshot(c)[0];self.assertTrue(row['promoted']);self.assertEqual(row['wins'],5);self.assertEqual(row['losses'],1);self.assertEqual(row['profit'],6.5)
+    def test_pending_uncertain_ignored_unconfirmed_do_not_count(self):
+        import execution
+        c={}
+        for status in ['Aberto','ABERTA','ENVIANDO','INCERTA','IGNORADA','REVISADA']:execution.record_outcome(c,self.trade(status))
+        execution.record_outcome(c,self.trade(broker_id=None))
+        self.assertEqual(execution.research_snapshot(c),[])
+    def test_versions_expiries_and_rules_never_pool_wins(self):
+        import execution
+        c={}
+        for i in range(4):execution.record_outcome(c,self.trade(broker_id=i+1))
+        for kwargs in [{'h':2},{'version':3},{'key':'ema_pullback'}]:execution.record_outcome(c,self.trade(**kwargs))
+        self.assertEqual(len(execution.research_snapshot(c)),4);self.assertFalse(any(r['promoted'] for r in execution.research_snapshot(c)))
+    def test_once_only_persistence_and_rotation(self):
+        import execution,json
+        c={};t=self.trade();execution.record_outcome(c,t);execution.record_outcome(c,t)
+        self.assertEqual(execution.research_snapshot(c)[0]['wins'],1)
+        stored=json.loads(json.dumps({'exec_trades':[t],'exec_research':c['exec_research']}))
+        restored={};execution.init_execution(restored,stored)
+        self.assertEqual(execution.research_snapshot(restored)[0]['wins'],1)
+        stored['exec_trades']=[];execution.init_execution(restored,stored)
+        self.assertEqual(execution.research_snapshot(restored)[0]['wins'],1)
+    def test_historical_backfill_and_later_losses_remain_visible(self):
+        import execution
+        c={};stored={'exec_trades':[self.trade(broker_id=i+1) for i in range(5)]}
+        execution.init_execution(c,stored)
+        for i in range(10):execution.record_outcome(c,self.trade('LOSS',broker_id=i+10))
+        row=execution.research_snapshot(c)[0];self.assertTrue(row['promoted']);self.assertEqual(row['losses'],10);self.assertLess(row['profit'],0)
 
 class ApiTests(unittest.TestCase):
     @classmethod
