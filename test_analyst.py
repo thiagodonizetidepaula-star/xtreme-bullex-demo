@@ -151,48 +151,61 @@ class MartingaleTests(unittest.TestCase):
         c={};execution.init_execution(c,{})
         c['exec_config']=execution.config({'mg_enabled':True,'mg_levels':2,'mg_multiplier':2,'stop_loss':30})
         return c
-    def test_loss_win_tie_limit_and_separate_pairs(self):
+    def test_gale_keeps_asset_direction_expiry_and_next_candle(self):
         import execution
-        c=self.context()
-        def outcome(status,level):execution.advance_mg(c,{'key':'wick','h':3,'mg_level':level,'status':status})
-        self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
-        outcome('LOSS',0);self.assertEqual(execution.bet_for(c,'wick',3),(4,1));self.assertEqual(execution.bet_for(c,'wick',1),(2,0))
-        outcome('EMPATE',1);self.assertEqual(execution.bet_for(c,'wick',3),(4,1))
-        outcome('IGNORADA',1);self.assertEqual(execution.bet_for(c,'wick',3),(4,1))
-        outcome('LOSS',1);self.assertEqual(execution.bet_for(c,'wick',3),(8,2))
-        outcome('LOSS',2);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
-        outcome('LOSS',0);outcome('WIN',1);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
-        c['exec_config']['mg_enabled']=False;outcome('LOSS',0);self.assertEqual(execution.bet_for(c,'wick',3),(2,0))
+        c=self.context();t={'status':'LOSS','mg_level':0,'expiration':300,'broker_id':123,'event':'root','asset':'TEST','t':60,'key':'wick','name':'Test','h':3,'direction':'put','rule_version':2}
+        next_order=execution.gale_after(c,t)
+        self.assertEqual((next_order['asset'],next_order['direction'],next_order['h'],next_order['stake'],next_order['mg_level']),('TEST','put',3,4,1))
+        self.assertEqual(next_order['entry_at'],300);self.assertEqual(next_order['t'],240);self.assertEqual(next_order['parent_broker_id'],123)
+        for status in ['WIN','EMPATE','IGNORADA','INCERTA','ABERTA']:
+            self.assertIsNone(execution.gale_after(c,{**t,'status':status}))
+        self.assertIsNone(execution.gale_after(c,{**t,'mg_level':2}))
+        c['exec_config']['mg_enabled']=False;self.assertIsNone(execution.gale_after(c,t))
     def test_malformed_or_excessive_martingale_rejected(self):
         import execution
         for data in [{'mg_enabled':'yes'},{'mg_levels':0},{'mg_levels':4},{'mg_levels':1.5},{'mg_multiplier':1},{'mg_multiplier':float('nan')},{'mg_enabled':True,'stake':60,'stop_loss':100}]:
             with self.assertRaises(ValueError):execution.config(data)
         self.assertFalse(execution.config({})['mg_enabled'])
-    def test_loop_uses_gale_only_on_new_signal_and_resets_after_win(self):
+    def run_sequence(self,delay=.5,stop_loss=30,stop_after_loss=False):
         import execution,threading
         clock=[120.5]
-        def event(t):return {'id':str(t),'asset':'TEST','t':t,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'}
-        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[event(60),{'key':'wick','h':3,'result':'Acerto','payout':80}]}
+        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[{'id':'root','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':-1,'result':'Aberto'},{'key':'wick','h':3,'result':'Acerto','payout':80}]}
         execution.init_execution(c,{})
-        c['exec_config']=execution.config({'mg_enabled':True,'stop_loss':30})
+        c['exec_config']=execution.config({'mg_enabled':True,'stop_loss':stop_loss})
         class Broker:
-            stakes=[]
+            orders=[]
             def call(self,op,**kw):
-                if op=='demo_order':self.stakes.append(kw['stake']);return {'sent':True,'id':len(self.stakes),'payout':85,'expiration':clock[0]+180}
-                n=len(self.stakes)
-                if n==3:c['exec_stop'].set()
-                else:clock[0]+=240;c['events'].append(event(int(clock[0])-60))
-                return {'status':'WIN' if n==2 else 'LOSS','profit':3.4 if n==2 else -2}
+                if op=='demo_order':
+                    self.orders.append(kw);return {'sent':True,'id':len(self.orders),'payout':85,'expiration':kw['candle']+60+kw['h']*60}
+                n=len(self.orders);clock[0]=kw['expiration']+delay
+                if n>1 or stop_after_loss:c['exec_stop'].set()
+                return {'status':'WIN' if n>1 else 'LOSS','profit':3.4 if n>1 else -2}
         c.update(exec_client=Broker(),exec_selected=[('wick',3)],exec_started=120,exec_running=True)
-        with patch('execution.time.time',side_effect=lambda:clock[0]):execution.loop(c,lambda _:True,lambda *_:True)
-        self.assertEqual(c['exec_client'].stakes,[2,4,2]);self.assertEqual([t['mg_level'] for t in c['exec_trades']],[0,1,0])
+        with patch('execution.time.time',side_effect=lambda:clock[0]),patch.object(c['exec_stop'],'wait',side_effect=lambda *_:c['exec_stop'].set()):execution.loop(c,lambda _:True,lambda *_:True)
+        return c
+    def test_next_candle_gale_without_new_signal(self):
+        c=self.run_sequence();orders=c['exec_client'].orders
+        self.assertEqual([o['stake'] for o in orders],[2,4]);self.assertEqual([o['candle'] for o in orders],[60,240])
+        self.assertTrue(all(o['asset']=='TEST' and o['direction']=='put' and o['h']==3 for o in orders))
+        self.assertEqual(c['exec_trades'][1]['parent_broker_id'],1)
+    def test_late_result_never_shifts_gale_to_another_candle(self):
+        c=self.run_sequence(delay=5.1)
+        self.assertEqual(len(c['exec_client'].orders),1)
+        self.assertEqual(c['exec_trades'][-1]['status'],'IGNORADA');self.assertIn('Gale cancelado',c['exec_trades'][-1]['reason'])
     def test_next_gale_cannot_exceed_remaining_stop_loss(self):
-        import execution,threading
-        c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[{'id':'fresh','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'},{'key':'wick','h':3,'result':'Acerto','payout':80}]}
-        execution.init_execution(c,{})
-        c.update(exec_config=execution.config({'mg_enabled':True,'stop_loss':5}),exec_mg={'wick:3':1},exec_profit=-2,exec_selected=[('wick',3)],exec_started=120)
-        with patch('execution.time.time',return_value=120.5):execution.loop(c,lambda _:True,lambda *_:True)
-        self.assertEqual(c['exec_trades'],[]);self.assertIn('gale ultrapassaria',c['exec_message'])
+        c=self.run_sequence(stop_loss=5)
+        self.assertEqual(len(c['exec_client'].orders),1);self.assertIn('gale ultrapassaria',c['exec_message'])
+    def test_broker_refreshes_before_expiry_then_reads_confirmed_result(self):
+        import types,runpy,contextlib
+        calls=[]
+        api=types.SimpleNamespace(get_balance=lambda:(calls.append('balance') or 100.),check_win_v4=lambda _:(calls.append('result') or ('loose',-2.)))
+        fake=types.SimpleNamespace(api=api,demo=lambda:None,market=lambda **_:(calls.append('market')),stage=lambda *_:contextlib.nullcontext())
+        with patch.dict('sys.modules',{'worker':fake}):module=runpy.run_path('executor_worker.py')
+        with patch('time.time',return_value=174.):r=module['dispatch']({'op':'demo_result','h':1,'id':123,'expiration':180,'prepare_gale':True})
+        self.assertEqual(calls,['market','balance','result']);self.assertEqual(r['status'],'LOSS')
+    def test_stop_after_loss_cancels_next_candle_gale(self):
+        c=self.run_sequence(stop_after_loss=True)
+        self.assertEqual(len(c['exec_client'].orders),1)
 
 class ApiTests(unittest.TestCase):
     @classmethod

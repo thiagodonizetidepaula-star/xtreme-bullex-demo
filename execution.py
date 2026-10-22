@@ -23,15 +23,16 @@ def config(data):
     out.update(mg_enabled=enabled,mg_levels=int(out['mg_levels']),limit=int(out['limit']));return out
 
 def bet_for(c,key,h):
-    cfg=c['exec_config'];level=c.get('exec_mg',{}).get(f'{key}:{h}',0) if cfg.get('mg_enabled') else 0
-    return round(cfg['stake']*cfg.get('mg_multiplier',2.)**level,2),level
+    # Fresh strategy signals always start a new base order; gales are chained separately.
+    return c['exec_config']['stake'],0
 
-def advance_mg(c,t):
-    if not c['exec_config'].get('mg_enabled') or t.get('status') not in ('WIN','LOSS','EMPATE'):return
-    identity=f"{t['key']}:{t['h']}";level=t.get('mg_level',0)
-    if t['status']=='WIN':level=0
-    elif t['status']=='LOSS':level=level+1 if level<c['exec_config']['mg_levels'] else 0
-    c.setdefault('exec_mg',{})[identity]=level
+def gale_after(c,t):
+    cfg=c['exec_config'];level=t.get('mg_level',0)
+    if not cfg.get('mg_enabled') or t.get('status')!='LOSS' or level>=cfg['mg_levels']:return None
+    expiration=t.get('expiration')
+    if not isinstance(expiration,int) or expiration%60:return None
+    level+=1
+    return {'event':f"gale:{t['broker_id']}:{level}:{expiration}",'asset':t['asset'],'t':expiration-60,'key':t['key'],'name':t['name'],'h':t['h'],'direction':t['direction'],'stake':round(cfg['stake']*cfg['mg_multiplier']**level,2),'mg_level':level,'mg_multiplier':cfg['mg_multiplier'],'parent_broker_id':t['broker_id'],'root_event':t.get('root_event',t['event']),'status':'ENVIANDO','signal_closed_at':t.get('signal_closed_at',t['t']+60),'entry_at':expiration,'rule_version':t.get('rule_version',1),'created_at':time.time()}
 
 def eligible(events):
     # User threshold: >=50% of completed observations, no minimum sample size.
@@ -71,7 +72,7 @@ def snapshot(c):
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
-    current=None;prepared_at=0
+    current=None;prepared_at=0;pending_gale=None
     try:
         while not c['exec_stop'].is_set():
             # Prepare away from the entry window; this independent process does no order here.
@@ -87,23 +88,38 @@ def loop(c,save,checkpoint=None):
                 if c['exec_used']>=cfg['limit']:c['exec_message']='Máximo de ordens atingido. Ajuste o limite e inicie uma nova execução.';break
                 if c['exec_profit']-cfg['stake'] < -cfg['stop_loss']:c['exec_message']='Stop loss atingido: saldo insuficiente no limite para a próxima entrada.';break
                 if c['exec_profit']>=cfg['stop_win']:c['exec_message']='Stop win atingido. Inicie uma nova execução para continuar o teste.';break
-                selected=eligible(c['events'])
-                if selected!=c['exec_selected']:
-                    if not c['exec_selected'] and selected:c['exec_started']=time.time()
-                    c['exec_selected']=selected
-                if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 50% de acerto nos resultados concluídos.'
-                used={(t['asset'],t['t']) for t in c['exec_trades']}
-                candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
-                if candidates:
-                    selected=next((e for pair in c['exec_selected'] for e in candidates if (e['key'],e['h'])==pair),None)
-                    stake,mg_level=bet_for(c,selected['key'],selected['h'])
-                    if c['exec_profit']-stake < -cfg['stop_loss']:
-                        c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
-                    current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'created_at':time.time()}
-                    c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
+                if pending_gale is not None:
+                    current=pending_gale
+                    delay=time.time()-current['entry_at']
+                    if delay<0:
+                        current=None
+                    else:
+                        pending_gale=None
+                        if delay>MAX_ENTRY_DELAY:
+                            current.update(status='IGNORADA',reason='Gale cancelado: resultado ou gravação chegou após a janela da próxima vela.')
+                            c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
+                            c['exec_message']=current['reason'];current=None
+                        elif c['exec_profit']-current['stake'] < -cfg['stop_loss']:
+                            c['exec_message']='Próximo gale ultrapassaria o stop loss. Execução encerrada.';break
                 else:
-                    current=None
-                    if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 5 segundos.'
+                    selected=eligible(c['events'])
+                    if selected!=c['exec_selected']:
+                        if not c['exec_selected'] and selected:c['exec_started']=time.time()
+                        c['exec_selected']=selected
+                    if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 50% de acerto nos resultados concluídos.'
+                    used={(t['asset'],t['t']) for t in c['exec_trades']}
+                    candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
+                    if candidates:
+                        selected=next((e for pair in c['exec_selected'] for e in candidates if (e['key'],e['h'])==pair),None)
+                        stake,mg_level=cfg['stake'],0
+                        if c['exec_profit']-stake < -cfg['stop_loss']:
+                            c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
+                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'created_at':time.time()}
+                    else:
+                        current=None
+                        if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 5 segundos.'
+                if current is not None:
+                    c['exec_trades'].append(current);c['exec_trades']=c['exec_trades'][-500:]
             if current is None:c['exec_stop'].wait(.25 if c['exec_selected'] else 2);continue
             # Durable pre-send record: on ambiguity never retry automatically.
             if not checkpoint(c,current):
@@ -121,13 +137,13 @@ def loop(c,save,checkpoint=None):
                 save(c);continue
             with c['lock']:current.update(status='ABERTA',confirmed_at=time.time(),send_delay=r.get('send_delay'),broker_id=r['id'],payout=r['payout'],expiration=r['expiration']);c['exec_used']+=1;c['exec_message']='Ordem DEMO confirmada. Acompanhando resultado; analisador continua ativo.'
             checkpoint(c,current)
-            result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'])
+            result=c['exec_client'].call('demo_result',timeout=current['h']*60+110,id=current['broker_id'],h=current['h'],expiration=current['expiration'],prepare_gale=bool(cfg.get('mg_enabled') and current['mg_level']<cfg['mg_levels']))
             with c['lock']:current.update(status=result['status'],profit=result['profit'],finished_at=time.time());c['exec_profit']+=result['profit'];c['exec_message']='Resultado confirmado pela corretora: '+result['status']
-            with c['lock']:record_outcome(c,current);advance_mg(c,current)
+            with c['lock']:record_outcome(c,current);c['exec_mg']={};pending_gale=gale_after(c,current)
             while not save(c):
                 with c['lock']:c['exec_message']='Resultado '+result['status']+' confirmado. Aguardando salvar para retomar a busca; nenhuma nova ordem será enviada.'
                 if c['exec_stop'].wait(5):return
-            with c['lock']:c['exec_message']='Resultado '+result['status']+' salvo. Procurando a próxima entrada.'
+            with c['lock']:c['exec_message']='LOSS confirmado. Gale na próxima vela do mesmo ativo e direção.' if pending_gale else 'Resultado '+result['status']+' salvo. Procurando a próxima entrada.'
             current=None
     except Exception:
         with c['lock']:

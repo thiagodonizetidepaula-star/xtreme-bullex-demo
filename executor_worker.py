@@ -46,6 +46,14 @@ def dispatch(c):
         prepared_balance-=stake
         return {'sent':True,'send_delay':round(broker.broker_now()-candle-60,3),'id':order_id,'payout':details['payout'],'mode':'PRACTICE','expiration':candle+60+h*60}
     if op=='demo_result':
+        if c.get('prepare_gale'):
+            expiration=c.get('expiration')
+            if not isinstance(expiration,int) or expiration%60:raise ValueError('Expiração inválida para preparar gale.')
+            # Refresh shortly before expiry, away from the next candle's send window.
+            while time.time()<expiration-6:time.sleep(max(0.,min(1.,expiration-6-time.time())))
+            if time.time()<=expiration+MAX_ENTRY_DELAY:
+                try:dispatch({'op':'demo_prepare'})
+                except RuntimeError:pass
         with broker.stage('resultado demo',c['h']*60+90):result,profit=api.check_win_v4(c['id'])
         if not isinstance(profit,(int,float)) or not math.isfinite(profit):raise RuntimeError('Resultado não confirmado.')
         broker.demo()
