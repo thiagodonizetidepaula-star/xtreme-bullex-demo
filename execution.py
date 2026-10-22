@@ -58,6 +58,13 @@ def eligible(events,expiry=None,strategy='all',strategies=None):
     chosen=[]
     for r in rs[:3]:
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
+    # 'Todas' inclui os padrões de candles assim que houver um sinal aberto recente.
+    # Não exige estatística histórica para o modo de teste de padrões na PRACTICE.
+    if strategy=='all' and 'patterns_v1' in EXECUTABLE:
+        horizons=(expiry,) if expiry in (1,2,3,5) else (1,2,3,5)
+        for h in horizons:
+            if any(e.get('key')=='patterns_v1' and e.get('h')==h and e.get('result')=='Aberto' for e in events):
+                if ('patterns_v1',h) not in chosen:chosen.append(('patterns_v1',h))
     return chosen
 
 def scoreboard(trades):
