@@ -67,7 +67,7 @@ def loop(c):
             batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets]);payouts={x['asset']:x['payout'] for x in assets}
             with c['lock']:
                 for item in batch.get('items',[]):ingest(c,item['asset'],item['candles'],batch['now'],payouts[item['asset']],bars5=item.get('candles5',[]))
-                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Thiago e Snipers em análise para demo; Multifiltros somente em estudo.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
+                c.update(ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Padrões, Thiago e Snipers em análise nos mercados abertos; Multifiltros somente em estudo.' if execution.EXECUTABLE else 'Coletando velas; estratégias anteriores retiradas. Aguardando nova regra.',errors=batch.get('errors',[])[-5:])
             if time.time()-save_at>=60:save(c);save_at=time.time()
             c['stop'].wait(.25)
     except Exception as e:
@@ -142,7 +142,7 @@ def state():
     c=contexts.get(session['owner'])
     if not c:return jsonify(error='Servidor reiniciado. Reconecte à Bullex para restaurar o histórico.'),401
     with c['lock']:
-        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),flow_checks=list(c.get('flow_checks',{}).values())[-100:],thiago_checks=list(c.get('thiago_checks',{}).values())[-100:],multifilter_checks=list(c.get('mf_checks',{}).values())[-100:],executor=execution.snapshot(c))
+        return jsonify(**{k:c[k] for k in ('connected','running','message','storage','saved_at','last_poll','ready','total','chart','errors')},csrf=session['csrf'],ranking=ranking(c['events']),archived_ranking=ranking(c['events'],archive=True),events=c['events'][-100:],retained=len(c['events']),mode='PRACTICE / DOIS MOTORES',server_now=time.time(),pattern_checks=list(c.get('pattern_checks',{}).values())[-100:],flow_checks=list(c.get('flow_checks',{}).values())[-100:],thiago_checks=list(c.get('thiago_checks',{}).values())[-100:],multifilter_checks=list(c.get('mf_checks',{}).values())[-100:],executor=execution.snapshot(c))
 @app.post('/api/start')
 def start():
     c=contexts.get(session['owner'])

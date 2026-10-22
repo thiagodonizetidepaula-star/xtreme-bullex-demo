@@ -42,7 +42,8 @@ def gale_after(c,t):
 def eligible(events,expiry=None,strategy='all'):
     # User threshold: >=50% of completed observations, no minimum sample size.
     # Compare integer counts so rounding cannot promote 49.96% to 50%.
-    rs=[r for r in ranking(events) if (expiry is None or r['h']==expiry) and r['name'] in {NAMES[k] for k in EXECUTABLE if strategy=='all' or k==strategy} and r['n']>0 and r['wins']*100>=50*r['n']]
+    if strategy=='patterns_v1' and 'patterns_v1' in EXECUTABLE and expiry in (1,2,3,5):return [('patterns_v1',expiry)]
+    rs=[r for r in ranking(events) if (expiry is None or r['h']==expiry) and r['name'] in {NAMES[k] for k in EXECUTABLE if (strategy=='all' and k!='patterns_v1') or k==strategy} and r['n']>0 and r['wins']*100>=50*r['n']]
     # Prefer the corrected Xtreme when it qualifies, preserving the user's 50% floor.
     rs.sort(key=lambda r:0 if r['name']==NAMES['thiago_v1'] else 1 if r['name']==NAMES['sniper_first_v2'] else 2)
     chosen=[]
@@ -127,7 +128,7 @@ def loop(c,save,checkpoint=None):
                         stake,mg_level=cfg['stake'],0
                         if c['exec_profit']-stake < -cfg['stop_loss']:
                             c['exec_message']='Próxima entrada/gale ultrapassaria o stop loss. Execução encerrada.';break
-                        current={'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'levels':selected.get('levels',[]),'params':selected.get('params',{}),'flow_filters':selected.get('flow_filters',{}),'flow_params':selected.get('flow_params',{}),'candle_source':selected.get('candle_source',{}),'created_at':time.time()}
+                        current={'patterns':selected.get('patterns',[]),'event':selected['id'],'asset':selected['asset'],'t':selected['t'],'key':selected['key'],'name':selected['name'],'h':selected['h'],'direction':'call' if selected['dir']==1 else 'put','stake':stake,'mg_level':mg_level,'mg_multiplier':cfg.get('mg_multiplier',2.) if cfg.get('mg_enabled') else 1.,'status':'ENVIANDO','signal_closed_at':selected['t']+60,'entry_at':selected['t']+60,'rule_version':selected.get('rule_version',1),'indicators':selected.get('indicators',{}),'filters':selected.get('filters',{}),'levels':selected.get('levels',[]),'params':selected.get('params',{}),'flow_filters':selected.get('flow_filters',{}),'flow_params':selected.get('flow_params',{}),'candle_source':selected.get('candle_source',{}),'created_at':time.time()}
                     else:
                         current=None
                         if c['exec_selected']:c['exec_message']='Aguardando sinal novo das candidatas selecionadas. Janela máxima: 5 segundos.'

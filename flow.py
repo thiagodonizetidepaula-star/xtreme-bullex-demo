@@ -20,15 +20,15 @@ def dmi(a,n=14):
         elif len(dx)>n:adx=(adx*(n-1)+dx[-1])/n
     return atr,adx,di_p,di_m
 
-def decision(a,first,reversed_at):
+def decision(a,first,reversed_at,require_reversal=True):
     checks={'dados':len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])),'primeiro_sinal':first in (-1,1)}
     out={'direction':0,'filters':checks,'indicators':{},'params':dict(PARAMS),'reason':'Aguardando 80 velas M1 consecutivas.'}
     if not checks['dados']:return out
     age=(a[-1]['t']-reversed_at)//60 if reversed_at is not None else None
-    checks['reversao_recente']=age is not None and 0<=age<=PARAMS['max_reversal_bars']
+    checks['reversao_recente']=(age is not None and 0<=age<=PARAMS['max_reversal_bars']) if require_reversal else True
     out['indicators']['reversal_age_bars']=age
     if not checks['primeiro_sinal']:out['reason']='Aguardando primeiro Sniper atual a favor da reversão; sinais repetidos não operam.';return out
-    if not checks['reversao_recente']:out['reason']='Sinal fora do começo da reversão (máximo 3 velas); entrada tardia bloqueada.';return out
+    if require_reversal and not checks['reversao_recente']:out['reason']='Sinal fora do começo da reversão (máximo 3 velas); entrada tardia bloqueada.';return out
     c=[b['c'] for b in a];fast=ema(c,9);slow=ema(c,21);atr,adx,di_p,di_m=dmi(a)
     distance=sum(abs(y-x) for x,y in zip(c[-11:],c[-10:]));eff=abs(c[-1]-c[-11])/distance if distance else 0.
     values={'adx14':adx,'atr14':atr,'di_plus':di_p,'di_minus':di_m,'ema9':fast[-1],'ema21':slow[-1],'efficiency10':eff}

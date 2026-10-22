@@ -32,9 +32,9 @@ class FlowTests(unittest.TestCase):
             engine.ingest(s,'TEST',raw[:81],a[80]['t']+60+.5,85)
             signals=[e for e in s['events'] if e['key']=='sniper_first_v2'];self.assertEqual(len(signals),4)
             self.assertTrue(all(e['entry_at']==a[80]['t']+60 and e['rule_version']==4 for e in signals))
-            count=len(s['events'])
+            count=len([e for e in s['events'] if e['key']=='sniper_first_v2'])
             for e in s['events']:e['result']='Acerto'
-            engine.ingest(s,'TEST',raw[:83],a[82]['t']+60+.5,85);self.assertEqual(len(s['events']),count)
+            engine.ingest(s,'TEST',raw[:83],a[82]['t']+60+.5,85);self.assertEqual(len([e for e in s['events'] if e['key']=='sniper_first_v2']),count)
     def test_v3_results_never_qualify_v4(self):
         old=[{'key':'sniper_first_v2','h':1,'result':'Acerto','payout':85,'rule_version':3}]*100
         self.assertEqual(execution.eligible(old,1),[])

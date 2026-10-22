@@ -4,7 +4,7 @@ from candle_context import decision as candle_decision
 LIVE_VERSION=4
 from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
-NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','thiago_v1':'Thiago · Sniper + Tendência + Retração S/R','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
+NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','patterns_v1':'Padrões de Velas · Teste demo imediato','thiago_v1':'Thiago · Sniper + Tendência + Retração S/R','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
 LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
 # Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
@@ -12,8 +12,8 @@ LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi
 
 # Only the two owner-selected Snipers execute; Multifiltros remains research-only.
 RESEARCH={'multifilter_v1'}
-ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','multifilter_v1')}
-EXECUTABLE={'sniper','sniper_first_v2','thiago_v1'}
+ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1')}
+EXECUTABLE={'sniper','sniper_first_v2','thiago_v1','patterns_v1'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
@@ -148,6 +148,11 @@ def ingest(state,asset,bars,now,payout,bars5=None):
         flow['params']['candle_context']=candles['params']
         state.setdefault('flow_checks',{})[asset]={'asset':asset,'at':latest['t']+60,**flow}
         permitted=flow['direction']
+    pattern_entry=None
+    if 'patterns_v1' in ACTIVE:
+        from pattern_entries import decision as pattern_decision
+        pattern_entry=pattern_decision(a,state.get('xtreme_regimes',{}).get(asset,{}).get('pos',0))
+        state.setdefault('pattern_checks',{})[asset]={'asset':asset,'at':latest['t']+60,**pattern_entry}
     thiago=None
     if 'thiago_v1' in ACTIVE:
         from thiago import decision
@@ -160,6 +165,7 @@ def ingest(state,asset,bars,now,payout,bars5=None):
     found=[(k,d) for k,d in found if k!='sniper_first_v2' and (flow is None or k!='sniper' or d==permitted)]
     if permitted:found.append(('sniper_first_v2',permitted))
     if thiago and thiago['direction']:found.append(('thiago_v1',thiago['direction']))
+    if pattern_entry and pattern_entry['direction']:found.append(('patterns_v1',pattern_entry['direction']))
     if now-latest['t']-60>(5 if 'multifilter_v1' in ACTIVE else 15):return
     for key,direction in found:
         for horizon in ACTIVE.get(key,()):
@@ -167,7 +173,7 @@ def ingest(state,asset,bars,now,payout,bars5=None):
             if any(e['id']==event_id for e in state['events']):continue
             # No overlapping observations within the same strategy/asset/horizon.
             if any(e['asset']==asset and e['key']==key and e['h']==horizon and e['result']=='Aberto' for e in state['events']):continue
-            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':LIVE_VERSION if 'multifilter_v1' in ACTIVE else 2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24),**({'indicators':flow['indicators'],'filters':flow['filters'],'params':flow['params'],'candle_source':flow['candle_context']['source']} if flow else {}),**({'indicators':{**flow['indicators'],**thiago['indicators']},'flow_filters':flow['filters'],'flow_params':flow['params'],'filters':thiago['filters'],'levels':thiago['levels'],'params':thiago['params']} if key=='thiago_v1' else {})})
+            state['events'].append({'id':event_id,'asset':asset,'t':latest['t'],'key':key,'name':NAMES[key],'h':horizon,'dir':direction,'base':latest['c'],'signal_closed_at':latest['t']+60,'entry_at':latest['t']+60,'entry_deadline':latest['t']+65,'rule_version':LIVE_VERSION if 'multifilter_v1' in ACTIVE else 2 if key=='sniper_first_v2' else 1,'payout':payout,'result':'Aberto','delay':round(now-latest['t']-60,2),'hour_utc':int(latest['t']//3600%24),**({'indicators':flow['indicators'],'filters':flow['filters'],'params':flow['params'],'candle_source':flow['candle_context']['source']} if flow else {}),**({'indicators':{**flow['indicators'],**thiago['indicators']},'flow_filters':flow['filters'],'flow_params':flow['params'],'filters':thiago['filters'],'levels':thiago['levels'],'params':thiago['params']} if key=='thiago_v1' else {}),**({'patterns':pattern_entry['patterns'],'indicators':pattern_entry['indicators'],'filters':pattern_entry['filters'],'params':pattern_entry['params'],'candle_source':pattern_entry['source']} if key=='patterns_v1' else {})})
     state['events']=state['events'][-5000:]
 
 def ranking(events,archive=False):
