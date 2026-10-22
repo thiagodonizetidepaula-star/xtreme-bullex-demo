@@ -56,14 +56,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(c.post('/api/start',json={}).status_code,403)
         self.assertEqual(c.post('/api/start',json={},headers={'X-CSRF-Token':'test'}).status_code,409)
 class ExecutorTests(unittest.TestCase):
-    def test_selection_requires_sample_and_positive_return(self):
+    def test_selection_uses_exact_sixty_percent_without_sample_floor(self):
         import execution
+        def sample(w,l,t=0,pending=0):
+            return [{'key':'wick','h':3,'result':r,'payout':80} for r,n in [('Acerto',w),('Erro',l),('Empate',t),('Aberto',pending)] for _ in range(n)]
         self.assertEqual(execution.eligible([]),[])
-        ev=[{'key':'wick','h':3,'result':'Acerto','payout':80} for _ in range(29)]
-        self.assertEqual(execution.eligible(ev),[])
-        ev.append(dict(ev[0]));self.assertEqual(execution.eligible(ev),[('wick',3)])
-        ev=[{'key':'wick','h':3,'result':'Erro','payout':80} for _ in range(50)]
-        self.assertEqual(execution.eligible(ev),[])
+        self.assertEqual(execution.eligible(sample(1,0)),[('wick',3)])
+        self.assertEqual(execution.eligible(sample(3,2,pending=100)),[('wick',3)])
+        self.assertEqual(execution.eligible(sample(2,2)),[])
+        self.assertEqual(execution.eligible(sample(3,2,1)),[])
+        self.assertEqual(execution.eligible(sample(599,401)),[])
     def test_real_account_blocked_before_any_order(self):
         import types,runpy
         fake=types.SimpleNamespace(demo=lambda:(_ for _ in ()).throw(RuntimeError('REAL blocked')))
@@ -78,6 +80,7 @@ class ExecutorTests(unittest.TestCase):
                 if op=='demo_order':return {'sent':True,'id':123,'payout':85,'expiration':300}
                 c['exec_stop'].set();return {'status':'WIN','profit':1.7}
         c={'lock':threading.RLock(),'persist_lock':threading.Lock(),'send_lock':threading.Lock(),'stop':threading.Event(),'connected':True,'running':True,'events':[{'id':'event','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'}]}
+        c['events'].extend([{'key':'wick','h':3,'result':'Acerto','payout':80} for _ in range(30)])
         execution.init_execution(c,{})
         c.update(exec_client=Fake(),exec_connected=True,exec_running=True,exec_started=120.,exec_selected=[('wick',3)])
         saved=[]

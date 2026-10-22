@@ -17,15 +17,16 @@ def config(data):
     out['limit']=int(out['limit']);return out
 
 def eligible(events):
-    # Freeze top 3 at explicit start. Selection data end before new execution signals.
-    rs=[r for r in ranking(events) if r['n']>=30 and r['ev'] is not None and r['ev']>0]
+    # User threshold: >=60% of completed observations, no minimum sample size.
+    # Compare integer counts so rounding cannot promote 59.96% to 60%.
+    rs=[r for r in ranking(events) if r['n']>0 and r['wins']*100>=60*r['n']]
     chosen=[]
     for r in rs[:3]:
         key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
     return chosen
 
 def snapshot(c):
-    return {'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
+    return {'connected':c['exec_connected'],'running':c['exec_running'],'message':c['exec_message'],'config':c['exec_config'],'trades':c['exec_trades'][-100:],'used':c['exec_used'],'profit':c['exec_profit'],'selected':[{'name':NAMES[k],'h':h,'n':sum(e['key']==k and e['h']==h and e['result'] in ('Acerto','Erro','Empate') for e in c['events']),'wins':sum(e['key']==k and e['h']==h and e['result']=='Acerto' for e in c['events'])} for k,h in c.get('exec_selected',[])],'mode':'PRACTICE'}
 
 def loop(c,save,checkpoint=None):
     checkpoint=checkpoint or (lambda c,t:save(c))
@@ -43,13 +44,11 @@ def loop(c,save,checkpoint=None):
                 cfg=dict(c['exec_config'])
                 if not c['running'] or not c['connected']:c['exec_message']='Analisador parado/desconectado; executor pausado.';break
                 if c['exec_used']>=cfg['limit'] or c['exec_profit']-cfg['stake'] < -cfg['stop_loss'] or c['exec_profit']>=cfg['stop_win']:c['exec_message']='Limite desta execução atingido.';break
-                if not c['exec_selected']:
-                    selected=eligible(c['events'])
-                    if selected:
-                        c['exec_selected']=selected;c['exec_started']=time.time()
-                        c['exec_message']='Candidatas elegíveis selecionadas. Aguardando um sinal novo.'
-                    else:
-                        c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com 30 resultados e retorno teórico positivo. O analisador continua trabalhando.'
+                selected=eligible(c['events'])
+                if selected!=c['exec_selected']:
+                    if not c['exec_selected'] and selected:c['exec_started']=time.time()
+                    c['exec_selected']=selected
+                if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 60% de acerto nos resultados concluídos.'
                 used={(t['asset'],t['t']) for t in c['exec_trades']}
                 candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
                 if candidates:
