@@ -1,8 +1,12 @@
-# Xtreme Analista
+# Xtreme Analista — two independent PRACTICE engines
 
-Independent read-only Bullex research app. No order dispatch. Start with gunicorn app:app --workers 1 --threads 8 --timeout 180 --bind 0.0.0.0:$PORT. Build: pip install -r requirements.txt && python bootstrap.py && python -m unittest test_analyst -v.
+Analyst worker.py has no order commands. Optional executor_worker.py uses a separate authenticated Bullex session and confirms PRACTICE before each order and at actual websocket send. No real account mode is supported. Connection alone never starts orders.
 
-Configure SESSION_SECRET, ANALYST_GATEWAY, ANALYST_GATEWAY_KEY in Render. Never commit credentials. Broker login is required to load each account's research; passwords stay in broker worker memory. Results compare closed candle prices and are theoretical, not broker trades. Five fixed rule families, four horizons, up to 5000 retained observations. Free Render services may sleep; reconnect after restart. No guaranteed overnight run or automatically invented strategies.
+Build: pip install -r requirements.txt && python bootstrap.py && python -m unittest test_analyst -v
+Start: gunicorn app:app --workers 1 --threads 8 --timeout 180 --bind 0.0.0.0:$PORT
 
+Environment: SESSION_SECRET, ANALYST_GATEWAY, ANALYST_GATEWAY_KEY in Render only. Supabase private gateway persists research and up to 500 demo order records. Database pre-send checkpoint is required; ambiguous orders stop execution and need manual broker review. No automatic retry or restart. No passwords persisted.
 
-2026-10-22 research selection: retain engulf/cross/wick at 3m; archive other historical combinations without deletion. Add separate strict Sniper HL2 and Sniper+ATR18x2 trend candidates at 1/2/3/5m. Existing source indicators reused; all observations remain theoretical. Selection is exploratory and does not establish profitability.
+Analysis selection: wick/cross/engulf at 3m; raw Sniper HL2 and Sniper + ATR18x2 trend at 1/2/3/5m. Archived results retained. Executor freezes up to three combinations at explicit start, requiring >=30 completed theoretical outcomes and positive per-unit theoretical return. These are experimental candidates, not validated strategies. Each run has a fixed stake, order cap, payout floor, stop loss, stop win, and one order at a time. Expiry follows the selected combination. Signals older than two seconds are skipped. Stopping analysis also stops new execution; already submitted orders continue to result.
+
+Free Render can sleep or restart, so overnight availability is not guaranteed. Broker integration is unofficial and 2FA remains unsupported. The actual broker login and order flow must be verified by the owner in PRACTICE. Unit tests use fake brokers and never place orders.

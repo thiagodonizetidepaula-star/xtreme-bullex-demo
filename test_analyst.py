@@ -51,8 +51,47 @@ class ApiTests(unittest.TestCase):
         os.environ.update(SESSION_SECRET='test-only',ANALYST_GATEWAY='https://example.invalid',ANALYST_GATEWAY_KEY='test-only');cls.module=importlib.import_module('app');cls.module.app.config['TESTING']=True
     def test_auth_and_csrf(self):
         c=self.module.app.test_client();self.assertEqual(c.get('/api/state').status_code,401)
-        self.assertFalse(c.get('/health').json['orders_enabled'])
+        self.assertFalse(c.get('/health').json['real_orders_enabled'])
         with c.session_transaction() as s:s['owner']='test';s['csrf']='test'
         self.assertEqual(c.post('/api/start',json={}).status_code,403)
         self.assertEqual(c.post('/api/start',json={},headers={'X-CSRF-Token':'test'}).status_code,409)
+class ExecutorTests(unittest.TestCase):
+    def test_selection_requires_sample_and_positive_return(self):
+        import execution
+        self.assertEqual(execution.eligible([]),[])
+        ev=[{'key':'wick','h':3,'result':'Acerto','payout':80} for _ in range(29)]
+        self.assertEqual(execution.eligible(ev),[])
+        ev.append(dict(ev[0]));self.assertEqual(execution.eligible(ev),[('wick',3)])
+        ev=[{'key':'wick','h':3,'result':'Erro','payout':80} for _ in range(50)]
+        self.assertEqual(execution.eligible(ev),[])
+    def test_real_account_blocked_before_any_order(self):
+        import types,runpy
+        fake=types.SimpleNamespace(demo=lambda:(_ for _ in ()).throw(RuntimeError('REAL blocked')))
+        with patch.dict('sys.modules',{'worker':fake}):module=runpy.run_path('executor_worker.py')
+        with self.assertRaisesRegex(RuntimeError,'REAL blocked'):module['dispatch']({'op':'demo_order'})
+    def test_duplicate_stop_and_durable_pre_send(self):
+        import execution,threading
+        class Fake:
+            calls=[]
+            def call(self,op,**kw):
+                self.calls.append(op)
+                if op=='demo_order':return {'sent':True,'id':123,'payout':85,'expiration':300}
+                c['exec_stop'].set();return {'status':'WIN','profit':1.7}
+        c={'lock':threading.RLock(),'persist_lock':threading.Lock(),'send_lock':threading.Lock(),'stop':threading.Event(),'connected':True,'running':True,'events':[{'id':'event','asset':'TEST','t':60,'h':3,'key':'wick','name':'Sentinela','dir':1,'result':'Aberto'}]}
+        execution.init_execution(c,{})
+        c.update(exec_client=Fake(),exec_connected=True,exec_running=True,exec_started=120.,exec_selected=[('wick',3)])
+        saved=[]
+        def save(c):saved.append([t['status'] for t in c['exec_trades']]);return True
+        with patch('execution.time.time',return_value=120.5):execution.loop(c,save)
+        self.assertEqual(c['exec_client'].calls,['demo_order','demo_result']);self.assertEqual(saved[0],['ENVIANDO']);self.assertEqual(c['exec_trades'][0]['status'],'WIN');self.assertEqual(c['exec_used'],1)
+        c['exec_stop'].clear();c['exec_running']=True;c['exec_used']=0;c['exec_client'].calls=[]
+        # A new run with unavailable durable storage must not reach the broker.
+        c['exec_trades']=[]
+        with patch('execution.time.time',return_value=120.5):execution.loop(c,lambda c:False)
+        self.assertEqual(c['exec_client'].calls,[]);self.assertEqual(c['exec_trades'][0]['status'],'IGNORADA')
+    def test_config_rejects_nonfinite_and_excess_stake(self):
+        import execution
+        for d in ({'stake':float('nan')},{'stake':101},{'limit':1.2},{'stop_loss':1}):
+            with self.assertRaises(ValueError):execution.config(d)
+
 if __name__=='__main__':unittest.main()
