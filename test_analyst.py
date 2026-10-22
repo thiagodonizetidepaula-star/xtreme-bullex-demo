@@ -97,7 +97,7 @@ class ExecutorTests(unittest.TestCase):
         c={'lock':threading.RLock(),'send_lock':threading.Lock(),'stop':threading.Event(),'running':True,'connected':True,'events':[]}
         execution.init_execution(c,{})
         c.update(exec_running=True,exec_selected=[])
-        with patch.object(c['exec_stop'],'wait',side_effect=lambda *_:c['exec_stop'].set()):execution.loop(c,lambda _:True)
+        with patch('execution.time.time',return_value=120.5),patch.object(c['exec_stop'],'wait',side_effect=lambda *_:c['exec_stop'].set()):execution.loop(c,lambda _:True)
         self.assertIn('EM ESPERA',c['exec_message']);self.assertEqual(c['exec_trades'],[])
     def test_start_accepts_waiting_mode_and_is_idempotent(self):
         import execution,threading
