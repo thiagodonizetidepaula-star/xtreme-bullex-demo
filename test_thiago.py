@@ -81,3 +81,10 @@ class ThiagoTests(unittest.TestCase):
                 self.assertEqual(r.status_code,200);self.assertEqual(r.json['scoreboard']['wins'],0);save.assert_called_once_with(c)
                 self.assertEqual(c['exec_profit'],1.7);self.assertEqual(c['exec_used'],1)
         finally:m.contexts.pop('score-fixture',None)
+
+    def test_waiting_reason_does_not_report_unassessed_filters_as_failed(self):
+        d=thiago.decision(self.bars(),0)
+        self.assertEqual(d['direction'],0);self.assertIn('primeiro Sniper',d['reason'])
+        for key in ('toque_na_retracao','estrutura_preservada','retomada_da_vela','espaco_ate_barreira'):self.assertIsNone(d['filters'][key])
+        d=thiago.decision(self.bars()[:40],0);self.assertIn('80 velas',d['reason'])
+        d=thiago.decision(self.bars(),1);self.assertIn('confirmado',d['reason']);self.assertTrue(all(d['filters'].values()))

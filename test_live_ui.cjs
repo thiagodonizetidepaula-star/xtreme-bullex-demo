@@ -24,3 +24,13 @@ console.log('Best tab: empty state, fifth WIN, losses, negative profit, progress
 const ms=html.indexOf('function mgPreview('),me=html.indexOf('\nfor(const id',ms);vm.runInContext(html.slice(ms,me)+';this.preview=mgPreview',researchContext);
 elem('execStake').value='2';elem('execMgLevels').value='2';elem('execMgMultiplier').value='2';elem('execMg').checked=true;researchContext.preview();assert(dom.mgPreview.textContent.includes('Base: 2.00 → Gale 1: 4.00 → Gale 2: 8.00'));assert(dom.mgPreview.textContent.includes('14.00'));
 elem('execMg').checked=false;researchContext.preview();assert(dom.mgPreview.textContent.includes('desligado'));console.log('Martingale preview: off state, levels and total sequence loss passed.');
+// Waiting diagnostics must be readable and distinguish unassessed filters.
+{
+ const nodes={};const make=()=>({children:[],textContent:'',style:{},append(...xs){this.children.push(...xs)},replaceChildren(){this.children=[]}});
+ const get=id=>nodes[id]||(nodes[id]=make());const ctx={$:get,document:{createElement:make},Date};vm.createContext(ctx);
+ const a=html.indexOf('function renderThiagoStatus('),b=html.indexOf('function render(s)',a);assert(a>=0&&b>a);vm.runInContext(html.slice(a,b),ctx);
+ const state={connected:true,running:true,server_now:1000,thiago_checks:[{asset:'TEST',at:990,direction:0,reason:'Aguardando o primeiro Sniper a favor da nova tendência.',filters:{toque_na_retracao:null}}]};
+ ctx.renderThiagoStatus(state);assert.equal(nodes.thiagoStatusCards.children.length,1);assert(nodes.thiagoStatusCards.children[0].children[1].textContent.includes('primeiro Sniper'));assert(!nodes.thiagoStatusCards.children[0].children[1].textContent.includes('toque_na_retracao'));
+ state.server_now=1200;ctx.renderThiagoStatus(state);assert(nodes.thiagoStatusCards.children[0].children[1].textContent.includes('desatualizada'));
+ state.thiago_checks=[];ctx.renderThiagoStatus(state);assert(nodes.thiagoSummary.textContent.includes('Aguardando dados'));console.log('Thiago diagnostics: readable waiting reason, stale data and empty state passed.');
+}

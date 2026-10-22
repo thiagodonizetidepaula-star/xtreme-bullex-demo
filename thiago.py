@@ -21,8 +21,8 @@ def levels(a):
     return out
 
 def decision(a,first):
-    ls=levels(a);checks={'dados_continuos':len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])),'primeiro_sniper_a_favor_da_tendencia':first in (-1,1),'toque_na_retracao':False,'estrutura_preservada':False,'retomada_da_vela':False,'espaco_ate_barreira':False}
-    result={'direction':0,'filters':checks,'indicators':{},'levels':ls,'params':dict(PARAMS),'validation':'EXPERIMENTAL'}
+    ls=levels(a);checks={'dados_continuos':len(a)>=80 and all(y['t']-x['t']==60 for x,y in zip(a,a[1:])),'primeiro_sniper_a_favor_da_tendencia':first in (-1,1),'toque_na_retracao':None,'estrutura_preservada':None,'retomada_da_vela':None,'espaco_ate_barreira':None}
+    result={'direction':0,'filters':checks,'indicators':{},'levels':ls,'params':dict(PARAMS),'validation':'EXPERIMENTAL','reason':f'Aguardando dados M1: mínimo de 80 velas consecutivas; {len(a)} disponíveis.'}
     if not checks['dados_continuos']:return result
     atr=None
     tr=[]
@@ -30,7 +30,13 @@ def decision(a,first):
         prev=a[i-1]['c'] if i else b['c'];tr.append(max(b['h']-b['l'],abs(b['h']-prev),abs(b['l']-prev)))
         if len(tr)>=18:atr=sum(tr[-18:])/18 if atr is None else (atr*17+tr[-1])/18
     result['indicators']['atr18']=atr
-    if not atr or first not in (-1,1):return result
+    if first not in (-1,1):
+        result['reason']='Aguardando o primeiro Sniper a favor da nova tendência. Retração e barreiras ainda não avaliadas.'
+        return result
+    if not atr:
+        result['reason']='ATR18 ainda indisponível; aguardando dados.'
+        return result
+    result['reason']='Primeiro Sniper detectado, mas sem retração com retomada preservando o suporte/resistência.'
     c,p=a[-1],a[-2];tol=atr*PARAMS['touch_atr'];recent=a[-PARAMS['pullback_bars']:]
     kind='support' if first==1 else 'resistance';best=None
     for level in ls:
@@ -47,5 +53,8 @@ def decision(a,first):
     space=min(ahead) if ahead else None
     checks['espaco_ate_barreira']=space is None or space>=atr*PARAMS['barrier_atr']
     result['indicators'].update(retracement_level=best['price'],retracement_label=best['label'],barrier_distance=space)
-    if all(checks.values()):result['direction']=first
+    result['reason']='Barreira contrária próxima demais; sem entrada.'
+    if all(checks.values()):
+        result['direction']=first
+        result['reason']='Sinal Thiago confirmado. Entrada prevista na próxima vela; executor verifica taxa, payout e prazo.'
     return result
