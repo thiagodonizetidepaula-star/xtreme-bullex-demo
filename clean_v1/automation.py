@@ -1,6 +1,6 @@
 """Fresh-session PRACTICE scanner. Strategy never loads old historical results."""
 import os,time,threading,math
-from apex_confluence import decision
+from clean_v1.xtreme_sniper import decision
 from engine import normalized
 
 def settle(state,call,order,asset,direction):
@@ -29,7 +29,7 @@ def run(state, call):
             now=time.time();sec=now%60
             if not state['running']:break
             if now-last_catalog>90 and 7<sec<44:
-                market=call('read',{'op':'market','payout':80,'strategy':'apex_confluence'},24)
+                market=call('read',{'op':'market','payout':80,'strategy':'sniper'},24)
                 assets=sorted([x for x in market.get('assets',[]) if x.get('payout',0)>=80],key=lambda x:-x['payout'])
                 last_catalog=now
                 state['markets']=len(assets)
