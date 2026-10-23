@@ -21,7 +21,7 @@ def respond(start,status,data,headers=None):
     start(status,[('Content-Type','application/json'),('Content-Length',str(len(raw))),('Cache-Control','no-store')]+(headers or []))
     return [raw]
 def proc_call(proc,data,timeout=50):
-    proc.stdin.write(json.dumps(data)+'\\n');proc.stdin.flush()
+    proc.stdin.write(json.dumps(data)+'\n');proc.stdin.flush()
     ready,_,_=select.select([proc.stdout],[],[],timeout)
     if not ready:raise RuntimeError('Bullex não respondeu no tempo limite')
     line=proc.stdout.readline()
