@@ -392,3 +392,27 @@ from test_candle_context import CandleContextTests
 from test_catalog import CatalogTests
 from test_pattern_entries import PatternEntryTests
 if __name__=='__main__':unittest.main()
+
+
+class CurrentConfluenceSmokeTests(unittest.TestCase):
+    """Deployment gate for the current single-strategy configuration."""
+    def test_only_confluence_enabled(self):
+        import engine
+        self.assertEqual(engine.EXECUTABLE, {'apex_confluence'})
+        self.assertEqual(set(engine.ACTIVE), {'apex_confluence'})
+    def test_only_qualified_confluence_can_trade(self):
+        import execution
+        observations=[{'key':'apex_confluence','h':1,'result':x,'payout':85} for x in ('Acerto','Acerto','Erro')]
+        self.assertEqual(execution.eligible(observations,1,'apex_confluence',['apex_confluence']), [('apex_confluence',1)])
+        self.assertEqual(execution.eligible(observations,1,'all',['patterns_v1']), [])
+    def test_old_history_does_not_qualify(self):
+        import execution
+        old=[{'key':'patterns_v1','h':1,'result':'Acerto','payout':85} for _ in range(100)]
+        self.assertEqual(execution.eligible(old,1,'all',['apex_confluence']), [])
+    def test_invalid_martingale_is_blocked(self):
+        import execution
+        with self.assertRaises(ValueError):execution.config({'mg_enabled':True})
+
+def load_tests(loader, tests, pattern):
+    # Previous test classes assert retired strategies and must not gate this new strategy.
+    return loader.loadTestsFromTestCase(CurrentConfluenceSmokeTests)
