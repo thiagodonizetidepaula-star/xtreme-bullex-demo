@@ -56,7 +56,7 @@ def run(state, call):
             if not assets:
                 state['phase']='catalog';state['message']='Aguardando catálogo de ativos binários abertos'
                 state['stop'].wait(2);continue
-            if 53<=sec<57 and last_prepare!=int(now//60):
+            if 56<=sec<59 and last_prepare!=int(now//60):
                 try:
                     call('exec',{'op':'demo_prepare'},22)
                     last_prepare=int(now//60)
@@ -121,7 +121,9 @@ def run(state, call):
                         threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],features(bars,state['current_direction'])),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
-                        state['message']=order.get('reason','Ordem não aceita')
+                        reason=str(order.get('reason','Ordem não aceita'))[:150]
+                        state['last_rejection_reason']=reason
+                        state['message']=reason
                         with state['order_lock']:state['pending']=False
                 except Exception:
                     state['running']=False;state['uncertain']=True
