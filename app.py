@@ -231,7 +231,11 @@ def executor_start():
         if not c['exec_connected'] or not c['connected'] or not c['running']:return jsonify(error='Conecte os dois motores e inicie o analisador primeiro.'),409
         if any(t['status'] in ('ENVIANDO','ABERTA','INCERTA') for t in c['exec_trades']):return jsonify(error='Revise as ordens incertas na corretora antes de retomar.'),409
         if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
-        try:cfg=execution.config(request.get_json(silent=True) or {})
+        incoming=request.get_json(silent=True) or {}
+        # Enforce the one production strategy regardless of stale browser settings.
+        incoming['strategy']='sniper'
+        incoming['strategies']=['sniper']
+        try:cfg=execution.config(incoming)
         except ValueError as e:return jsonify(error=str(e)),400
         selected=execution.eligible(c['events'],cfg['expiry'] if 'sniper' in execution.EXECUTABLE else None,cfg.get('strategy','all'),cfg.get('strategies'))
         c.update(exec_mg={},exec_config=cfg,exec_selected=selected,exec_started=time.time(),exec_used=0,exec_profit=0.,exec_running=True,exec_message='Executor demo iniciado; aguardando sinal novo.' if selected else 'Executor iniciado. Aguardando estratégia com pelo menos 50% de acerto nos resultados concluídos.')
