@@ -3,14 +3,18 @@ from wsgiref.simple_server import make_server
 from urllib.parse import urlparse
 from http.cookies import SimpleCookie
 from pathlib import Path
+from socketserver import ThreadingMixIn
+from clean_v1.automation import run as run_bot
 HTML='''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Xtreme Bot Pro</title><style>
 :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#071021;color:#eaf3ff;font:16px system-ui,sans-serif}main{max-width:740px;margin:auto;padding:20px 14px}header{padding:20px 0 26px;display:flex;justify-content:space-between;align-items:center}h1{font-size:25px;letter-spacing:-1px;margin:0}h1 b{color:#72a9ff}p{color:#9bafc9;line-height:1.6}.pill{font-size:12px;color:#28dfab;background:#103f37;border-radius:30px;padding:9px 12px;font-weight:800}.card{background:#111e33;border:1px solid #2a3e5c;border-radius:18px;padding:20px;margin-bottom:16px}h2{font-size:17px;margin:0 0 16px}.state{padding:16px;background:#172b43;border-radius:13px;font-weight:700}.muted{font-size:13px;color:#97abc5}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:#1a2b45;border-radius:12px;padding:16px}.metric strong{font-size:25px;display:block;margin-top:10px}.btn{border:0;border-radius:12px;padding:15px;color:#08231c;background:#19d99e;font-size:16px;font-weight:800;width:100%;margin-top:10px}.btn:disabled{background:#31445c;color:#8ea1b9}.outline{background:#1c3557;color:#c8dcfa}label{font-size:13px;color:#a4b5cf}input{background:#1b2c45;color:white;border:1px solid #425775;border-radius:10px;padding:13px;width:100%;font-size:16px;margin:6px 0 14px}@media(max-width:420px){main{padding:12px}header{padding:13px 0 22px}.card{padding:16px}}
-</style></head><body><main><header><div><h1>ϟ Xtreme <b>Bot Pro</b></h1><p style="margin:3px 0">Painel de execução · versão limpa</p></div><span class="pill">DEMO</span></header><section class="card"><h2>Conexão Bullex</h2><div class="state" id="state">● Desconectado</div><p class="muted">Conexão de leitura disponível na conta PRACTICE. A conexão DEMO inclui um executor separado. As ordens permanecem bloqueadas até que exista uma estratégia validada.</p><form id="brokerForm"><label>E-mail Bullex</label><input id="email" type="email" autocomplete="username" required><label>Senha Bullex</label><input id="password" type="password" autocomplete="current-password" required><button class="btn" id="connectBtn">Conectar PRACTICE</button></form><button class="btn outline" id="disconnectBtn" hidden>Desconectar</button><p class="muted" id="brokerDetail"></p></section><section class="card"><h2>Execução</h2><div class="grid"><div><label>Entrada (US$)</label><input value="2" type="number" min="1" readonly></div><div><label>Payout mínimo (%)</label><input value="80" type="number" readonly></div><div><label>Stop loss (US$)</label><input value="10" readonly></div><div><label>Stop win (US$)</label><input value="20" readonly></div></div><button class="btn" id="preflight" disabled>Validar executor DEMO</button><p class="muted" id="preflightStatus">Executor aguardando conexão.</p><button class="btn outline" disabled>Parar robô</button><p class="muted">Nenhuma estratégia instalada e nenhuma ordem automática habilitada.</p></section><section class="card"><h2>Placar</h2><div class="grid"><div class="metric">WIN<strong>0</strong></div><div class="metric">LOSS<strong>0</strong></div><div class="metric">Operações<strong>0</strong></div><div class="metric">Resultado<strong>0,00</strong></div></div></section></main><script>
+</style></head><body><main><header><div><h1>ϟ Xtreme <b>Bot Pro</b></h1><p style="margin:3px 0">Painel de execução · versão limpa</p></div><span class="pill">DEMO</span></header><section class="card"><h2>Conexão Bullex</h2><div class="state" id="state">● Desconectado</div><p class="muted">Conexão de leitura disponível na conta PRACTICE. A conexão DEMO inclui um executor separado. As ordens permanecem bloqueadas até que exista uma estratégia validada.</p><form id="brokerForm"><label>E-mail Bullex</label><input id="email" type="email" autocomplete="username" required><label>Senha Bullex</label><input id="password" type="password" autocomplete="current-password" required><button class="btn" id="connectBtn">Conectar PRACTICE</button></form><button class="btn outline" id="disconnectBtn" hidden>Desconectar</button><p class="muted" id="brokerDetail"></p></section><section class="card"><h2>Execução</h2><div class="grid"><div><label>Entrada (US$)</label><input value="2" type="number" min="1" readonly></div><div><label>Payout mínimo (%)</label><input value="80" type="number" readonly></div><div><label>Stop loss (US$)</label><input value="10" readonly></div><div><label>Stop win (US$)</label><input value="20" readonly></div></div><button class="btn" id="preflight" disabled>Iniciar robô DEMO</button><p class="muted" id="preflightStatus">Executor aguardando conexão.</p><button class="btn outline" id="stopBot" disabled>Parar robô</button><p class="muted">Estratégia única: confluência EMA 9/21 + RSI + candles · M1 · apenas PRACTICE</p><p class="muted" id="botStatus">Robô parado.</p><p class="muted" id="lastSignal"></p></section><section class="card"><h2>Placar</h2><div class="grid"><div class="metric">WIN<strong id="wins">0</strong></div><div class="metric">LOSS<strong id="losses">0</strong></div><div class="metric">Operações<strong id="orders">0</strong></div><div class="metric">Resultado<strong id="pnl">0,00</strong></div></div></section></main><script>
 const el=id=>document.getElementById(id);
 async function send(path,body){const res=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const v=await res.json();if(!res.ok)throw Error(v.error||'Erro ao conectar');return v}
-function show(v){el('state').textContent=v.connected?'● Conectado à PRACTICE · '+v.balance+' '+v.currency:'● Desconectado';el('brokerForm').hidden=!!v.connected;el('preflight').disabled=!v.executor_connected;el('disconnectBtn').hidden=!v.connected;el('brokerDetail').textContent=v.connected?(v.executor_connected?'Leitura e executor conectados à PRACTICE.':'Leitura conectada; executor ainda indisponível.'):'Conta real não permitida. Apenas Bullex PRACTICE.'}
+function show(v){el('state').textContent=v.connected?'● Conectado à PRACTICE · '+v.balance+' '+v.currency:'● Desconectado';el('brokerForm').hidden=!!v.connected;el('preflight').disabled=!v.executor_connected||!!v.running;el('stopBot').disabled=!v.running;el('botStatus').textContent=v.message||(v.running?'Analisando':'Robô parado');el('wins').textContent=v.wins||0;el('losses').textContent=v.losses||0;el('orders').textContent=v.orders||0;el('pnl').textContent=(v.profit||0).toFixed(2);el('lastSignal').textContent=v.last_signal?'Último sinal: '+v.last_signal.asset+' '+v.last_signal.direction:'';el('disconnectBtn').hidden=!v.connected;el('brokerDetail').textContent=v.connected?(v.executor_connected?'Leitura e executor conectados à PRACTICE.':'Leitura conectada; executor ainda indisponível.'):'Conta real não permitida. Apenas Bullex PRACTICE.'}
 el('brokerForm').onsubmit=async e=>{e.preventDefault();el('connectBtn').disabled=true;el('brokerDetail').textContent='Autenticando na Bullex...';const pwd=el('password').value;el('password').value='';try{show(await send('/api/connect',{email:el('email').value,password:pwd}))}catch(err){el('brokerDetail').textContent=err.message}finally{el('connectBtn').disabled=false}};
-el('disconnectBtn').onclick=async()=>{show(await send('/api/disconnect',{}))};el('preflight').onclick=async()=>{el('preflightStatus').textContent='Validando...';try{const v=await send('/api/prepare',{});el('preflightStatus').textContent=v.ready?'Executor pronto para testes, mas ordens automáticas desativadas.':'Pré-validação falhou'}catch(e){el('preflightStatus').textContent=e.message}};
+el('disconnectBtn').onclick=async()=>{show(await send('/api/disconnect',{}))};el('preflight').onclick=async()=>{try{show(await send('/api/start',{}))}catch(e){el('botStatus').textContent=e.message}};
+el('stopBot').onclick=async()=>{try{show(await send('/api/stop',{}))}catch(e){el('botStatus').textContent=e.message}};
+setInterval(()=>fetch('/api/state',{credentials:'same-origin'}).then(r=>r.json()).then(show).catch(()=>{}),3000);
 fetch('/api/state',{credentials:'same-origin'}).then(r=>r.json()).then(show).catch(()=>{});
 </script></body></html>'''
 ROOT=Path(__file__).resolve().parent.parent
@@ -29,6 +33,9 @@ def proc_call(proc,data,timeout=50):
     result=json.loads(line)
     if not result.get('ok'):raise RuntimeError(result.get('error','Falha no conector'))
     return result['data']
+def state_view(v):
+    if not v:return {'connected':False}
+    return {k:v.get(k) for k in ('balance','currency','running','pending','message','wins','losses','orders','profit','signals','markets','ready','last_signal','last_order')}|{'connected':True,'executor_connected':bool(v.get('executor'))}
 def app(environ,start_response):
     path=urlparse(environ.get('PATH_INFO','/')).path
     method=environ.get('REQUEST_METHOD','GET')
@@ -39,15 +46,28 @@ def app(environ,start_response):
     token=sid.value if sid else None
     with guard: current=sessions.get(token)
     if path=='/health':return respond(start_response,'200 OK',{'ok':True,'orders_enabled':False})
-    if path=='/api/state':return respond(start_response,'200 OK',dict(connected=True,balance=current['balance'],currency=current['currency'],executor_connected=bool(current.get('executor'))) if current else {'connected':False})
+    if path=='/api/state':return respond(start_response,'200 OK',state_view(current))
     if path=='/':
         data=HTML.encode()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),('Content-Length',str(len(data))),('Cache-Control','no-store')])
         return [data]
-    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare'):
+    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop'):
         origin=environ.get('HTTP_ORIGIN','')
         host=environ.get('HTTP_HOST','')
         if origin and origin not in ('https://'+host,'http://'+host):return respond(start_response,'403 Forbidden',{'error':'Origem inválida'})
+        if path in ('/api/start','/api/stop'):
+            if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor PRACTICE desconectado'})
+            if path=='/api/stop':
+                current['running']=False;current['stop'].set();current['message']='Parada solicitada. Ordem já enviada continuará em confirmação.'
+                return respond(start_response,'200 OK',state_view(current))
+            if current['running']:return respond(start_response,'200 OK',state_view(current))
+            if current['pending'] or current.get('uncertain'):return respond(start_response,'409 Conflict',{'error':'Há ordem anterior incerta; confira a Bullex'})
+            current['stop']=threading.Event();current['running']=True;current['message']='Preparando catálogo PRACTICE'
+            def ccall(mode,command,timeout=50):
+                with current['exec_lock'] if mode=='exec' else current['read_lock']:
+                    return proc_call(current['executor'] if mode=='exec' else current['proc'],command,timeout)
+            threading.Thread(target=run_bot,args=(current,ccall),daemon=True).start()
+            return respond(start_response,'200 OK',state_view(current))
         if path=='/api/prepare':
             if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor DEMO desconectado'})
             try:
@@ -58,6 +78,7 @@ def app(environ,start_response):
             with guard:
                 old=sessions.pop(token,None)
                 if old:
+                    old['running']=False;old['stop'].set()
                     old['proc'].terminate()
                     if old.get('executor'):old['executor'].terminate()
             return respond(start_response,'200 OK',{'connected':False},[('Set-Cookie','xb_session=; Max-Age=0; HttpOnly; Secure; SameSite=Strict; Path=/')])
@@ -83,8 +104,8 @@ def app(environ,start_response):
                     if executor:executor.terminate()
                     executor=None
                 new=secrets.token_urlsafe(32)
-                with guard:sessions[new]={'proc':proc,'executor':executor,'exec_lock':threading.Lock(),'balance':answer.get('balance'),'currency':answer.get('currency')}
-                return respond(start_response,'200 OK',{'connected':True,'executor_connected':bool(executor),'balance':answer.get('balance'),'currency':answer.get('currency')},[('Set-Cookie','xb_session='+new+'; HttpOnly; Secure; SameSite=Strict; Path=/')])
+                with guard:sessions[new]={'proc':proc,'executor':executor,'exec_lock':threading.Lock(),'read_lock':threading.Lock(),'order_lock':threading.Lock(),'stop':threading.Event(),'running':False,'pending':False,'uncertain':False,'message':'Conectado à PRACTICE','stake':2,'max_orders':10,'stop_loss':10,'stop_win':20,'profit':0.,'wins':0,'losses':0,'orders':0,'signals':0,'seen':set(),'markets':0,'ready':0,'balance':answer.get('balance'),'currency':answer.get('currency')}
+                return respond(start_response,'200 OK',state_view(sessions[new]),[('Set-Cookie','xb_session='+new+'; HttpOnly; Secure; SameSite=Strict; Path=/')])
             except Exception:
                 proc.terminate()
                 raise
@@ -96,4 +117,5 @@ if __name__=='__main__':
     # Render clean service uses this entry point without an external build command.
     subprocess.run([sys.executable,'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True,timeout=180)
     subprocess.run([sys.executable,str(ROOT/'bootstrap.py')],cwd=str(ROOT),check=True,timeout=90)
-    make_server('0.0.0.0',int(os.environ.get('PORT','10000')),app).serve_forever()
+    class ThreadServer(ThreadingMixIn, type(make_server('127.0.0.1',0,app))):daemon_threads=True
+    make_server('0.0.0.0',int(os.environ.get('PORT','10000')),app,server_class=ThreadServer).serve_forever()
