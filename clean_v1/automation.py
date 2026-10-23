@@ -30,7 +30,15 @@ def run(state, call):
             now=time.time();sec=now%60
             if not state['running']:break
             if now-last_catalog>90 and 7<sec<44:
-                market=call('read',{'op':'market','payout':80,'strategy':'sniper'},24)
+                try:
+                    market=call('read',{'op':'market','payout':80,'strategy':'sniper'},24)
+                    state['read_failures']=0
+                except (OSError,RuntimeError,TimeoutError,ValueError) as err:
+                    state['read_failures']=state.get('read_failures',0)+1
+                    state['phase']='reconnecting'
+                    state['message']='Leitura temporariamente indisponível; nova tentativa sem alterar as ordens'
+                    state['stop'].wait(min(12,2*state['read_failures']))
+                    continue
                 assets=sorted([x for x in market.get('assets',[]) if x.get('payout',0)>=80],key=lambda x:-x['payout'])
                 last_catalog=now
                 state['markets']=len(assets)
@@ -48,7 +56,15 @@ def run(state, call):
             # Prioritize payout and rotate the rest without losing the watched group.
             subset=assets[:12]+([assets[12+((rot+i)%(len(assets)-12))] for i in range(min(10,len(assets)-12))] if len(assets)>12 else [])
             rot+=10
-            snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True},15)
+            try:
+                snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True},15)
+                state['read_failures']=0
+            except (OSError,RuntimeError,TimeoutError,ValueError):
+                state['read_failures']=state.get('read_failures',0)+1
+                state['phase']='reconnecting'
+                state['message']='Candles indisponíveis momentaneamente; repetindo leitura sem enviar ordens'
+                state['stop'].wait(min(12,2*state['read_failures']))
+                continue
             state['ready']=snap.get('ready',0)
             if not state['pending']:state['phase']='scan'
             state['message']=f'Analisando {state["ready"]}/{len(subset)} ativos preparados (catálogo: {len(assets)})'
