@@ -46,7 +46,7 @@ def proc_call(proc,data,timeout=50):
     return result['data']
 def state_view(v):
     if not v:return {'connected':False}
-    return {k:v.get(k) for k in ('balance','currency','running','pending','message','phase','current_asset','current_direction','current_order_id','entry_ts','expire_ts','wins','losses','orders','profit','signals','markets','ready','last_signal','last_order','last_result','rejections','research_summary','archive_last_saved')}|{'connected':True,'executor_connected':bool(v.get('executor')),'settings':{'stop_loss':v['stop_loss'],'stop_win':v['stop_win']}}
+    return {k:v.get(k) for k in ('balance','currency','running','pending','message','phase','current_asset','current_direction','current_order_id','entry_ts','expire_ts','wins','losses','orders','profit','signals','markets','ready','last_signal','last_order','last_result','rejections','last_rejection_reason','research_summary','archive_last_saved')}|{'connected':True,'executor_connected':bool(v.get('executor')),'settings':{'stop_loss':v['stop_loss'],'stop_win':v['stop_win']}}
 def app(environ,start_response):
     path=urlparse(environ.get('PATH_INFO','/')).path
     method=environ.get('REQUEST_METHOD','GET')
