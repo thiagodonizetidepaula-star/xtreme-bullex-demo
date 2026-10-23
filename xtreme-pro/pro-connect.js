@@ -30,4 +30,15 @@ document.getElementById('proBrokerForm').onsubmit=async(e)=>{
 document.getElementById('proDisconnect').onclick=async()=>{try{display(await call('/api/pro/disconnect'))}catch(error){feedback.textContent=error.message}};
 document.getElementById('connectQuick').onclick=()=>document.querySelector('[data-tab="conectar"]').click();
 fetch('/api/pro/state',{credentials:'same-origin'}).then(r=>r.json()).then(display).catch(()=>{feedback.textContent='Servidor de conexão indisponível.'});
+
+const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>⚙ Quatro motores de busca • PRACTICE</h3><p class="note">Tendência · Padrões · Reversão · Rompimento. Os sinais são analisados, mas o envio de ordens continua bloqueado até validação do executor.</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
+document.getElementById('painel').prepend(scan);
+async function scanUpdate(){try{
+ const r=await fetch('/api/pro/scanner/state',{credentials:'same-origin'});const d=await r.json();
+ document.getElementById('scannerStats').textContent=(d.running?'🟢 Motores ativos':'⚪ Motores parados')+' · '+(d.scan_count||0)+' leituras · '+(d.signals||[]).length+' sinais'+(d.error?' · '+d.error:'');
+ document.getElementById('scannerSignals').textContent=(d.signals||[]).slice(-5).reverse().map(x=>x.engine+' | '+x.asset+' | '+x.side+' | '+x.payout+'%').join(' · ')||'Aguardando sinais novos';
+}catch(e){}}
+document.getElementById('startScanner').onclick=async()=>{try{await call('/api/pro/scanner/start');scanUpdate()}catch(e){feedback.textContent=e.message}};
+document.getElementById('stopScanner').onclick=async()=>{try{await call('/api/pro/scanner/stop');scanUpdate()}catch(e){feedback.textContent=e.message}};
+setInterval(scanUpdate,5000);scanUpdate();
 })();
