@@ -113,6 +113,23 @@ def scanner_loop(c):
     finally:
         c["scanner_running"]=False
 
+@app.get("/api/pro/chart")
+def chart_data():
+    c=get_current()
+    if not c:return jsonify(error="Conecte à Bullex PRACTICE."),401
+    asset=request.args.get("asset","")
+    allowed={a["asset"] for a in c["assets"]}
+    if asset not in allowed:return jsonify(error="Escolha um ativo disponível."),400
+    try:
+        candles=send_worker(c,"candles",asset=asset)
+        clean=[]
+        for b in candles.get("candles",[])[-90:]:
+            try:
+                clean.append({"t":int(b["from"]),"o":float(b["open"]),"h":float(b["max"]),"l":float(b["min"]),"c":float(b["close"])})
+            except (ValueError,KeyError,TypeError):continue
+        return jsonify(asset=asset,candles=clean[-70:],source="Bullex PRACTICE")
+    except RuntimeError as exc:return jsonify(error=str(exc)),502
+
 @app.post("/api/pro/scanner/start")
 def scanner_start():
     c=get_current()
