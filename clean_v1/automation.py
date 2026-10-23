@@ -2,6 +2,7 @@
 import os,time,threading,math
 from clean_v1.xtreme_sniper import decision
 from clean_v1.candle_research import features,summarize
+from clean_v1 import archive
 from engine import normalized
 
 def settle(state,call,order,asset,direction,candle_features):
@@ -16,6 +17,10 @@ def settle(state,call,order,asset,direction,candle_features):
         state.setdefault('research',[]).append({'asset':asset,'direction':direction,'status':result['status'],'profit':pnl,'features':candle_features,'at':time.time()})
         state['research']=state['research'][-300:]
         state['research_summary']=summarize(state['research'])
+        try:
+            state['archive_last_saved']=archive.record(state,order,asset,direction,result,candle_features)
+        except Exception:
+            state['archive_last_saved']=False
         state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['expire_ts']=0
         state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
         state['phase']='scan' if state['running'] else 'result'
