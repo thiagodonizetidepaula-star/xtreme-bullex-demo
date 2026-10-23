@@ -93,7 +93,7 @@ def dispatch(c):
         wanted=c['assets'];errors=[]
         # Nunca inicializar histórico durante a janela de entrada; uma assinatura por vez.
         pending=[a for a in wanted if a not in stream_assets and time.time()-stream_retry.get(a,0)>60]
-        if pending and not any(a in stream_assets and a not in context_assets and time.time()-context_retry.get(a,0)>60 for a in wanted) and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
+        if pending and (c.get('sniper_only',False) or not any(a in stream_assets and a not in context_assets and time.time()-context_retry.get(a,0)>60 for a in wanted)) and 5<=now%60<=40 and time.time()-stream_seed_at>=1:
             asset=pending[0];stream_seed_at=time.time();stream_retry[asset]=time.time()
             try:
                 with stage('histórico inicial do streaming M1',8):bars=api.get_candles(asset,60,200,int(now))
