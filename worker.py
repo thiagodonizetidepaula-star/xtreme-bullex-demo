@@ -107,7 +107,7 @@ def dispatch(c):
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
         # Native M5 subscription is independent; never aggregate M1 as a substitute.
         pending5=[a for a in wanted if a in stream_assets and a not in context_assets and time.time()-context_retry.get(a,0)>60]
-        if pending5 and 8<=now%60<=35 and time.time()-stream_seed_at>=1:
+        if not c.get('sniper_only',False) and pending5 and 8<=now%60<=35 and time.time()-stream_seed_at>=1:
             asset=pending5[0];stream_seed_at=time.time();context_retry[asset]=time.time()
             try:
                 with stage('histórico nativo M5 Multifiltros',8):history5=api.get_candles(asset,300,200,int(now))
