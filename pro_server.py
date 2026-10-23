@@ -1,6 +1,6 @@
 """Read-only PRACTICE connection for Xtreme Bot Pro. No order API."""
 import os,sys,time,json,queue,threading,subprocess,pathlib,secrets,math
-from flask import Flask,request,jsonify,session,send_from_directory
+from flask import Flask,request,jsonify,session,send_from_directory,redirect
 from pro_engines import inspect
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__,static_folder=None)
@@ -47,7 +47,7 @@ def security(resp):
     resp.headers["Referrer-Policy"]="no-referrer"
     return resp
 @app.get("/")
-def home():return send_from_directory(ROOT/"xtreme-pro","index.html")
+def home():return redirect("https://xtreme-analista.onrender.com",code=302)
 @app.get("/pro-connect.js")
 def connector_script():return send_from_directory(ROOT/"xtreme-pro","pro-connect.js")
 @app.get("/health")
