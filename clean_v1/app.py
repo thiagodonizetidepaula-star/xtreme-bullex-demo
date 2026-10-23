@@ -77,4 +77,7 @@ def app(environ,start_response):
     return respond(start_response,'404 Not Found',{'error':'Não encontrado'})
 if __name__=='__main__':
     from wsgiref.simple_server import make_server
+    # Render clean service uses this entry point without an external build command.
+    subprocess.run([sys.executable,'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True,timeout=180)
+    subprocess.run([sys.executable,str(ROOT/'bootstrap.py')],cwd=str(ROOT),check=True,timeout=90)
     make_server('0.0.0.0',int(os.environ.get('PORT','10000')),app).serve_forever()
