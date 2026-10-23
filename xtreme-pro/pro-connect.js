@@ -13,13 +13,13 @@ async function call(url,body) {
 function display(data){
  const connected=!!data.connected;
  const cards=document.querySelectorAll('.status');
- if(cards.length) cards[0].querySelector('strong').textContent=connected?'Conectado à PRACTICE':'Desconectado';
+ if(cards.length){cards[0].querySelector('strong').textContent=connected?'Conectado à PRACTICE':'Desconectado';const detail=cards[0].querySelector('.muted');if(detail)detail.textContent=connected?'Bullex conectada • verificando executor DEMO':'Bullex desconectada';const dot=cards[0].querySelector('.dot');if(dot)dot.style.background=connected?'#19e4a0':'#74849c';}
  const balance=cards.length?cards[0].parentElement.querySelector('.kv b'):null;
  if(balance)balance.textContent=connected?String(data.balance??'—')+' '+String(data.currency||''):'—';
  const assets=Array.isArray(data.assets)?data.assets:[];
  document.getElementById('paircount').textContent=assets.length+' pares';
  document.getElementById('pairs').innerHTML=assets.length?assets.slice(0,25).map(a=>'<tr><td>'+String(a.asset).replace(/[^A-Za-z0-9/_-]/g,'')+'</td><td>—</td><td>'+Number(a.payout).toFixed(1)+'%</td></tr>').join(''):'<tr><td colspan="3">Aguardando pares</td></tr>';
- feedback.textContent=connected?'Conta DEMO conectada • ordens bloqueadas':'Desconectado';
+ feedback.textContent=connected?'Bullex DEMO conectada. Executor: consulte o estado no painel.':'Desconectado';
  if(connected){const select=document.getElementById('asset');const previous=select.value;select.replaceChildren(...assets.slice(0,60).map(a=>new Option(a.asset,a.asset)));if(assets.some(a=>a.asset===previous))select.value=previous;else if(assets.length)select.value=assets[0].asset;refreshChart();}
 }
 document.getElementById('proBrokerForm').onsubmit=async(e)=>{
