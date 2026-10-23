@@ -34,6 +34,18 @@ fetch('/api/pro/state',{credentials:'same-origin'}).then(r=>r.json()).then(displ
 
 const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>⚙ Quatro motores de busca • PRACTICE</h3><p class="note">Tendência · Padrões · Reversão · Rompimento. Os sinais são analisados, mas o envio de ordens continua bloqueado até validação do executor.</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
 document.getElementById('painel').prepend(scan);
+const auto=document.createElement('section');auto.className='panel';
+auto.innerHTML='<h3>⚡ Execução automática DEMO</h3><p class="note">Somente Bullex PRACTICE. Usa os limites da aba Configurações. Ordens enviadas somente após confirmação dos motores e dentro da janela M1.</p><div class="actions"><button class="btn primary" id="autoStart" type="button">▶ Ativar ordens DEMO</button><button class="btn stop" id="autoStop" type="button">■ Desativar ordens</button></div><p class="note" id="autoState">Ordens automáticas desativadas</p><div class="note" id="autoTrades"></div>';
+scan.after(auto);
+document.getElementById('autoStart').onclick=async()=>{try{
+ const cfg=JSON.parse(localStorage.getItem('xtreme-pro-settings')||'{}');
+ const d=await call('/api/pro/auto/start',cfg);
+ document.getElementById('autoState').textContent=d.automatic?'Execução DEMO ativada':'Execução desativada';
+}catch(e){document.getElementById('autoState').textContent=e.message}};
+document.getElementById('autoStop').onclick=async()=>{try{await call('/api/pro/auto/stop');document.getElementById('autoState').textContent='Ordens automáticas desativadas'}catch(e){document.getElementById('autoState').textContent=e.message}};
+async function refreshAuto(){try{const r=await fetch('/api/pro/state',{credentials:'same-origin'});const d=await r.json();document.getElementById('autoState').textContent=d.automatic?'🟢 Execução DEMO ativa • '+(d.used||0)+' ordens • resultado '+(d.profit||0):'⚪ Ordens desligadas'+(d.executor_error?' • '+d.executor_error:'');document.getElementById('autoTrades').textContent=(d.orders||[]).slice(-5).reverse().map(t=>t.asset+' '+t.side+' '+t.status).join(' | ')||'Nenhuma ordem DEMO confirmada.';}catch(e){}}
+setInterval(refreshAuto,5000);refreshAuto();
+
 async function scanUpdate(){try{
  const r=await fetch('/api/pro/scanner/state',{credentials:'same-origin'});const d=await r.json();
  document.getElementById('scannerStats').textContent=(d.running?'🟢 Motores ativos':'⚪ Motores parados')+' · '+(d.scan_count||0)+' leituras · '+(d.signals||[]).length+' sinais'+(d.error?' · '+d.error:'');
