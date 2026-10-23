@@ -143,7 +143,10 @@ def auto_start():
     c=get_current()
     if not c or not c.get("executor"):return jsonify(error="Reconecte à Bullex DEMO para iniciar o executor separado."),409
     if c["executor_busy"] or any(x.get("status")=="INCERTA" for x in c["orders"]):return jsonify(error="Revise as ordens incertas na Bullex primeiro."),409
-    if not c["scanner_running"]:return jsonify(error="Inicie primeiro os quatro motores de análise."),409
+    if not c["scanner_running"]:
+        c["scanner_stop"].clear()
+        c["scanner_running"]=True
+        threading.Thread(target=scanner_loop,args=(c,),daemon=True).start()
     data=request.get_json(silent=True) or {}
     try:
         stake=float(data.get("stake",2));limit=int(data.get("limit",10));payout=float(data.get("payout",80))
@@ -158,8 +161,10 @@ def auto_start():
 @app.post("/api/pro/auto/stop")
 def auto_stop():
     c=get_current()
-    if c:c["execute"]=False
-    return jsonify(ok=True,automatic=False)
+    if c:
+        c["execute"]=False
+        c["scanner_stop"].set()
+    return jsonify(ok=True,automatic=False,running=False)
 
 def scanner_loop(c):
     seen=set()
