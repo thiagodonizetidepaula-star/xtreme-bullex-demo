@@ -56,7 +56,7 @@ def checkpoint(c,trade):
     except Exception:return False
 
 def loop(c):
-    catalog_at=0;save_at=0;assets=[]
+    catalog_at=0;save_at=0;assets=[];rotation=0
     # Four independent discovery lanes share one broker stream and one order executor.
     # The broker API must not be called concurrently from multiple threads.
     lanes=4
@@ -80,17 +80,17 @@ def loop(c):
                 if not assets:
                     with c['lock']:c['message']='Nenhum ativo binário aberto informado pela corretora.'
                     c['stop'].wait(10);continue
-                batch=c['client'].call('snapshot',assets=[x['asset'] for x in assets])
-                payouts={x['asset']:x['payout'] for x in assets}
+                # Hot set + rotating cold set: low latency on the best payout pairs,\n                # while every other market is revisited over successive scans.\n                hot=assets[:16]\n                cold=assets[16:]\n                batch_size=min(12,len(cold))\n                cold_batch=[cold[(rotation+i)%len(cold)] for i in range(batch_size)] if cold else []\n                rotation=(rotation+batch_size)%len(cold) if cold else 0\n                selected_assets=hot+cold_batch\n                batch=c['client'].call('snapshot',assets=[x['asset'] for x in selected_assets])
+                payouts={x['asset']:x['payout'] for x in selected_assets}
                 groups=[[] for _ in range(lanes)]
                 for item in batch.get('items',[]):
                     # Stable lane ownership prevents duplicate processing of the same pair.
-                    slot=next((i%lanes for i,a in enumerate(assets) if a['asset']==item['asset']),None)
+                    slot=next((i%lanes for i,a in enumerate(selected_assets) if a['asset']==item['asset']),None)
                     if slot is not None:groups[slot].append(item)
                 futures=[pool.submit(process_lane,i,group,payouts,batch['now']) for i,group in enumerate(groups)]
                 details=[f.result() for f in futures]
                 with c['lock']:
-                    c.update(scanner_lanes=details,ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Xtreme Sniper analisando todos os ativos binários abertos informados pela Bullex.',errors=batch.get('errors',[])[-5:])
+                    c.update(scanner_lanes=details,ready=batch['ready'],total=batch['total'],last_poll=time.time(),message=f'Xtreme Sniper: {len(selected_assets)} pares priorizados neste ciclo; {len(assets)} disponíveis no catálogo. Sinais válidos encaminhados ao executor DEMO.',errors=batch.get('errors',[])[-5:])
                 if time.time()-save_at>=60:save(c);save_at=time.time()
                 c['stop'].wait(.25)
     except Exception as e:
