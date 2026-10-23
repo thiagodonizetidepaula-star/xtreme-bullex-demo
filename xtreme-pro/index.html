@@ -21,6 +21,52 @@ main{max-width:1720px;margin:auto;padding:18px;display:grid;gap:14px}.layout{dis
 .view{display:none}.view.active{display:grid;gap:14px}#toast{position:fixed;right:20px;bottom:20px;background:#1c3150;border:1px solid #5488d7;border-radius:10px;padding:15px;max-width:330px;display:none;z-index:9}.buttonrow{display:flex;gap:10px;flex-wrap:wrap}
 @media(max-width:1150px){.layout,.mid{grid-template-columns:1fr 1fr}.layout>.panel:first-child{grid-column:1/-1}.mid>.panel:first-child{grid-column:1/-1}}
 @media(max-width:690px){header{position:static;padding:14px;flex-wrap:wrap;gap:9px}.brand{min-width:0}.brand strong{font-size:19px}nav{order:3;width:100%;overflow-x:auto}nav button{white-space:nowrap;font-size:12px;padding:10px}.layout,.mid{grid-template-columns:1fr}.layout>.panel:first-child,.mid>.panel:first-child{grid-column:auto}main{padding:10px}.panel{padding:14px}.cards{grid-template-columns:1fr 1fr}.chart{height:220px}}
+
+/* Mobile-first correction: prevent clipped panels and provide accessible horizontal tables. */
+html,body{width:100%;max-width:100%;overflow-x:clip}
+main,.view,.layout,.mid,.panel{min-width:0;max-width:100%}
+.panel{overflow-wrap:anywhere}
+button,select,input{max-width:100%}
+.tablewrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:690px){
+ body{font-size:13px}
+ header{display:flex;align-items:center;gap:10px;padding:12px}
+ .brand{flex:1 1 auto;max-width:calc(100% - 150px)}
+ .brand strong{font-size:17px;white-space:normal}
+ .brand small{font-size:9px;letter-spacing:.2px}
+ header>.pill{flex:0 0 auto;font-size:9px;padding:6px 8px}
+ nav{flex:1 0 100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;overflow:visible}
+ nav button{min-width:0;white-space:normal;line-height:1.15;padding:10px 3px;font-size:11px;text-align:center}
+ main{padding:9px;gap:10px}
+ .view.active,.layout,.mid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+ .panel{padding:12px;border-radius:12px}
+ .panel h3{font-size:14px}
+ .top{align-items:flex-start}
+ .chart{height:220px}
+ .cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+ .tile{min-width:0;min-height:105px;padding:11px 8px}
+ .tile .num{font-size:20px;word-break:break-word}
+ .tile .tiny{font-size:10px;line-height:1.4}
+ .fieldgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .field input,.field select{font-size:16px;padding:10px 7px}
+ .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .btn{padding:11px 8px}
+ .assets{table-layout:fixed;width:100%}
+ .assets td,.assets th{font-size:11px;padding:10px 2px;overflow-wrap:anywhere}
+ .score{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .tablewrap{border-radius:8px}
+ table.trades{min-width:690px}
+ .center{padding:20px 8px}
+}
+@media(max-width:360px){
+ .brand{max-width:calc(100% - 135px)}
+ .brand strong{font-size:15px}
+ .brand .bolt{font-size:25px}
+ .cards{grid-template-columns:1fr}
+ .tile{min-height:70px}
+ .tile .num{margin-top:4px}
+}
+
 </style></head><body>
 <header><div class="brand"><div class="bolt">ϟ</div><div><strong>Xtreme <span>Bot Pro</span></strong><small>PAINEL PROFISSIONAL • DEMO</small></div></div><nav><button class="active" data-tab="painel">⌂ Painel</button><button data-tab="config">⚙ Configurações</button><button data-tab="placar">▥ Placar</button><button data-tab="conectar">↗ Conectar</button></nav><span class="pill">● SEM ESTRATÉGIA</span></header>
 <main>
