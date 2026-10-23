@@ -232,10 +232,10 @@ def executor_start():
         if any(t['status'] in ('ENVIANDO','ABERTA','INCERTA') for t in c['exec_trades']):return jsonify(error='Revise as ordens incertas na corretora antes de retomar.'),409
         if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
         incoming=request.get_json(silent=True) or {}
-        # Interpret selected signals independently. Old hidden strategy selector must not filter these.
-        incoming['strategy']='all'
-        if not incoming.get('strategies'):
-            incoming['strategies']=sorted(execution.EXECUTABLE)
+        # Only the new transparently specified confluence is authorized in PRACTICE.
+        incoming['strategy']='apex_confluence'
+        incoming['strategies']=['apex_confluence']
+        incoming['expiry']=1
         try:cfg=execution.config(incoming)
         except ValueError as e:return jsonify(error=str(e)),400
         selected=execution.eligible(c['events'],cfg['expiry'],cfg.get('strategy','all'),cfg.get('strategies'))
