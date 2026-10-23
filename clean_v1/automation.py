@@ -3,6 +3,24 @@ import os,time,threading,math
 from apex_confluence import decision
 from engine import normalized
 
+def settle(state,call,order,asset,direction):
+    """Only settlement blocks the next order; scanner stays independent."""
+    try:
+        result=call('exec',{'op':'demo_result','id':order['id'],'h':1},160)
+        pnl=float(result['profit'])
+        state['profit']+=pnl
+        if pnl>0:state['wins']+=1
+        elif pnl<0:state['losses']+=1
+        state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl}
+        state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['expire_ts']=0
+        state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
+        state['phase']='scan' if state['running'] else 'result'
+    except Exception:
+        state['running']=False;state['uncertain']=True
+        state['phase']='uncertain';state['message']='Resultado incerto; confira a ordem na Bullex antes de retomar'
+    finally:
+        with state['order_lock']:state['pending']=False
+
 def run(state, call):
     try:
         state['phase']='catalog';state['message']='Lendo ativos abertos da PRACTICE'
@@ -31,7 +49,7 @@ def run(state, call):
             rot+=10
             snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True},15)
             state['ready']=snap.get('ready',0)
-            state['phase']='scan'
+            if not state['pending']:state['phase']='scan'
             state['message']=f'Analisando {state["ready"]}/{len(subset)} ativos preparados (catálogo: {len(assets)})'
             server_now=snap.get('now',time.time())
             boundary=int(server_now//60)*60
@@ -63,33 +81,22 @@ def run(state, call):
                     if order.get('sent') and order.get('id'):
                         state['orders']+=1
                         state['phase']='running_order'
-                        # Timestamp comes from confirmed broker order expiration, not a simulated countdown.
                         state['expire_ts']=int(order.get('expiration',0))
                         state['entry_ts']=int(boundary)
                         state['current_asset']=item['asset']
                         state['current_direction']='CALL' if signal==1 else 'PUT'
                         state['current_order_id']=str(order['id'])
-                        state['message']='Ordem DEMO confirmada: '+str(order['id'])
-                        state['last_order']={'asset':item['asset'],'direction':'CALL' if signal==1 else 'PUT','id':str(order['id'])}
-                        # No new order until broker confirms outcome.
-                        try:
-                            result=call('exec',{'op':'demo_result','id':order['id'],'h':1},160)
-                            pnl=float(result['profit'])
-                            state['profit']+=pnl
-                            if pnl>0:state['wins']+=1
-                            elif pnl<0:state['losses']+=1
-                            state['phase']='result';state['expire_ts']=0
-                            state['message']='Último resultado confirmado: '+result['status']
-                        except Exception:
-                            state['running']=False
-                            state['uncertain']=True
-                            state['phase']='uncertain';state['message']='Resultado incerto: pare e confira o histórico da Bullex'
-                    else:state['message']=order.get('reason','Ordem não aceita')
+                        state['message']='Ordem em andamento; analisando outros ativos'
+                        state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id'])}
+                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction']),daemon=True).start()
+                    else:
+                        state['message']=order.get('reason','Ordem não aceita')
+                        with state['order_lock']:state['pending']=False
                 except Exception:
-                    state['running']=False
-                    state['uncertain']=True
-                    state['phase']='uncertain';state['message']='Envio com confirmação incerta: confira a Bullex antes de reiniciar'
-                finally:state['pending']=False
+                    state['running']=False;state['uncertain']=True
+                    state['phase']='uncertain'
+                    state['message']='Envio incerto; confira a Bullex antes de retomar'
+                    # Remain pending on uncertainty to prevent duplicate submissions.
             state['stop'].wait(.4)
     except Exception as e:
         state['running']=False;state['phase']='error';state['message']='Análise interrompida: '+str(e)[:120]
