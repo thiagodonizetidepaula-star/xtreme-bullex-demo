@@ -81,7 +81,7 @@ button,select,input{max-width:100%}
 </section>
 <section id="config" class="view"><div class="panel"><h3><b>⚙</b> Configurações do robô</h3><p class="note warning">Configurações locais, apenas para preparar o novo robô. Nenhuma operação será executada e nenhuma senha é armazenada.</p><div class="fieldgrid" id="fullFields"></div><div class="buttonrow" style="margin-top:16px"><button class="btn blue" id="saveSettings">Salvar configurações</button><button class="btn" id="resetSettings">Restaurar padrões</button></div></div><div class="panel"><h3>Estratégias</h3><p class="muted">Nenhuma estratégia instalada. Esta área será implementada em uma próxima etapa.</p></div></section>
 <section id="placar" class="view"><div class="panel"><h3><b>▥</b> Placar de desempenho</h3><div class="cards"><div class="tile"><div class="muted">Vitórias</div><div class="num">0</div></div><div class="tile"><div class="muted">Derrotas</div><div class="num">0</div></div><div class="tile"><div class="muted">Resultado DEMO</div><div class="num">0,00</div></div></div><p class="note">O placar começa zerado e só deve utilizar resultados confirmados de operações DEMO.</p></div></section>
-<section id="conectar" class="view"><div class="panel"><h3><b>↗</b> Conexão segura</h3><p class="warning note">Modo DEMO. O conector da corretora ainda não foi implementado neste novo aplicativo. Não informe senhas nesta versão.</p><div class="status"><div class="dot"></div><strong>Desconectado</strong></div><div class="buttonrow"><button class="btn primary" id="connectPage">Conectar conta DEMO</button><button class="btn stop" id="stopPage">Parar robô</button></div></div></section>
+<section id="conectar" class="view"></section>
 </main><div id="toast" role="status" aria-live="polite"></div>
 <script>
 const defaults={stake:2,limit:10,payout:80,stopLoss:10,stopWin:20,expiry:1};let config={...defaults};try{config={...config,...JSON.parse(localStorage.getItem('xtreme-pro-settings')||'{}')}}catch(e){}
@@ -95,6 +95,6 @@ function save(){const values={};for(const [k] of fields){const el=document.query
 document.getElementById('saveSettings').onclick=save;
 document.getElementById('resetSettings').onclick=()=>{config={...defaults};localStorage.removeItem('xtreme-pro-settings');renderFields('quickFields');renderFields('fullFields');toast('Valores padrão restaurados.')};
 document.getElementById('quickFields').onchange=()=>{const vals={};document.querySelectorAll('#quickFields input').forEach(e=>vals[e.dataset.key]=Number(e.value));config={...config,...vals};renderFields('fullFields')};
-for(const id of ['connectQuick','connectPage'])document.getElementById(id).onclick=()=>toast('Conector de corretora ainda não instalado. Nenhuma conexão ou ordem enviada.');
-for(const id of ['stopQuick','stopPage'])document.getElementById(id).onclick=()=>toast('Robô parado: nenhum motor de operação está ativo.');
+document.getElementById('connectQuick').onclick=()=>tab('conectar');
+document.getElementById('stopQuick').onclick=()=>toast('Execução desativada: não há estratégias instaladas.');
 </script><script src="/pro-connect.js" defer></script></body></html>
