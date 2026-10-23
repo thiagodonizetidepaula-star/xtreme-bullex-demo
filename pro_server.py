@@ -82,13 +82,13 @@ def connect():
             er=send_worker(ex,"connect",email=email.strip(),password=password)
             if er.get("mode")!="PRACTICE":raise RuntimeError("Executor não confirmou DEMO")
             c["executor"]=ex
-        except Exception:
+        except Exception as exc:
             if "ex" in locals() and ex["proc"].poll() is None:ex["proc"].terminate()
-            c["executor_error"]="Executor DEMO ainda não conectado; reconecte para habilitar ordens"
+            c["executor_error"]=str(exc) if isinstance(exc,RuntimeError) else "Falha na inicialização do executor DEMO"
         key=secrets.token_urlsafe(32)
         with lock:clients[key]=c
         session.clear();session["connection"]=key
-        return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=False)
+        return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=bool(c["executor"]),executor_error=c["executor_error"])
     except Exception as exc:
         c["proc"].kill()
         return jsonify(error=str(exc) if isinstance(exc,RuntimeError) else "Falha na integração Bullex."),502
