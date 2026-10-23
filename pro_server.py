@@ -1,6 +1,7 @@
 """Read-only PRACTICE connection for Xtreme Bot Pro. No order API."""
 import os,sys,time,json,queue,threading,subprocess,pathlib,secrets
 from flask import Flask,request,jsonify,session,send_from_directory
+from pro_engines import inspect
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__,static_folder=None)
 app.secret_key=os.environ["XTREME_PRO_SECRET"]
@@ -26,7 +27,7 @@ def open_worker():
         for line in process.stdout:q.put(line)
         q.put(None)
     threading.Thread(target=reader,daemon=True).start()
-    return {"proc":process,"q":q,"lock":threading.RLock(),"updated":time.time(),"assets":[],"balance":None,"currency":None}
+    return {"proc":process,"q":q,"lock":threading.RLock(),"updated":time.time(),"assets":[],"balance":None,"currency":None,"scanner_running":False,"scanner_stop":threading.Event(),"signals":[],"scanner_error":None,"scan_count":0}
 def get_current():
     key=session.get("connection")
     if not key:return None
@@ -43,13 +44,13 @@ def home():return send_from_directory(ROOT/"xtreme-pro","index.html")
 @app.get("/pro-connect.js")
 def connector_script():return send_from_directory(ROOT/"xtreme-pro","pro-connect.js")
 @app.get("/health")
-def health():return jsonify(ok=True,practice_only=True,orders_enabled=False)
+def health():return jsonify(ok=True,practice_only=True,orders_enabled=False,scanner_running=False)
 @app.get("/api/pro/state")
 def state():
     c=get_current()
     if not c:return jsonify(connected=False,mode="PRACTICE",orders_enabled=False)
     if c["proc"].poll() is not None:return jsonify(connected=False,mode="PRACTICE",error="Sessão encerrada",orders_enabled=False)
-    return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=False)
+    return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=False,scanner_running=c["scanner_running"],signals=c["signals"][-40:],scan_count=c["scan_count"],scanner_error=c["scanner_error"])
 @app.post("/api/pro/connect")
 def connect():
     if request.headers.get("Origin") and request.headers["Origin"].rstrip("/")!=request.host_url.rstrip("/"):return jsonify(error="Origem não autorizada"),403
@@ -84,9 +85,61 @@ def refresh():
         c["assets"]=market.get("assets",[])
         return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=False)
     except RuntimeError as exc:return jsonify(error=str(exc)),502
+
+def scanner_loop(c):
+    seen=set()
+    try:
+        while not c["scanner_stop"].is_set():
+            # Four analysis engines evaluate each candle snapshot; prioritize payout.
+            assets=sorted(c["assets"],key=lambda x:-x.get("payout",0))[:12]
+            for item in assets:
+                if c["scanner_stop"].is_set():break
+                asset=item["asset"]
+                try:
+                    sample=send_worker(c,"candles",asset=asset)
+                    for signal in inspect(sample["candles"]):
+                        identity=(asset,signal["engine"],signal["closed_at"])
+                        if identity in seen:continue
+                        seen.add(identity)
+                        signal.update(asset=asset,payout=item.get("payout"),status="SINAL_DEMO_SEM_ORDEM")
+                        c["signals"].append(signal)
+                    c["signals"]=c["signals"][-120:]
+                    c["scan_count"]+=1
+                except RuntimeError as exc:
+                    c["scanner_error"]=str(exc)
+                if c["scanner_stop"].wait(.5):break
+            if len(seen)>5000:seen=set(list(seen)[-2500:])
+            c["scanner_stop"].wait(3)
+    finally:
+        c["scanner_running"]=False
+
+@app.post("/api/pro/scanner/start")
+def scanner_start():
+    c=get_current()
+    if not c:return jsonify(error="Conecte à PRACTICE primeiro."),401
+    if c["scanner_running"]:return jsonify(ok=True,running=True)
+    c["scanner_stop"].clear()
+    c["scanner_running"]=True
+    threading.Thread(target=scanner_loop,args=(c,),daemon=True).start()
+    return jsonify(ok=True,running=True,orders_enabled=False)
+
+@app.post("/api/pro/scanner/stop")
+def scanner_stop():
+    c=get_current()
+    if c:c["scanner_stop"].set()
+    return jsonify(ok=True,running=False)
+
+@app.get("/api/pro/scanner/state")
+def scanner_state():
+    c=get_current()
+    if not c:return jsonify(connected=False,running=False,signals=[])
+    return jsonify(connected=True,running=c["scanner_running"],signals=c["signals"][-40:],scan_count=c["scan_count"],error=c["scanner_error"],orders_enabled=False)
+
 @app.post("/api/pro/disconnect")
 def disconnect():
     key=session.pop("connection",None)
     with lock:c=clients.pop(key,None) if key else None
-    if c and c["proc"].poll() is None:c["proc"].terminate()
+    if c:
+        c["scanner_stop"].set()
+        if c["proc"].poll() is None:c["proc"].terminate()
     return jsonify(connected=False,orders_enabled=False)
