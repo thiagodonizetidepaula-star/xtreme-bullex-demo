@@ -106,11 +106,15 @@ def loop(c,save,checkpoint=None):
         while not c['exec_stop'].is_set():
             # Prepare away from the entry window; this independent process does no order here.
             now=time.time()
-            if 50<=now%60<60 and now-prepared_at>=2:
-                try:c['exec_client'].call('demo_prepare')
+            # Pré-aqueça apenas perto da virada M1. O broker exige catálogo e saldo
+            # com no máximo 8 s; preparar aos 50 s deixava a validação expirar às 00 s.
+            if 55<=now%60<59 and now-prepared_at>=3:
+                try:
+                    c['exec_client'].call('demo_prepare')
+                    prepared_at=time.time()
                 except RuntimeError:
-                    with c['lock']:c['exec_message']='Pré-validação indisponível. Aguardando catálogo e saldo recentes; nenhuma ordem enviada.'
-                prepared_at=time.time()
+                    with c['lock']:c['exec_message']='Preparação DEMO falhou; não enviaremos ordem sem saldo e payout válidos.'
+                    prepared_at=time.time()
             with c['lock']:
                 cfg=dict(c['exec_config'])
                 if not EXECUTABLE:c['exec_message']='SEM OPERAÇÃO: estratégias anteriores retiradas. Aguardando nova estratégia.';break
@@ -154,7 +158,9 @@ def loop(c,save,checkpoint=None):
             # Durable pre-send record: on ambiguity never retry automatically.
             if not checkpoint(c,current):
                 with c['lock']:current.update(status='IGNORADA',reason='Armazenamento indisponível antes do envio');c['exec_message']='Aguardando armazenamento. Nenhuma ordem enviada; nova tentativa em 5 segundos.'
-                c['exec_stop'].wait(5)
+                # A falha de checkpoint não autoriza enviar esta ordem.
+                # Volta a observar imediatamente sinais futuros em vez de bloquear 5s.
+                c['exec_stop'].wait(.25)
                 current=None
                 continue
             with c['send_lock']:
