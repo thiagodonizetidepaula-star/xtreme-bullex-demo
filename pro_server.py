@@ -40,6 +40,8 @@ def security(resp):
     return resp
 @app.get("/")
 def home():return send_from_directory(ROOT/"xtreme-pro","index.html")
+@app.get("/pro-connect.js")
+def connector_script():return send_from_directory(ROOT/"xtreme-pro","pro-connect.js")
 @app.get("/health")
 def health():return jsonify(ok=True,practice_only=True,orders_enabled=False)
 @app.get("/api/pro/state")
