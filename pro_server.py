@@ -32,6 +32,13 @@ def get_current():
     key=session.get("connection")
     if not key:return None
     with lock:return clients.get(key)
+@app.before_request
+def protect_control():
+    if request.method=="POST" and request.path.startswith("/api/pro/"):
+        origin=request.headers.get("Origin")
+        if origin and origin.rstrip("/")!=request.host_url.rstrip("/"):
+            return jsonify(error="Origem não autorizada"),403
+
 @app.after_request
 def security(resp):
     resp.headers["Cache-Control"]="no-store"
