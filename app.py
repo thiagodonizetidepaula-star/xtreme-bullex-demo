@@ -80,7 +80,7 @@ def loop(c):
                 if not assets:
                     with c['lock']:c['message']='Nenhum ativo binário aberto informado pela corretora.'
                     c['stop'].wait(10);continue
-                # Hot set + rotating cold set: low latency on the best payout pairs,\n                # while every other market is revisited over successive scans.\n                hot=assets[:16]\n                cold=assets[16:]\n                batch_size=min(12,len(cold))\n                cold_batch=[cold[(rotation+i)%len(cold)] for i in range(batch_size)] if cold else []\n                rotation=(rotation+batch_size)%len(cold) if cold else 0\n                selected_assets=hot+cold_batch\n                batch=c['client'].call('snapshot',assets=[x['asset'] for x in selected_assets],sniper_only=True)
+                # Hot set + rotating cold set: low latency on the best payout pairs,\n                # while every other market is revisited over successive scans.\n                hot=assets[:16]\n                cold=assets[16:]\n                batch_size=min(12,len(cold))\n                cold_batch=[cold[(rotation+i)%len(cold)] for i in range(batch_size)] if cold else []\n                rotation=(rotation+batch_size)%len(cold) if cold else 0\n                selected_assets=hot+cold_batch\n                batch=c['client'].call('snapshot',assets=[x['asset'] for x in selected_assets],sniper_only=False)
                 payouts={x['asset']:x['payout'] for x in selected_assets}
                 groups=[[] for _ in range(lanes)]
                 for item in batch.get('items',[]):
