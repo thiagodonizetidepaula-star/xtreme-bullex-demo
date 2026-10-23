@@ -74,7 +74,7 @@ def loop(c):
                 if not assets or (time.time()-catalog_at>60 and time.time()%60>8):
                     market=c['client'].call('market',payout=0,strategy='sniper')['assets']
                     # Highest payout first; prefer regular market when payouts tie.
-                    assets=sorted(market,key=lambda x:(-float(x.get('payout',0)),bool(x.get('otc',False)),x['asset']))[:32]
+                    assets=sorted(market,key=lambda x:(-float(x.get('payout',0)),bool(x.get('otc',False)),x['asset']))
                     catalog_at=time.time()
                     with c['lock']:c['assets']=assets
                 if not assets:
@@ -90,7 +90,7 @@ def loop(c):
                 futures=[pool.submit(process_lane,i,group,payouts,batch['now']) for i,group in enumerate(groups)]
                 details=[f.result() for f in futures]
                 with c['lock']:
-                    c.update(scanner_lanes=details,ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='4 motores analisando pares prioritários e encaminhando sinais ao executor PRACTICE.',errors=batch.get('errors',[])[-5:])
+                    c.update(scanner_lanes=details,ready=batch['ready'],total=batch['total'],last_poll=time.time(),message='Xtreme Sniper analisando todos os ativos binários abertos informados pela Bullex.',errors=batch.get('errors',[])[-5:])
                 if time.time()-save_at>=60:save(c);save_at=time.time()
                 c['stop'].wait(.25)
     except Exception as e:
