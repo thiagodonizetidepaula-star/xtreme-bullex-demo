@@ -2,6 +2,9 @@ import unittest,threading
 from unittest.mock import patch
 import thiago,engine,execution
 class ThiagoTests(unittest.TestCase):
+    def setUp(self):
+        self._legacy_patch=patch.object(execution,'EXECUTABLE',{'sniper','sniper_first_v2','thiago_v1','patterns_v1'});self._legacy_patch.start();self.addCleanup(self._legacy_patch.stop)
+
     def bars(self):
         a=[{'t':1710000000+i*60,'o':100.,'h':101.,'l':99.,'c':100.} for i in range(80)]
         a[-2].update(o=99.6,h=100.,l=99.,c=99.4)
