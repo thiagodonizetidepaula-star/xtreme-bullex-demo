@@ -3,6 +3,10 @@ from unittest.mock import patch
 import pattern_entries as pe
 import engine,execution
 class PatternEntryTests(unittest.TestCase):
+    def setUp(self):
+        self._legacy_patches=[patch.object(engine,'ACTIVE',{k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1')}),patch.object(engine,'EXECUTABLE',{'sniper','sniper_first_v2','thiago_v1','patterns_v1'}),patch.object(execution,'EXECUTABLE',{'sniper','sniper_first_v2','thiago_v1','patterns_v1'})]
+        for pp in self._legacy_patches:pp.start();self.addCleanup(pp.stop)
+
     def bars(self,n=90):return [{'t':1710000000+i*60,'o':100+(i-1)*.02,'c':100+i*.02,'h':100+i*.02+.1,'l':100+(i-1)*.02-.1} for i in range(n)]
     def test_pattern_without_sniper_or_history_and_opposite_trend_block(self):
         a=self.bars();a[-1].update(o=a[-1]['c']-.06,h=a[-1]['c']+.005,l=a[-1]['c']-.065)
