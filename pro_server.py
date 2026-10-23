@@ -220,7 +220,9 @@ def scanner_start():
 @app.post("/api/pro/scanner/stop")
 def scanner_stop():
     c=get_current()
-    if c:\n        c["scanner_stop"].set()\n        c["execute"]=False
+    if c:
+        c["scanner_stop"].set()
+        c["execute"]=False
     return jsonify(ok=True,running=False)
 
 @app.get("/api/pro/scanner/state")
