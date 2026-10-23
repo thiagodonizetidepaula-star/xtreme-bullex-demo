@@ -25,6 +25,7 @@ def run(state, call):
     try:
         state['phase']='catalog';state['message']='Lendo ativos abertos da PRACTICE'
         last_catalog=0;assets=[];rot=0;last_prepare=-1
+        state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0}
         while not state['stop'].is_set():
             now=time.time();sec=now%60
             if not state['running']:break
@@ -66,10 +67,14 @@ def run(state, call):
                 state['phase']='signal'
                 if len(state['seen'])>600:state['seen']={x for x in state['seen'] if x[0]>boundary-3600}
                 # Broker order window is only five seconds; never send stale signals.
-                if not 0<=server_now-boundary<=3 or not state['running'] or state['pending']:continue
+                if not 0<=server_now-boundary<=3:
+                    state['rejections']['late']+=1;continue
+                if not state['running'] or state['pending']:
+                    state['rejections']['busy']+=1;continue
                 if state['orders']>=state['max_orders'] or state['profit']<=-state['stop_loss'] or state['profit']>=state['stop_win']:
                     state['running']=False;state['message']='Limite de operações ou stop atingido';break
                 if last_prepare!=int(server_now//60)-1:
+                    state['rejections']['preflight']+=1
                     state['message']='Sem pré-validação fresca, entrada ignorada';continue
                 # Local once-per-candle fence. Never retry uncertain orders.
                 with state['order_lock']:
@@ -90,6 +95,7 @@ def run(state, call):
                         state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id'])}
                         threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction']),daemon=True).start()
                     else:
+                        state['rejections']['broker']+=1
                         state['message']=order.get('reason','Ordem não aceita')
                         with state['order_lock']:state['pending']=False
                 except Exception:
