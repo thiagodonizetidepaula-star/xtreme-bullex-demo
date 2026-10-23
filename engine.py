@@ -4,7 +4,7 @@ from candle_context import decision as candle_decision
 LIVE_VERSION=4
 from statistics import mean,pstdev
 from sniper import sniper_buffers,xtreme_trend,xtreme_trend_series
-NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','patterns_v1':'Padrões de Velas · Teste demo imediato','thiago_v1':'Thiago · Sniper + Tendência + Retração S/R','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0'}
+NAMES={'engulf':'Aurora · Engolfo','wick':'Sentinela · Rejeição','cross':'Vetor · Tendência','sweep':'Eclipse · Falso rompimento','bands':'Órbita · Retorno à média','sniper':'Xtreme Sniper','sniper_trend':'Xtreme Sniper + Tendência · HL2 (anterior)','sniper_first_v2':'Xtreme Sniper + Tendência','ema_pullback':'Impulso · Retorno EMA20','rsi_bands':'Equilíbrio · Bandas + RSI14','channel_break':'Horizonte · Rompimento 20 + Tendência','patterns_v1':'Padrões de Velas · Teste demo imediato','thiago_v1':'Thiago · Sniper + Tendência + Retração S/R','multifilter_v1':'Multifiltros · Tendência + Pullback V1.0','apex_confluence':'Confluência EMA + RSI + Pressão de Velas'}
 # Frozen selection from completed observations before this revision. New candidates retain all horizons.
 LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sniper_first_v2':(1,2,3,5),'ema_pullback':(1,2,3,5),'rsi_bands':(1,2,3,5),'channel_break':(1,2,3,5)}
 # Raw unfiltered Sniper remains analysis-only; new hypotheses may qualify for demo.
@@ -12,8 +12,8 @@ LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi
 
 # Only the two owner-selected Snipers execute; Multifiltros remains research-only.
 RESEARCH=set()
-ACTIVE={}
-EXECUTABLE=set()
+ACTIVE={'apex_confluence':(1,)}
+EXECUTABLE={'apex_confluence'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
@@ -161,11 +161,15 @@ def ingest(state,asset,bars,now,payout,bars5=None):
         state['chart']['levels']=thiago['levels']
     # First snapshot seeds history; only subsequently observed closed bars generate forward signals.
     if previous is None or latest['t']<=previous:return
-    found=signals(a)
+    found=[]
+    if 'apex_confluence' in ACTIVE:
+        from apex_confluence import decision as apex_decision
+        apex_direction=apex_decision(a)
+        if apex_direction:found.append(('apex_confluence',apex_direction))
     found=[(k,d) for k,d in found if k!='sniper_first_v2' and (flow is None or k!='sniper' or d==permitted)]
-    if permitted:found.append(('sniper_first_v2',permitted))
-    if thiago and thiago['direction']:found.append(('thiago_v1',thiago['direction']))
-    if pattern_entry and pattern_entry['direction']:found.append(('patterns_v1',pattern_entry['direction']))
+    if permitted and 'sniper_first_v2' in ACTIVE:found.append(('sniper_first_v2',permitted))
+    if thiago and thiago['direction'] and 'thiago_v1' in ACTIVE:found.append(('thiago_v1',thiago['direction']))
+    if pattern_entry and pattern_entry['direction'] and 'patterns_v1' in ACTIVE:found.append(('patterns_v1',pattern_entry['direction']))
     if now-latest['t']-60>(5 if 'multifilter_v1' in ACTIVE else 15):return
     for key,direction in found:
         for horizon in ACTIVE.get(key,()):
