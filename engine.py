@@ -11,9 +11,9 @@ LEGACY_ACTIVE={'wick':(3,), 'cross':(3,), 'engulf':(3,), 'sniper':(1,2,3,5), 'sn
 LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi_bands','channel_break'}
 
 # Only the two owner-selected Snipers execute; Multifiltros remains research-only.
-RESEARCH={'multifilter_v1'}
-ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','patterns_v1')}
-EXECUTABLE={'sniper','sniper_first_v2','thiago_v1','patterns_v1'}
+RESEARCH=set()
+ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1')}
+EXECUTABLE={'sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1'}
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
