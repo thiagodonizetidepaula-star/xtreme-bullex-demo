@@ -15,7 +15,7 @@ def dispatch(c):
         if not isinstance(closed,int) or closed%60 or side not in ('call','put'):raise ValueError('Sinal inválido')
         if not isinstance(minimum,(int,float)) or minimum<80:raise ValueError('Payout mínimo inválido')
         if not 0<=broker.broker_now()-closed<=5:return {'sent':False,'reason':'Sinal fora da janela M1'}
-        if time.time()-broker.market_at>8:return {'sent':False,'reason':'Catálogo vencido'}
+        broker.market(force=True)\n        if time.time()-broker.market_at>8:return {'sent':False,'reason':'Catálogo vencido'}
         info=broker.market_cache.get(asset,{})
         if not info.get('open') or info.get('payout',0)<minimum:return {'sent':False,'reason':'Payout ou abertura insuficiente'}
         balance=broker.api.get_balance()
