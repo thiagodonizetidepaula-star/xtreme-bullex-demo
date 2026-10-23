@@ -35,28 +35,37 @@ document.getElementById('proDisconnect').onclick=async()=>{try{display(await cal
 
 fetch('/api/pro/state',{credentials:'same-origin'}).then(r=>r.json()).then(display).catch(()=>{feedback.textContent='Servidor de conexão indisponível.'});
 
-const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>◈ Central de análise • 4 motores</h3><p class="note">Tendência · Padrões · Reversão · Rompimento</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
-document.getElementById('painel').prepend(scan);
-const auto=document.createElement('section');auto.className='panel';
-auto.innerHTML='<h3>⚡ Operações automáticas • DEMO</h3><p class="note">Somente PRACTICE · Limites em Configurações</p><div class="actions"><button class="btn primary" id="autoStart" type="button">▶ Ativar ordens DEMO</button><button class="btn stop" id="autoStop" type="button">■ Desativar ordens</button></div><p class="note" id="autoState">Ordens automáticas desativadas</p><div class="note" id="autoTrades"></div>';
-scan.after(auto);
-document.getElementById('autoStart').onclick=async()=>{try{
- const cfg=JSON.parse(localStorage.getItem('xtreme-pro-settings')||'{}');
- const d=await call('/api/pro/auto/start',cfg);
- document.getElementById('autoState').textContent=d.automatic?'Execução DEMO ativada':'Execução desativada';
-}catch(e){document.getElementById('autoState').textContent=e.message}};
-document.getElementById('autoStop').onclick=async()=>{try{await call('/api/pro/auto/stop');document.getElementById('autoState').textContent='Ordens automáticas desativadas'}catch(e){document.getElementById('autoState').textContent=e.message}};
-async function refreshAuto(){try{const r=await fetch('/api/pro/state',{credentials:'same-origin'});const d=await r.json();document.getElementById('autoState').textContent=d.automatic?'🟢 Execução DEMO ativa • '+(d.used||0)+' ordens • resultado '+(d.profit||0):'⚪ Ordens desligadas'+(d.executor_error?' • '+d.executor_error:'');document.getElementById('autoTrades').textContent=(d.orders||[]).slice(-5).reverse().map(t=>t.asset+' '+t.side+' '+t.status).join(' | ')||'Nenhuma ordem DEMO confirmada.';}catch(e){}}
-setInterval(refreshAuto,5000);refreshAuto();
-
-async function scanUpdate(){try{
- const r=await fetch('/api/pro/scanner/state',{credentials:'same-origin'});const d=await r.json();
- document.getElementById('scannerStats').textContent=(d.running?'🟢 Motores ativos':'⚪ Motores parados')+' · '+(d.scan_count||0)+' leituras · '+(d.signals||[]).length+' sinais'+(d.error?' · '+d.error:'');
- document.getElementById('scannerSignals').textContent=(d.signals||[]).slice(-5).reverse().map(x=>x.engine+' | '+x.asset+' | '+x.side+' | '+x.payout+'%').join(' · ')||'Aguardando sinais novos';
-}catch(e){}}
-document.getElementById('startScanner').onclick=async()=>{try{await call('/api/pro/scanner/start');scanUpdate()}catch(e){feedback.textContent=e.message}};
-document.getElementById('stopScanner').onclick=async()=>{try{await call('/api/pro/scanner/stop');scanUpdate()}catch(e){feedback.textContent=e.message}};
-setInterval(scanUpdate,5000);setInterval(refreshChart,30000);scanUpdate();
+const cockpit=document.createElement('section');
+cockpit.className='panel';
+cockpit.innerHTML='<h3>⚡ Xtreme Sniper · Robô DEMO</h3><p class="note">Analisa o mercado M1 com Xtreme Sniper e os motores de apoio. Somente PRACTICE.</p><button class="btn primary" style="width:100%;font-size:16px" id="robotToggle">▶ Iniciar robô</button><p class="note" id="robotStatus">Verificando conexão e executor...</p><p class="note" id="robotSignals"></p>';
+document.getElementById('painel').prepend(cockpit);
+let switching=false,active=false;
+const toggle=document.getElementById('robotToggle');
+async function updateRobot(){
+ try{
+  const [sr,rr]=await Promise.all([fetch('/api/pro/state',{credentials:'same-origin'}),fetch('/api/pro/scanner/state',{credentials:'same-origin'})]);
+  const d=await sr.json(),sc=await rr.json();
+  active=Boolean(d.automatic&&sc.running);
+  toggle.textContent=active?'■ Parar robô':'▶ Iniciar robô';
+  toggle.className=active?'btn stop':'btn primary';
+  const reason=!d.connected?'Bullex desconectada':!d.orders_enabled?'Executor DEMO indisponível: '+(d.executor_error||'reconecte a conta'):d.executor_error?'Alerta: '+d.executor_error:active?'Robô ativo · lendo candles e avaliando sinais':'Pronto para iniciar';
+  document.getElementById('robotStatus').textContent=reason+' · '+(sc.scan_count||0)+' leituras · '+(sc.signals||[]).length+' sinais';
+  document.getElementById('robotSignals').textContent=(sc.signals||[]).slice(-3).reverse().map(x=>x.engine+' '+x.asset+' '+x.side).join(' · ')||'Nenhum sinal novo';
+ }catch(e){document.getElementById('robotStatus').textContent='Servidor indisponível: '+e.message}
+}
+toggle.onclick=async()=>{
+ if(switching)return;switching=true;toggle.disabled=true;
+ try{
+  if(active){await call('/api/pro/auto/stop');active=false}
+  else{
+   const cfg=JSON.parse(localStorage.getItem('xtreme-pro-settings')||'{}');
+   const result=await call('/api/pro/auto/start',cfg);
+   active=Boolean(result.automatic);
+  }
+ }catch(e){document.getElementById('robotStatus').textContent=e.message}
+ finally{switching=false;toggle.disabled=false;await updateRobot()}
+};
+setInterval(updateRobot,5000);updateRobot();
 
 let chartBusy=false;
 async function refreshChart(){
