@@ -1,9 +1,9 @@
 (() => {
 const side=document.getElementById('conectar');
 const note=side.querySelector('.warning');
-if(note) note.textContent='Conexão Bullex somente PRACTICE. Dados protegidos por sessão; nenhuma ordem automática disponível.';
+if(note) note.remove();
 const panel=document.createElement('section');panel.className='panel';
-panel.innerHTML='<h3>Conectar Bullex PRACTICE</h3><form id="proBrokerForm" class="fieldgrid"><div class="field"><label for="proEmail">E-mail Bullex</label><input type="email" id="proEmail" autocomplete="username" required></div><div class="field"><label for="proPass">Senha Bullex</label><input type="password" id="proPass" autocomplete="current-password" required></div><button class="btn primary" type="submit">Conectar DEMO</button><button class="btn stop" id="proDisconnect" type="button">Desconectar</button></form><p class="note" id="proFeedback">Aguardando conexão.</p>';
+panel.innerHTML='<h3>🔐 Conexão Bullex • DEMO</h3><form id="proBrokerForm" class="fieldgrid"><div class="field"><label for="proEmail">E-mail Bullex</label><input type="email" id="proEmail" autocomplete="username" required></div><div class="field"><label for="proPass">Senha Bullex</label><input type="password" id="proPass" autocomplete="current-password" required></div><button class="btn primary" type="submit">Conectar DEMO</button><button class="btn stop" id="proDisconnect" type="button">Desconectar</button></form><p class="note" id="proFeedback">Aguardando conexão.</p>';
 side.prepend(panel);
 const feedback=document.getElementById('proFeedback');
 async function call(url,body) {
@@ -12,14 +12,17 @@ async function call(url,body) {
 }
 function display(data){
  const connected=!!data.connected;
+ document.getElementById('proBrokerForm').style.display=connected?'none':'grid';
+ let logout=document.getElementById('proDisconnect');if(connected){logout.style.display='block';side.appendChild(logout)}else{logout.style.display='none';document.getElementById('proBrokerForm').appendChild(logout)}
+ const indicator=document.getElementById('execBrokerStatus');if(indicator)indicator.textContent=!connected?'Desconectado':data.orders_enabled?'Pronto DEMO':data.executor_error?'Falhou • ver detalhe':'Aguardando';
  const cards=document.querySelectorAll('.status');
- if(cards.length){cards[0].querySelector('strong').textContent=connected?'Conectado à PRACTICE':'Desconectado';const detail=cards[0].querySelector('.muted');if(detail)detail.textContent=connected?'Bullex conectada • verificando executor DEMO':'Bullex desconectada';const dot=cards[0].querySelector('.dot');if(dot)dot.style.background=connected?'#19e4a0':'#74849c';}
+ if(cards.length){cards[0].querySelector('strong').textContent=connected?'Conectado à PRACTICE':'Desconectado';const detail=cards[0].querySelector('.muted');if(detail)detail.textContent=connected?(data.orders_enabled?'Leitura e executor conectados':'Leitura conectada • executor indisponível'):'Bullex desconectada';const dot=cards[0].querySelector('.dot');if(dot)dot.style.background=connected?'#19e4a0':'#74849c';}
  const balance=cards.length?cards[0].parentElement.querySelector('.kv b'):null;
  if(balance)balance.textContent=connected?String(data.balance??'—')+' '+String(data.currency||''):'—';
  const assets=Array.isArray(data.assets)?data.assets:[];
  document.getElementById('paircount').textContent=assets.length+' pares';
  document.getElementById('pairs').innerHTML=assets.length?assets.slice(0,25).map(a=>'<tr><td>'+String(a.asset).replace(/[^A-Za-z0-9/_-]/g,'')+'</td><td>—</td><td>'+Number(a.payout).toFixed(1)+'%</td></tr>').join(''):'<tr><td colspan="3">Aguardando pares</td></tr>';
- feedback.textContent=connected?'Bullex DEMO conectada. Executor: consulte o estado no painel.':'Desconectado';
+ feedback.textContent=connected?(data.orders_enabled?'Conta DEMO e executor conectados.':(data.executor_error||'Conectado para leitura; executor não disponível.')):'Desconectado';
  if(connected){const select=document.getElementById('asset');const previous=select.value;select.replaceChildren(...assets.slice(0,60).map(a=>new Option(a.asset,a.asset)));if(assets.some(a=>a.asset===previous))select.value=previous;else if(assets.length)select.value=assets[0].asset;refreshChart();}
 }
 document.getElementById('proBrokerForm').onsubmit=async(e)=>{
@@ -32,10 +35,10 @@ document.getElementById('proDisconnect').onclick=async()=>{try{display(await cal
 
 fetch('/api/pro/state',{credentials:'same-origin'}).then(r=>r.json()).then(display).catch(()=>{feedback.textContent='Servidor de conexão indisponível.'});
 
-const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>⚙ Quatro motores de busca • PRACTICE</h3><p class="note">Tendência · Padrões · Reversão · Rompimento. Os sinais são analisados, mas o envio de ordens continua bloqueado até validação do executor.</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
+const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>◈ Central de análise • 4 motores</h3><p class="note">Tendência · Padrões · Reversão · Rompimento</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
 document.getElementById('painel').prepend(scan);
 const auto=document.createElement('section');auto.className='panel';
-auto.innerHTML='<h3>⚡ Execução automática DEMO</h3><p class="note">Somente Bullex PRACTICE. Usa os limites da aba Configurações. Ordens enviadas somente após confirmação dos motores e dentro da janela M1.</p><div class="actions"><button class="btn primary" id="autoStart" type="button">▶ Ativar ordens DEMO</button><button class="btn stop" id="autoStop" type="button">■ Desativar ordens</button></div><p class="note" id="autoState">Ordens automáticas desativadas</p><div class="note" id="autoTrades"></div>';
+auto.innerHTML='<h3>⚡ Operações automáticas • DEMO</h3><p class="note">Somente PRACTICE · Limites em Configurações</p><div class="actions"><button class="btn primary" id="autoStart" type="button">▶ Ativar ordens DEMO</button><button class="btn stop" id="autoStop" type="button">■ Desativar ordens</button></div><p class="note" id="autoState">Ordens automáticas desativadas</p><div class="note" id="autoTrades"></div>';
 scan.after(auto);
 document.getElementById('autoStart').onclick=async()=>{try{
  const cfg=JSON.parse(localStorage.getItem('xtreme-pro-settings')||'{}');
