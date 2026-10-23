@@ -68,10 +68,12 @@ def run(state, call):
                             state['message']='Último resultado confirmado: '+result['status']
                         except Exception:
                             state['running']=False
+                            state['uncertain']=True
                             state['message']='Resultado incerto: pare e confira o histórico da Bullex'
                     else:state['message']=order.get('reason','Ordem não aceita')
                 except Exception:
                     state['running']=False
+                    state['uncertain']=True
                     state['message']='Envio com confirmação incerta: confira a Bullex antes de reiniciar'
                 finally:state['pending']=False
             state['stop'].wait(.4)
