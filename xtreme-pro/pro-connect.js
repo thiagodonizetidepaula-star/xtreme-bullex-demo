@@ -20,6 +20,7 @@ function display(data){
  document.getElementById('paircount').textContent=assets.length+' pares';
  document.getElementById('pairs').innerHTML=assets.length?assets.slice(0,25).map(a=>'<tr><td>'+String(a.asset).replace(/[^A-Za-z0-9/_-]/g,'')+'</td><td>—</td><td>'+Number(a.payout).toFixed(1)+'%</td></tr>').join(''):'<tr><td colspan="3">Aguardando pares</td></tr>';
  feedback.textContent=connected?'Conta DEMO conectada • ordens bloqueadas':'Desconectado';
+ if(connected){const select=document.getElementById('asset');const previous=select.value;select.replaceChildren(...assets.slice(0,60).map(a=>new Option(a.asset,a.asset)));if(assets.some(a=>a.asset===previous))select.value=previous;else if(assets.length)select.value=assets[0].asset;refreshChart();}
 }
 document.getElementById('proBrokerForm').onsubmit=async(e)=>{
  e.preventDefault();const button=e.submitter;button.disabled=true;feedback.textContent='Conectando à Bullex...';
@@ -28,7 +29,7 @@ document.getElementById('proBrokerForm').onsubmit=async(e)=>{
  finally{button.disabled=false}
 };
 document.getElementById('proDisconnect').onclick=async()=>{try{display(await call('/api/pro/disconnect'))}catch(error){feedback.textContent=error.message}};
-document.getElementById('connectQuick').onclick=()=>document.querySelector('[data-tab="conectar"]').click();
+
 fetch('/api/pro/state',{credentials:'same-origin'}).then(r=>r.json()).then(display).catch(()=>{feedback.textContent='Servidor de conexão indisponível.'});
 
 const scan=document.createElement('section');scan.className='panel';scan.innerHTML='<h3>⚙ Quatro motores de busca • PRACTICE</h3><p class="note">Tendência · Padrões · Reversão · Rompimento. Os sinais são analisados, mas o envio de ordens continua bloqueado até validação do executor.</p><div class="actions"><button type="button" class="btn primary" id="startScanner">▶ Iniciar motores</button><button type="button" class="btn stop" id="stopScanner">■ Parar motores</button></div><p class="note" id="scannerStats">Aguardando início</p><div id="scannerSignals" class="note">Nenhum sinal ainda</div>';
@@ -40,5 +41,36 @@ async function scanUpdate(){try{
 }catch(e){}}
 document.getElementById('startScanner').onclick=async()=>{try{await call('/api/pro/scanner/start');scanUpdate()}catch(e){feedback.textContent=e.message}};
 document.getElementById('stopScanner').onclick=async()=>{try{await call('/api/pro/scanner/stop');scanUpdate()}catch(e){feedback.textContent=e.message}};
-setInterval(scanUpdate,5000);scanUpdate();
+setInterval(scanUpdate,5000);setInterval(refreshChart,30000);scanUpdate();
+
+let chartBusy=false;
+async function refreshChart(){
+ if(chartBusy)return;chartBusy=true;
+ const holder=document.getElementById('chartHolder'),status=document.getElementById('chartStatus');
+ try{
+  const asset=document.getElementById('asset').value;
+  const res=await fetch('/api/pro/chart?asset='+encodeURIComponent(asset),{credentials:'same-origin'});
+  const data=await res.json();
+  if(!res.ok)throw Error(data.error||'Não foi possível carregar candles');
+  const candles=(data.candles||[]).filter(x=>[x.o,x.h,x.l,x.c].every(Number.isFinite));
+  if(candles.length<3)throw Error('Aguardando candles válidos da Bullex.');
+  const width=780,height=290,pad=32;
+  const min=Math.min(...candles.map(x=>x.l)),max=Math.max(...candles.map(x=>x.h));
+  const scale=Math.max(max-min,.000001);const x=i=>pad+i*(width-2*pad)/candles.length+(width-2*pad)/candles.length/2;
+  const y=v=>height-pad-(v-min)/scale*(height-2*pad);
+  const bar=Math.max(2,Math.min(9,(width-2*pad)/candles.length*.65));
+  let lines='';
+  for(let i=0;i<5;i++){let yy=pad+i*(height-2*pad)/4;lines+='<line x1="0" y1="'+yy+'" x2="'+width+'" y2="'+yy+'" stroke="#263851" stroke-width="1"/>';}
+  candles.forEach((c,i)=>{
+   const color=c.c>=c.o?'#19e4a0':'#ff5270',xx=x(i);
+   lines+='<line x1="'+xx+'" x2="'+xx+'" y1="'+y(c.h)+'" y2="'+y(c.l)+'" stroke="'+color+'" stroke-width="1.5"/>';
+   lines+='<rect x="'+(xx-bar/2)+'" y="'+Math.min(y(c.o),y(c.c))+'" width="'+bar+'" height="'+Math.max(1,Math.abs(y(c.o)-y(c.c)))+'" fill="'+color+'"/>';
+  });
+  holder.innerHTML='<svg role="img" aria-label="Candles reais M1 Bullex" viewBox="0 0 '+width+' '+height+'" preserveAspectRatio="none" style="display:block;width:100%;height:100%">'+lines+'</svg>';
+  status.textContent=asset+' · '+candles.length+' candles M1 · Fonte Bullex PRACTICE';
+ }catch(e){status.textContent=e.message;holder.innerHTML='<div class="emptychart">Gráfico indisponível: '+String(e.message).replace(/[<>]/g,'')+'</div>'}
+ finally{chartBusy=false}
+}
+const pairSelect=document.getElementById('asset');
+pairSelect.addEventListener('change',refreshChart);
 })();
