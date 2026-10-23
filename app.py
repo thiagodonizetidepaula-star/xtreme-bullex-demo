@@ -232,9 +232,9 @@ def executor_start():
         if any(t['status'] in ('ENVIANDO','ABERTA','INCERTA') for t in c['exec_trades']):return jsonify(error='Revise as ordens incertas na corretora antes de retomar.'),409
         if not execution.EXECUTABLE:return jsonify(error='Estratégias anteriores retiradas. Aguardando configuração e validação da nova estratégia.'),409
         incoming=request.get_json(silent=True) or {}
-        # Default to all supported strategies, but permit explicit user selections.
+        # Interpret selected signals independently. Old hidden strategy selector must not filter these.
+        incoming['strategy']='all'
         if not incoming.get('strategies'):
-            incoming['strategy']='all'
             incoming['strategies']=sorted(execution.EXECUTABLE)
         try:cfg=execution.config(incoming)
         except ValueError as e:return jsonify(error=str(e)),400
