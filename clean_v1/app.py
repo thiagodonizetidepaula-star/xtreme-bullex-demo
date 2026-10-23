@@ -18,6 +18,15 @@ el('disconnectBtn').onclick=async()=>{show(await send('/api/disconnect',{}))};el
 el('saveSettings').onclick=async()=>{try{let v=await send('/api/settings',{stop_loss:Number(el('stopLoss').value),stop_win:Number(el('stopWin').value)});show(v);el('saveStatus').textContent='Configurações salvas nesta sessão'}catch(e){el('saveStatus').textContent=e.message}};el('stopBot').onclick=async()=>{try{show(await send('/api/stop',{}))}catch(e){el('botStatus').textContent=e.message}};
 setInterval(()=>fetch('/api/state',{credentials:'same-origin'}).then(r=>r.json()).then(show).catch(()=>{}),3000);
 fetch('/api/state',{credentials:'same-origin'}).then(r=>r.json()).then(show).catch(()=>{});
+</script><section class="card" style="margin:16px"><h2>Histórico por data · DEMO</h2><button id="loadArchive" type="button">Atualizar histórico</button><p id="archiveInfo" class="muted">Conecte à PRACTICE para consultar o histórico.</p></section><script>
+document.getElementById('loadArchive').addEventListener('click',async()=>{
+ const node=document.getElementById('archiveInfo');node.textContent='Consultando...';
+ try{const res=await fetch('/api/history',{credentials:'same-origin',cache:'no-store'});const value=await res.json();
+ if(!res.ok)throw Error(value.error||'Não disponível');
+ if(!value.enabled){node.textContent='Armazenamento aguardando configuração privada no Render.';return;}
+ node.textContent=(value.days||[]).length?value.days.map(d=>d.date+' · '+d.wins+' WIN / '+d.losses+' LOSS · US$ '+d.profit.toFixed(2)).join(' | '):'Sem operações gravadas nesta conta.';
+ }catch(e){node.textContent=e.message||'Falha ao consultar histórico';}
+});
 </script></body></html>'''
 ROOT=Path(__file__).resolve().parent.parent
 sessions={}
