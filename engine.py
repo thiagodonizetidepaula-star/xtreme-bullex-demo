@@ -12,8 +12,8 @@ LEGACY_EXECUTABLE={'wick','cross','engulf','sniper_first_v2','ema_pullback','rsi
 
 # Only the two owner-selected Snipers execute; Multifiltros remains research-only.
 RESEARCH=set()
-ACTIVE={k:(1,2,3,5) for k in ('sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1')}
-EXECUTABLE={'sniper','sniper_first_v2','thiago_v1','patterns_v1','multifilter_v1'}
+ACTIVE={}
+EXECUTABLE=set()
 
 def ema(values,period):
     out=[];value=None;alpha=2/(period+1)
