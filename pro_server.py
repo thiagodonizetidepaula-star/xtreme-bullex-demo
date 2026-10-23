@@ -76,7 +76,16 @@ def connect():
         market=send_worker(c,"market",payout=0,strategy="sniper")
         c["assets"]=market.get("assets",[])
         c["balance"]=result.get("balance");c["currency"]=result.get("currency")
-        # Executor is a second, isolated PRACTICE session. Never persist credentials.\n        try:\n            ex=open_worker("pro_executor.py")\n            er=send_worker(ex,"connect",email=email.strip(),password=password)\n            if er.get("mode")!="PRACTICE":raise RuntimeError("Executor não confirmou DEMO")\n            c["executor"]=ex\n        except Exception:\n            if "ex" in locals() and ex["proc"].poll() is None:ex["proc"].terminate()\n            c["executor_error"]="Executor DEMO ainda não conectado; reconecte para habilitar ordens"\n        key=secrets.token_urlsafe(32)
+        # Executor is a second, isolated PRACTICE session. Never persist credentials.
+        try:
+            ex=open_worker("pro_executor.py")
+            er=send_worker(ex,"connect",email=email.strip(),password=password)
+            if er.get("mode")!="PRACTICE":raise RuntimeError("Executor não confirmou DEMO")
+            c["executor"]=ex
+        except Exception:
+            if "ex" in locals() and ex["proc"].poll() is None:ex["proc"].terminate()
+            c["executor_error"]="Executor DEMO ainda não conectado; reconecte para habilitar ordens"
+        key=secrets.token_urlsafe(32)
         with lock:clients[key]=c
         session.clear();session["connection"]=key
         return jsonify(connected=True,mode="PRACTICE",balance=c["balance"],currency=c["currency"],assets=c["assets"],orders_enabled=False)
