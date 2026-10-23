@@ -43,29 +43,15 @@ def gale_after(c,t):
     return {'event':f"gale:{t['broker_id']}:{level}:{expiration}",'asset':t['asset'],'t':expiration-60,'key':t['key'],'name':t['name'],'h':t['h'],'direction':t['direction'],'stake':round(cfg['stake']*cfg['mg_multiplier']**level,2),'mg_level':level,'mg_multiplier':cfg['mg_multiplier'],'parent_broker_id':t['broker_id'],'root_event':t.get('root_event',t['event']),'status':'ENVIANDO','signal_closed_at':t.get('signal_closed_at',t['t']+60),'entry_at':expiration,'rule_version':t.get('rule_version',1),'created_at':time.time()}
 
 def eligible(events,expiry=None,strategy='all',strategies=None):
+    """Only completed observations with strictly over 50% wins qualify each rule/horizon."""
+    allowed=EXECUTABLE if strategy=='all' else ({strategy} & EXECUTABLE)
     if strategies is not None:
-        chosen=[]
-        for key in strategies:
-            for pair in eligible(events,expiry,key):
-                if pair not in chosen:chosen.append(pair)
-        return chosen
-    # User threshold: >=50% of completed observations, no minimum sample size.
-    # Compare integer counts so rounding cannot promote 49.96% to 50%.
-    if strategy=='patterns_v1' and 'patterns_v1' in EXECUTABLE and expiry in (1,2,3,5):return [('patterns_v1',expiry)]
-    rs=[r for r in ranking(events) if (expiry is None or r['h']==expiry) and r['name'] in {NAMES[k] for k in EXECUTABLE if (strategy=='all' and k!='patterns_v1') or k==strategy} and r['n']>0 and r['wins']*100>=50*r['n']]
-    # Prefer the corrected Xtreme when it qualifies, preserving the user's 50% floor.
-    rs.sort(key=lambda r:0 if r['name']==NAMES['thiago_v1'] else 1 if r['name']==NAMES['sniper_first_v2'] else 2)
-    chosen=[]
-    for r in rs[:3]:
-        key=next(k for k,v in NAMES.items() if v==r['name']);chosen.append((key,r['h']))
-    # 'Todas' inclui os padrões de candles assim que houver um sinal aberto recente.
-    # Não exige estatística histórica para o modo de teste de padrões na PRACTICE.
-    if strategy=='all' and 'patterns_v1' in EXECUTABLE:
-        horizons=(expiry,) if expiry in (1,2,3,5) else (1,2,3,5)
-        for h in horizons:
-            if any(e.get('key')=='patterns_v1' and e.get('h')==h and e.get('result')=='Aberto' for e in events):
-                if ('patterns_v1',h) not in chosen:chosen.append(('patterns_v1',h))
-    return chosen
+        allowed=allowed & set(strategies)
+    rows=[r for r in ranking(events) if r['name'] in {NAMES[k] for k in allowed}
+          and (expiry is None or r['h']==expiry) and r['n']>0 and r['wins']*2>r['n']]
+    rows.sort(key=lambda r:(-r['wins']/r['n'],-r['n'],r['name']))
+    return [(next(k for k in allowed if NAMES[k]==r['name']),r['h']) for r in rows]
+
 
 def scoreboard(trades):
     done=[t for t in trades if t.get('status') in ('WIN','LOSS','EMPATE') and not t.get('score_excluded',False)]
