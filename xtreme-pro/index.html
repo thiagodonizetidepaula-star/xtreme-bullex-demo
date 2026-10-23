@@ -97,4 +97,4 @@ document.getElementById('resetSettings').onclick=()=>{config={...defaults};local
 document.getElementById('quickFields').onchange=()=>{const vals={};document.querySelectorAll('#quickFields input').forEach(e=>vals[e.dataset.key]=Number(e.value));config={...config,...vals};renderFields('fullFields')};
 for(const id of ['connectQuick','connectPage'])document.getElementById(id).onclick=()=>toast('Conector de corretora ainda não instalado. Nenhuma conexão ou ordem enviada.');
 for(const id of ['stopQuick','stopPage'])document.getElementById(id).onclick=()=>toast('Robô parado: nenhum motor de operação está ativo.');
-</script></body></html>
+</script><script src="/pro-connect.js" defer></script></body></html>
