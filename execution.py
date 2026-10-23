@@ -134,9 +134,9 @@ def loop(c,save,checkpoint=None):
                 else:
                     selected=eligible(c['events'],cfg['expiry'] if 'sniper' in EXECUTABLE else None,cfg.get('strategy','all'),cfg.get('strategies'))
                     if selected!=c['exec_selected']:
-                        if not c['exec_selected'] and selected:c['exec_started']=time.time()
+                        # Keep original start time when a strategy reaches 50%; do not discard fresh signals during qualification.
                         c['exec_selected']=selected
-                    if not selected:c['exec_message']='EXECUTOR EM ESPERA: nenhuma estratégia com pelo menos 50% de acerto nos resultados concluídos.'
+                    if not selected:c['exec_message']='Xtreme Sniper: aguardando 50% ou mais de acerto nos sinais concluídos desta expiração.'
                     used={(t['asset'],t['t']) for t in c['exec_trades']}
                     candidates=[e for e in c['events'] if (e['key'],e['h']) in c['exec_selected'] and e['result']=='Aberto' and e['t']+60>=c['exec_started'] and 0<=time.time()-e['t']-60<=MAX_ENTRY_DELAY and (e['asset'],e['t']) not in used]
                     if candidates:
