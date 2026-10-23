@@ -67,14 +67,39 @@ button,select,input{max-width:100%}
  .tile .num{margin-top:4px}
 }
 
+
+/* Premium mobile trading cockpit */
+@media(max-width:690px){
+ header{background:#080f20;padding:13px 14px 8px;position:sticky;top:0;border-color:#1b3153}
+ .brand{max-width:none;flex:1 1 100%;padding-bottom:7px}
+ .brand strong{font-size:21px;font-weight:800;letter-spacing:-.7px}
+ .brand small{letter-spacing:.8px;color:#8499b9}
+ header>.pill{position:absolute;right:12px;top:21px;background:#113930;padding:7px}
+ nav{gap:5px;background:#101d33;padding:4px;border-radius:13px;grid-template-columns:repeat(4,minmax(0,1fr))}
+ nav button{border-radius:10px;font-weight:600;padding:10px 2px}
+ nav button.active{background:#254775;box-shadow:none}
+ main{padding:10px;gap:10px}
+ .panel{background:linear-gradient(160deg,#14233c 0%,#0b1728 100%);border-color:#2a3b55;box-shadow:0 4px 15px #00000030}
+ .panel h3{font-size:15px;font-weight:750}
+ .layout{gap:10px}
+ .layout>.panel:nth-child(2) .assets tr:nth-child(n+9){display:none}
+ .status{padding:12px}
+ .tile{background:#172944}
+ .chart{background-color:#0b1628}
+ .kv{padding:8px 0}
+ .actions{margin:10px 0}
+ .btn.primary{background:linear-gradient(125deg,#24edb1,#0ab882)}
+ .btn.stop{background:linear-gradient(130deg,#ff536d,#df3658)}
+ #scannerSignals{line-height:1.5}
+}
 </style></head><body>
-<header><div class="brand"><div class="bolt">ϟ</div><div><strong>Xtreme <span>Bot Pro</span></strong><small>PAINEL PROFISSIONAL • DEMO</small></div></div><nav><button class="active" data-tab="painel">⌂ Painel</button><button data-tab="config">⚙ Configurações</button><button data-tab="placar">▥ Placar</button><button data-tab="conectar">↗ Conectar</button></nav><span class="pill">● 4 MOTORES • DEMO</span></header>
+<header><div class="brand"><div class="bolt">ϟ</div><div><strong>Xtreme <span>Bot Pro</span></strong><small>PAINEL PROFISSIONAL • DEMO</small></div></div><nav><button class="active" data-tab="painel">⌂ Painel</button><button data-tab="config">⚙ Configurações</button><button data-tab="placar">▥ Placar</button><button data-tab="conectar">↗ Conectar</button></nav><span class="pill">● PRACTICE</span></header>
 <main>
 <section id="painel" class="view active">
 <div class="layout">
 <div class="panel"><div class="top"><h3><b>▥</b> Mercado e gráfico</h3><div class="buttonrow"><select id="asset" class="btn small"><option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option><option>AUD/USD</option></select><span class="pill">M1</span></div></div><div class="chart" id="chartHolder" style="height:270px"><div class="emptychart">Carregando candles da Bullex...</div></div><p class="note" id="chartStatus">Candles M1 da conta PRACTICE.</p></div>
-<div class="panel"><div class="top"><h3><b>⌁</b> Ativos monitorados</h3><span class="tiny muted" id="paircount">0 conectados</span></div><table class="assets"><thead><tr><th>PAR</th><th>PREÇO</th><th>PAYOUT</th></tr></thead><tbody id="pairs"><tr><td>EUR/USD</td><td>—</td><td>—</td></tr><tr><td>GBP/USD</td><td>—</td><td>—</td></tr><tr><td>USD/JPY</td><td>—</td><td>—</td></tr><tr><td>AUD/USD</td><td>—</td><td>—</td></tr></tbody></table><p class="note">Os pares são apenas uma lista inicial; a disponibilidade será confirmada pela corretora.</p></div>
-<div style="display:grid;gap:13px"><div class="panel"><div class="top"><h3><b>◉</b> Status da conexão</h3><span class="pill">DEMO</span></div><div class="status"><div class="dot"></div><div><strong>Desconectado</strong><div class="muted tiny">Integração com corretora pendente</div></div></div><div class="kv"><span class="muted">Saldo DEMO</span><b>—</b></div><div class="kv"><span class="muted">Servidor</span><b>—</b></div><div class="kv"><span class="muted">Atualização</span><b>—</b></div></div></div>
+<div class="panel"><div class="top"><h3><b>⌁</b> Ativos monitorados</h3><span class="tiny muted" id="paircount">0 conectados</span></div><table class="assets"><thead><tr><th>PAR</th><th>PREÇO</th><th>PAYOUT</th></tr></thead><tbody id="pairs"><tr><td>EUR/USD</td><td>—</td><td>—</td></tr><tr><td>GBP/USD</td><td>—</td><td>—</td></tr><tr><td>USD/JPY</td><td>—</td><td>—</td></tr><tr><td>AUD/USD</td><td>—</td><td>—</td></tr></tbody></table><p class="note">Pares disponíveis informados pela Bullex PRACTICE.</p></div>
+<div style="display:grid;gap:13px"><div class="panel"><div class="top"><h3><b>◉</b> Status da conexão</h3><span class="pill">DEMO</span></div><div class="status"><div class="dot"></div><div><strong>Desconectado</strong><div class="muted tiny">Integração com corretora pendente</div></div></div><div class="kv"><span class="muted">Saldo DEMO</span><b>—</b></div><div class="kv"><span class="muted">Executor de ordens</span><b id="execBrokerStatus">Aguardando</b></div></div></div>
 </div>
 <div class="mid"><div class="panel"><h3><b>▥</b> Placar</h3><div class="score"><div class="tile"><div class="muted tiny">WIN</div><div class="num" style="color:var(--green)">0</div></div><div class="tile"><div class="muted tiny">LOSS</div><div class="num" style="color:var(--red)">0</div></div><div class="tile"><div class="muted tiny">ACERTO</div><div class="num">—</div></div><div class="tile"><div class="muted tiny">RESULTADO</div><div class="num">0,00</div></div></div></div><div class="panel"><div class="top"><h3><b>⚙</b> Configurações rápidas</h3><button class="btn small" data-go="config">Abrir completo →</button></div><div class="fieldgrid" id="quickFields"></div></div></div>
 <div class="panel"><div class="top"><h3><b>☷</b> Operações recentes</h3><span class="muted tiny">Histórico vazio</span></div><div class="tablewrap"><table class="trades"><thead><tr><th>HORA</th><th>ATIVO</th><th>DIREÇÃO</th><th>ENTRADA</th><th>EXPIRAÇÃO</th><th>PAYOUT</th><th>RESULTADO</th><th>STATUS</th></tr></thead></table></div><div class="center">Nenhuma operação registrada. A execução de ordens está desativada.</div></div>
