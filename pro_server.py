@@ -168,7 +168,9 @@ def scanner_loop(c):
                         if identity in seen:continue
                         seen.add(identity)
                         signal.update(asset=asset,payout=item.get("payout"),status="SINAL_DEMO_SEM_ORDEM")
-                        c["signals"].append(signal)\n                        if c["execute"] and c["executor"] and item.get("payout",0)>=c["risk"]["min_payout"]:\n                            launch_demo(c,signal)
+                        c["signals"].append(signal)
+                        if c["execute"] and c["executor"] and item.get("payout",0)>=c["risk"]["min_payout"]:
+                            launch_demo(c,signal)
                     c["signals"]=c["signals"][-120:]
                     c["scan_count"]+=1
                 except RuntimeError as exc:
