@@ -1,9 +1,10 @@
 """Fresh-session PRACTICE scanner. Strategy never loads old historical results."""
 import os,time,threading,math
 from clean_v1.xtreme_sniper import decision
+from clean_v1.candle_research import features,summarize
 from engine import normalized
 
-def settle(state,call,order,asset,direction):
+def settle(state,call,order,asset,direction,candle_features):
     """Only settlement blocks the next order; scanner stays independent."""
     try:
         result=call('exec',{'op':'demo_result','id':order['id'],'h':1},160)
@@ -12,6 +13,9 @@ def settle(state,call,order,asset,direction):
         if pnl>0:state['wins']+=1
         elif pnl<0:state['losses']+=1
         state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl}
+        state.setdefault('research',[]).append({'asset':asset,'direction':direction,'status':result['status'],'profit':pnl,'features':candle_features,'at':time.time()})
+        state['research']=state['research'][-300:]
+        state['research_summary']=summarize(state['research'])
         state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['expire_ts']=0
         state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
         state['phase']='scan' if state['running'] else 'result'
@@ -109,7 +113,7 @@ def run(state, call):
                         state['current_order_id']=str(order['id'])
                         state['message']='Ordem em andamento; analisando outros ativos'
                         state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id'])}
-                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction']),daemon=True).start()
+                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],features(bars,state['current_direction'])),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
                         state['message']=order.get('reason','Ordem não aceita')
