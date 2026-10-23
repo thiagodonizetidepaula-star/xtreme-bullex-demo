@@ -5,6 +5,9 @@ import mf_live as live
 import execution
 class LiveTests(unittest.TestCase):
     def setUp(self):
+        self._legacy_patches=[patch.object(execution,'EXECUTABLE',{'sniper','sniper_first_v2','thiago_v1','patterns_v1'})]
+        for pp in self._legacy_patches:pp.start();self.addCleanup(pp.stop)
+        
         a,b=fixture();self.a=[self.raw(x) for x in a];self.b=[self.raw(x) for x in b];self.s={'events':[]};self.now=self.a[999]['from']+60+.5
     def raw(self,x):return dict(zip(('from','open','max','min','close'),(x['t'],x['o'],x['h'],x['l'],x['c'])))
     def decision(self,a,i,n,context,p):return {'direction':1,'checks':{'context':context is not None and context['run']>=150},'indicators':i[-1]}
