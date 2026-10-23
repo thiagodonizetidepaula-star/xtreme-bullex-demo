@@ -208,14 +208,13 @@ def executor_connect():
         d=request.get_json(silent=True) or {};email=str(d.get('email','')).strip().lower()
         owner=hmac.new(app.secret_key.encode(),email.encode(),hashlib.sha256).hexdigest()
         if owner!=c['owner'] or not isinstance(d.get('password'),str) or not d['password']:return jsonify(error='Use a mesma conta Bullex do analisador.'),400
-        if any(t['status'] in ('ENVIANDO','ABERTA','INCERTA') for t in c['exec_trades']) and d.get('reviewed') is not True:return jsonify(error='Confira ordens incertas no histórico da corretora e marque a revisão.'),409
+        # Login is independent of any prior execution's unresolved checkpoint.\n        # Never mark an old order reviewed just because the new DEMO account connected.
         cl=Client(executor=True);r=cl.call('connect',email=email,password=d['password'])
         if r.get('mode')!='PRACTICE':raise RuntimeError('Conta PRACTICE não confirmada.')
         with c['lock']:
             if c['exec_client']:c['exec_client'].close()
             c['exec_client']=cl;c['exec_connected']=True;c['exec_message']='Executor conectado exclusivamente à demo. Aguardando início manual.'
-            for t in c['exec_trades']:
-                if t['status'] in ('ENVIANDO','ABERTA','INCERTA'):t['status']='REVISADA';t['reviewed_at']=time.time()
+            # Preserve uncertain legacy orders for explicit reconciliation; no automatic retries.
         save(c);return jsonify(ok=True)
     except Exception as e:
         if cl:cl.close()
