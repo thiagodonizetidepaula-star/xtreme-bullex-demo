@@ -13,7 +13,7 @@ def send_worker(client,op,**kwargs):
         process=client["proc"]
         if process.poll() is not None:raise RuntimeError("A conexão com a corretora terminou.")
         process.stdin.write(json.dumps({"op":op,**kwargs})+"\n");process.stdin.flush()
-        try:line=client["q"].get(timeout=48 if op=="connect" else 22)
+        try:line=client["q"].get(timeout=48 if op=="connect" else 160 if op=="result" else 22)
         except queue.Empty:
             process.kill();raise RuntimeError("A corretora não respondeu dentro do limite.")
         if line is None:raise RuntimeError("Sessão da corretora encerrada.")
