@@ -1,6 +1,7 @@
 """Fresh-session PRACTICE scanner. Strategy never loads old historical results."""
 import os,time,threading,math
 from clean_v1.xtreme_sniper import decision
+from clean_v1.trend_regime import trending
 from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
 from engine import normalized
@@ -34,7 +35,7 @@ def run(state, call):
     try:
         state['phase']='catalog';state['message']='Lendo ativos abertos da PRACTICE'
         last_catalog=0;assets=[];rot=0;last_prepare=-1
-        state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0}
+        state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0,'lateral':0}
         while not state['stop'].is_set():
             now=time.time();sec=now%60
             if not state['running']:break
@@ -96,6 +97,10 @@ def run(state, call):
                     state['rejections']['late']+=1;continue
                 if not state['running'] or state['pending']:
                     state['rejections']['busy']+=1;continue
+                if not trending(bars,signal):
+                    state['rejections']['lateral']+=1
+                    state['message']='Mercado sem tendência confirmada; entrada descartada'
+                    continue
                 if state['orders']>=state['max_orders'] or state['profit']<=-state['stop_loss'] or state['profit']>=state['stop_win']:
                     state['running']=False;state['message']='Limite de operações ou stop atingido';break
                 if last_prepare!=int(server_now//60)-1:
