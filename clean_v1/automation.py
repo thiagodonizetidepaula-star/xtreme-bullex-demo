@@ -13,10 +13,10 @@ def limit_reason(state):
     if state['orders']>=state['max_orders']:return 'Quantidade máxima atingida: '+str(state['orders'])+' de '+str(state['max_orders'])+' operações'
     return None
 
-def settle(state,call,order,asset,direction,candle_features):
+def settle(state,call,order,asset,direction,candle_features,expiration_minutes):
     """Only settlement blocks the next order; scanner stays independent."""
     try:
-        result=call('exec',{'op':'demo_result','id':order['id'],'h':1},160)
+        result=call('exec',{'op':'demo_result','id':order['id'],'h':expiration_minutes},expiration_minutes*60+120)
         pnl=float(result['profit'])
         state['profit']+=pnl
         if pnl>0:state['wins']+=1
@@ -142,7 +142,8 @@ def run(state, call):
                     state['pending']=True
                     state['phase']='sending';state['message']='Sinal válido, enviando ordem DEMO...'
                 try:
-                    order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':state['stake'],'h':1,'candle':boundary-60,'min_payout':80},13)
+                    expiration_minutes=state['expiration_minutes']
+                    order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':state['stake'],'h':expiration_minutes,'candle':boundary-60,'min_payout':80},13)
                     if order.get('sent') and order.get('id'):
                         state['orders']+=1
                         state['phase']='running_order'
@@ -153,7 +154,7 @@ def run(state, call):
                         state['current_order_id']=str(order['id'])
                         state['message']='Ordem em andamento; analisando outros ativos'
                         state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id'])}
-                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],features(bars,state['current_direction'])),daemon=True).start()
+                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],features(bars,state['current_direction']),expiration_minutes),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
                         reason=str(order.get('reason','Ordem não aceita'))[:150]
