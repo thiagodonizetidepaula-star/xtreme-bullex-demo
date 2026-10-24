@@ -7,6 +7,12 @@ from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
 from engine import normalized
 
+def limit_reason(state):
+    if state['profit']<=-state['stop_loss']:return 'Stop Loss atingido: US$ '+format(state['profit'],'.2f')+' (limite US$ -'+format(state['stop_loss'],'.2f')+')'
+    if state['profit']>=state['stop_win']:return 'Stop Win atingido: US$ +'+format(state['profit'],'.2f')+' (meta US$ +'+format(state['stop_win'],'.2f')+')'
+    if state['orders']>=state['max_orders']:return 'Quantidade máxima atingida: '+str(state['orders'])+' de '+str(state['max_orders'])+' operações'
+    return None
+
 def settle(state,call,order,asset,direction,candle_features):
     """Only settlement blocks the next order; scanner stays independent."""
     try:
@@ -24,8 +30,13 @@ def settle(state,call,order,asset,direction,candle_features):
         except Exception:
             state['archive_last_saved']=False
         state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['expire_ts']=0
-        state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
-        state['phase']='scan' if state['running'] else 'result'
+        reason=limit_reason(state)
+        if reason:
+            state['running']=False;state['stop'].set();state['stop_reason']=reason
+            state['message']=reason;state['phase']='limit_reached'
+        else:
+            state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
+            state['phase']='scan' if state['running'] else 'result'
     except Exception:
         state['running']=False;state['uncertain']=True
         state['phase']='uncertain';state['message']='Resultado incerto; confira a ordem na Bullex antes de retomar'
@@ -40,6 +51,9 @@ def run(state, call):
         while not state['stop'].is_set():
             now=time.time();sec=now%60
             if not state['running']:break
+            reason=limit_reason(state)
+            if reason:
+                state['running']=False;state['stop_reason']=reason;state['message']=reason;state['phase']='limit_reached';break
             if now-last_catalog>90 and 7<sec<44:
                 try:
                     market=call('read',{'op':'market','payout':80,'strategy':'sniper'},24)
@@ -106,8 +120,9 @@ def run(state, call):
                     state['rejections']['exhausted']+=1
                     state['message']='Fluxo de velas já estendido; entrada descartada'
                     continue
-                if state['orders']>=state['max_orders'] or state['profit']<=-state['stop_loss'] or state['profit']>=state['stop_win']:
-                    state['running']=False;state['message']='Limite de operações ou stop atingido';break
+                reason=limit_reason(state)
+                if reason:
+                    state['running']=False;state['stop_reason']=reason;state['message']=reason;state['phase']='limit_reached';break
                 if last_prepare!=int(server_now//60)-1:
                     state['rejections']['preflight']+=1
                     state['message']='Sem pré-validação fresca, entrada ignorada';continue
