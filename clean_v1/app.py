@@ -70,6 +70,29 @@ a{color:#ffd075}
 .brand .xtreme-logo-wrap{display:block;width:100%;max-width:780px;margin:0;aspect-ratio:1270/346}
 .brand .brand-tagline{display:block;align-self:flex-start;margin:2px 0 0;padding:0;line-height:1.25;text-align:left;font-weight:800;letter-spacing:1.3px}
 @media(max-width:580px){.brand{padding-inline:16px;margin-bottom:12px}.brand .xtreme-logo-wrap{width:100%;max-width:100%}.brand .brand-tagline{margin-top:2px;font-size:11px;letter-spacing:1px}}
+/* Mobile card overflow fix — affects content cards only, never the animated logo. */
+#botPanel,#settingsPanel{min-width:0;max-width:100%}
+#botPanel>.card,#settingsPanel>.card,#botPanel>.duo{min-width:0;max-width:100%}
+.duo{min-width:0;max-width:100%;grid-template-columns:repeat(2,minmax(0,1fr))}
+.duo>.card,.grid>.metric,.score>.metric{min-width:0;max-width:100%}
+.trade,.analyzer{min-width:0;max-width:100%;overflow-wrap:break-word}
+.trade .pair,.trade .signal,.analyzer .gladiator-frame,.analyzer .scanbar{min-width:0;max-width:100%}
+.operation-heading{min-width:0;max-width:100%}
+.operation-heading .operation-timeframe{max-width:100%;white-space:normal;overflow-wrap:normal;line-height:1.3}
+.metric,.metric strong,#opId,#parallelCandidate{min-width:0;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:760px){
+  .duo{grid-template-columns:minmax(0,1fr)}
+  .duo>.card{width:100%;min-width:0}
+  .operation-heading{align-items:flex-start;flex-wrap:wrap}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid>.metric{padding:clamp(10px,3vw,14px)}
+  .row{flex-wrap:wrap}
+  .bot-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bot-tabs button{min-width:0;overflow-wrap:anywhere}
+}
+@media(max-width:340px){
+  .operation-heading{flex-direction:column;align-items:flex-start}
+}
 </style></head><body><main>
 <div class="brand"><div class="brand-copy"><div class="xtreme-logo-wrap" aria-label="Logo Xtreme Tiger animada"><img class="xtreme-logo xtreme-logo-fallback" src="/assets/xtreme_tiger_logo.webp?v=1" alt="Xtreme Tiger — tigre dourado com gráficos de mercado" width="600" height="200" loading="eager" decoding="async"><video id="xtremeLogoVideo" class="xtreme-logo-video" autoplay muted loop playsinline preload="metadata" poster="/assets/xtreme_tiger_logo.webp?v=1" aria-label="Xtreme Tiger animado"><source src="/assets/xtreme_tiger_logo_animada.mp4?v=1" type="video/mp4"></video></div><div class="brand-tagline">ANÁLISE CONTÍNUA</div></div></div>
 <nav class="bot-tabs" aria-label="Abas do aplicativo"><button type="button" id="tabBot" class="tab-selected" aria-selected="true">◉ Bot</button><button type="button" id="tabSettings" aria-selected="false">⚙ Configurações</button></nav><div id="botPanel"><section class="card"><div class="row"><div><h2 id="runnerText">Robô parado</h2><div class="subtitle">Executor PRACTICE · análise contínua</div></div><div class="clock" id="mainTimer">—</div></div><div class="bar" role="progressbar" aria-label="Tempo restante da operação"><div id="orderProgressBar"></div></div><div class="small green" id="activeStatus">● AGUARDANDO ENTRADA</div><p class="muted" id="botStatus">Robô parado.</p><p class="muted" id="limitStatus">Limite configurado: 10 operações · Stop Win US$ 20 · Stop Loss US$ 10</p></section>
