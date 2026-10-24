@@ -47,8 +47,17 @@ details summary{color:#ffd17a}
 .stop-symbol{color:#ffc65a}
 a{color:#ffd075}
 @media(max-width:580px){.xtreme-logo{width:100%;max-height:none}.brand{align-items:center;gap:7px}.brand .online{font-size:11px;padding:8px 10px}.brand-tagline{letter-spacing:.8px;font-size:10px}.brand-tagline.live{letter-spacing:.8px;font-size:10px}}
+/* Animated logo: responsive, seamless and isolated from the trade interface */
+.xtreme-logo-wrap{position:relative;display:block;width:min(100%,640px);aspect-ratio:1270/346;min-width:0;max-width:100%;overflow:hidden;isolation:isolate}
+.xtreme-logo-wrap>.xtreme-logo-fallback,.xtreme-logo-video{position:absolute;inset:0;display:block;width:100%;height:100%;max-height:none;object-fit:contain;object-position:left center}
+.xtreme-logo-video{opacity:0;transition:opacity .18s ease;background:transparent;pointer-events:none}
+.xtreme-logo-wrap.logo-playing .xtreme-logo-video{opacity:1}
+.xtreme-logo-wrap.logo-playing .xtreme-logo-fallback{opacity:0}
+@media(max-width:580px){.xtreme-logo-wrap{width:100%;aspect-ratio:1270/346}.brand{gap:8px}.brand .brand-copy{min-width:0;flex:1}.brand .online{flex-shrink:0}}
+@media(min-width:581px){.xtreme-logo-wrap{width:min(100%,640px)}}
+
 </style></head><body><main>
-<div class="brand"><div class="brand-copy"><img class="xtreme-logo" src="/assets/xtreme_tiger_logo.webp?v=1" alt="Xtreme Tiger — tigre dourado com gráficos de mercado" width="600" height="200" loading="eager" decoding="async"><div class="brand-tagline">ANÁLISE CONTÍNUA</div><div class="brand-tagline live">OPERAÇÃO AO VIVO</div></div><span class="online">● DEMO</span></div>
+<div class="brand"><div class="brand-copy"><div class="xtreme-logo-wrap" aria-label="Logo Xtreme Tiger animada"><img class="xtreme-logo xtreme-logo-fallback" src="/assets/xtreme_tiger_logo.webp?v=1" alt="Xtreme Tiger — tigre dourado com gráficos de mercado" width="600" height="200" loading="eager" decoding="async"><video id="xtremeLogoVideo" class="xtreme-logo-video" autoplay muted loop playsinline preload="metadata" poster="/assets/xtreme_tiger_logo.webp?v=1" aria-label="Xtreme Tiger animado"><source src="/assets/xtreme_tiger_logo_animada.mp4?v=1" type="video/mp4"></video></div><div class="brand-tagline">ANÁLISE CONTÍNUA</div><div class="brand-tagline live">OPERAÇÃO AO VIVO</div></div><span class="online">● DEMO</span></div>
 <nav class="bot-tabs" aria-label="Abas do aplicativo"><button type="button" id="tabBot" class="tab-selected" aria-selected="true">◉ Bot</button><button type="button" id="tabSettings" aria-selected="false">⚙ Configurações</button></nav><div id="botPanel"><section class="card hero"><div class="topline"><div><div class="kicker">SALA DE OPERAÇÕES</div><h2>XTREME <span class="cyan">AI</span></h2><div class="subtitle">Xtreme Sniper + Tendência ATR 18×2</div></div><span class="status">M1 · OTC</span></div><span class="m1">M1 ATIVO</span><span class="m5">M5 INATIVO</span></section>
 <section class="card"><div class="row"><div><h2 id="runnerText">Robô parado</h2><div class="subtitle">Executor PRACTICE · análise contínua</div></div><div class="clock" id="mainTimer">—</div></div><div class="bar" role="progressbar" aria-label="Tempo restante da operação"><div id="orderProgressBar"></div></div><div class="small green" id="activeStatus">● AGUARDANDO ENTRADA</div><p class="muted" id="botStatus">Robô parado.</p><p class="muted" id="limitStatus">Limite configurado: 10 operações · Stop Win US$ 20 · Stop Loss US$ 10</p></section>
 <div class="duo"><section class="card trade"><h3>OPERAÇÃO ATUAL</h3><div class="pair" id="opAsset">—</div><p class="muted">Somente ordens confirmadas pela Bullex</p><p class="muted">Estratégia: <b>Xtreme Sniper + Tendência ATR 18×2 · M1</b></p><div class="signal" id="opDirection">—<small>SEM ENTRADA ATIVA</small></div><div class="grid"><div class="metric">Ordem Bullex<strong id="opId">—</strong></div><div class="metric">Tempo restante<strong id="opClock">—</strong></div></div><p class="muted" id="opNotice">Aguardando confirmação real.</p><p class="muted" id="lastResult">Última operação: nenhuma</p></section>
@@ -75,7 +84,7 @@ document.getElementById('loadArchive').addEventListener('click',async()=>{
  node.textContent=(value.days||[]).length?value.days.map(d=>d.date+' · '+d.wins+' WIN / '+d.losses+' LOSS · US$ '+d.profit.toFixed(2)).join(' | '):'Sem operações gravadas nesta conta.';
  }catch(e){node.textContent=e.message||'Falha ao consultar histórico';}
 });
-</script><script>(function(){const v=document.getElementById('gladiatorVideo'),f=document.querySelector('.gladiator-frame');if(!v||!f)return;v.addEventListener('loadeddata',()=>{f.classList.add('video-ready');const p=v.play();if(p&&p.catch)p.catch(()=>{});});v.addEventListener('error',()=>{f.classList.remove('video-ready');if(!v.dataset.fallback){v.dataset.fallback='1';v.src='/assets/gladiador_bot.mp4';v.load();const p=v.play();if(p&&p.catch)p.catch(()=>{});}});})();</script></body></html>'''
+</script><script>(function(){const v=document.getElementById('gladiatorVideo'),f=document.querySelector('.gladiator-frame');if(!v||!f)return;v.addEventListener('loadeddata',()=>{f.classList.add('video-ready');const p=v.play();if(p&&p.catch)p.catch(()=>{});});v.addEventListener('error',()=>{f.classList.remove('video-ready');if(!v.dataset.fallback){v.dataset.fallback='1';v.src='/assets/gladiador_bot.mp4';v.load();const p=v.play();if(p&&p.catch)p.catch(()=>{});}});})();</script><script>(function(){const v=document.getElementById("xtremeLogoVideo");if(!v)return;const wrap=v.closest(".xtreme-logo-wrap");const show=()=>wrap&&wrap.classList.add("logo-playing");const hide=()=>wrap&&wrap.classList.remove("logo-playing");v.muted=true;v.addEventListener("playing",show);v.addEventListener("error",hide);v.addEventListener("stalled",hide);if(v.readyState>=2&&!v.paused)show();const p=v.play();if(p&&typeof p.catch==="function")p.catch(hide);})();</script></body></html>'''
 ROOT=Path(__file__).resolve().parent.parent
 sessions={}
 guard=threading.RLock()
@@ -104,6 +113,13 @@ def app(environ,start_response):
     sid=cookie.get('xb_session')
     token=sid.value if sid else None
     with guard: current=sessions.get(token)
+    if path=='/assets/xtreme_tiger_logo_animada.mp4':
+        logo_video=Path(__file__).resolve().parent/'xtreme_tiger_logo_animada.mp4'
+        if not logo_video.is_file():
+            start_response('404 Not Found',[('Content-Type','text/plain'),('Content-Length','0')]);return [b'']
+        logo_bytes=logo_video.read_bytes()
+        start_response('200 OK',[('Content-Type','video/mp4'),('Content-Length',str(len(logo_bytes))),('Cache-Control','public, max-age=86400'),('Accept-Ranges','none')])
+        return [logo_bytes]
     if path=='/assets/xtreme_tiger_logo.webp':
         logo_file=Path(__file__).resolve().parent/'xtreme_tiger_logo.webp'
         if not logo_file.is_file():
