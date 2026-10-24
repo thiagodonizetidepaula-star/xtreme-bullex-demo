@@ -261,7 +261,7 @@ def app(environ,start_response):
         data=(Path(__file__).resolve().parent/'tiger_binoculars.webp').read_bytes()
         start_response('200 OK',[('Content-Type','image/webp'),('Content-Length',str(len(data))),('Cache-Control','public, max-age=3600')])
         return [data]
-    if path=='/health':return respond(start_response,'200 OK',{'ok':True,'orders_enabled':False})
+    if path=='/health':return respond(start_response,'200 OK',{'ok':True,'orders_enabled':False,'supabase_archive_configured':configured()})
     if path=='/api/state':
         if current:current['last_seen']=time.time()
         return respond(start_response,'200 OK',state_view(current))
