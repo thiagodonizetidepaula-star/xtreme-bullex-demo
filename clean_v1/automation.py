@@ -80,7 +80,15 @@ def run(state, call):
                 except Exception as ex:state['message']='Pré-validação: '+str(ex)[:100]
             # Prioritize payout and rotate the rest without losing the watched group.
             subset=assets[:12]+([assets[12+((rot+i)%(len(assets)-12))] for i in range(min(10,len(assets)-12))] if len(assets)>12 else [])
-            rot+=10
+            # Keep a fixed candidate batch across candle close, rather than
+            # rotating the batch during the 0-3 second execution window.
+            minute=int(now//60)
+            if sec>=52:
+                frozen_subset=subset;frozen_minute=minute+1
+            elif sec<=3.5 and locals().get('frozen_minute')==minute:
+                subset=frozen_subset
+            else:
+                rot+=10
             try:
                 snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True},15)
                 state['read_failures']=0
@@ -94,6 +102,8 @@ def run(state, call):
             if not state['pending']:state['phase']='scan'
             state['message']=f'Analisando {state["ready"]}/{len(subset)} ativos preparados (catálogo: {len(assets)})'
             server_now=snap.get('now',time.time())
+            # Do not mistake old provider snapshots for a fresh executable signal.
+            wall_now=time.time()
             boundary=int(server_now//60)*60
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
@@ -108,7 +118,7 @@ def run(state, call):
                 state['phase']='signal'
                 if len(state['seen'])>600:state['seen']={x for x in state['seen'] if x[0]>boundary-3600}
                 # Broker order window is only five seconds; never send stale signals.
-                if not 0<=server_now-boundary<=3:
+                if not (0<=server_now-boundary<=3 and 0<=wall_now-boundary<=3):
                     state['rejections']['late']+=1;continue
                 if not state['running'] or state['pending']:
                     state['rejections']['busy']+=1;continue
