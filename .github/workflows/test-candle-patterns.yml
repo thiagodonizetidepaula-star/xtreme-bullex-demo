@@ -1,0 +1,33 @@
+name: Test candle patterns M1
+
+on:
+  push:
+    branches: [feat/six-candle-patterns-20261025]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar sintaxe dos arquivos Python
+        run: python -m py_compile strategy.py candle_patterns.py app.py worker.py
+      - name: Testar padrões e configurações
+        env:
+          APP_ACCESS_KEY: test-access-key-only
+        run: python -m unittest discover -s tests -p 'test_candle_patterns.py' -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verificar sintaxe do JavaScript do painel
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          page = Path("templates/index.html").read_text()
+          script = page.rsplit("<script>", 1)[1].split("</script>", 1)[0]
+          Path("/tmp/xtreme-ui.js").write_text(script)
+          PY
+          node --check /tmp/xtreme-ui.js
