@@ -86,7 +86,8 @@ class IllustratedTests(unittest.TestCase):
         b=engulf("CALL")
         old=proposals(b,60)
         self.assertEqual(old,proposals(b,60))
-        self.assertEqual(old,proposals(b+[{"t":80*60,"o":1,"c":1,"h":1,"l":1}],60)[0:0] or old)
+        # O scanner entrega apenas velas fechadas; entradas com vela ainda aberta não são propostas.
+        self.assertIn(("Engolfo de Alta (confirmado)","CALL"),old)
         invalid=[dict(v) for v in b]
         invalid[60]["t"]+=60
         self.assertEqual(proposals(invalid,60),[])
