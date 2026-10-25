@@ -1,0 +1,33 @@
+name: Verify illustrated patterns on clean-v1
+
+on:
+  push:
+    branches: [feat/clean-v1-six-illustrated-entries-20261025]
+  pull_request:
+    branches: [xtreme-clean-v1]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Python syntax
+        run: python -m py_compile clean_v1/*.py
+      - name: Tests for the six illustrated patterns
+        run: python -m unittest test_clean_illustrated_patterns -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check browser JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path("clean_v1/app.py").read_text()
+          first=src.index('<script>')+len('<script>')
+          last=src.index('</script>',first)
+          Path('/tmp/xtreme-clean-ui.js').write_text(src[first:last])
+          PY
+          node --check /tmp/xtreme-clean-ui.js
