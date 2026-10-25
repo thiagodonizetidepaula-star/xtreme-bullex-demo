@@ -21,6 +21,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Verify service has no live demo order
+        run: |
+          python - <<'PY'
+          import json,sys,urllib.request
+          url='https://xtreme-bot-clean-v1.onrender.com/api/state'
+          req=urllib.request.Request(url,headers={'User-Agent':'Xtreme-Deploy-Preflight/1.0'})
+          try:
+              with urllib.request.urlopen(req,timeout=25) as resp:
+                  data=json.load(resp)
+          except Exception as exc:
+              print('Não foi possível validar que não há ordem aberta: '+type(exc).__name__)
+              sys.exit(3)
+          running=bool(data.get('running'))
+          pending=bool(data.get('pending'))
+          current_order=bool(data.get('current_order_id'))
+          print('Bot running:',running,'pending:',pending,'active order:',current_order)
+          if running or pending or current_order:
+              print('Publicação bloqueada: sessão PRACTICE ativa.')
+              sys.exit(4)
+          print('Pré-validação: sem sessão ativa ou ordem pendente.')
+          PY
       - name: Check browser JavaScript syntax
         run: |
           python - <<'PY'
