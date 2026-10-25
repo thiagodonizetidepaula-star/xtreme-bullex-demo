@@ -121,9 +121,34 @@ a{color:#ffd075}
 .study-action{margin:8px 0}
 @media(max-width:760px){.bot-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:600px){.bot-tabs{gap:5px}.bot-tabs button{padding:11px 4px;font-size:12px;overflow-wrap:anywhere}.study-stat{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .strategy-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0 15px}.strategy-presets .btn{margin:0;min-width:0;padding:10px;font-size:12px;white-space:normal;line-height:1.25}.strategy-group{border:1px solid #6b502e;border-radius:12px;padding:12px;margin:8px 0;background:#1c130c}.strategy-group>h3{margin:0 0 10px}.strategy-group summary{cursor:pointer;color:#f2ce8e;font-weight:800;padding:4px 0 10px}.strategy-option{display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 5px;border-bottom:1px solid #554023;line-height:1.3;overflow-wrap:anywhere}.strategy-option input{flex-shrink:0;appearance:auto;accent-color:#ffc259;width:20px;height:20px;margin:0}.strategy-option span{min-width:0}.strategy-option small{display:block;font-size:11px;color:#c3ac8d;margin-top:3px}@media(min-width:780px){.strategy-presets{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.monitor-code{padding:13px;border:1px solid #c28f41;color:#ffdc92;background:#251809;border-radius:12px;font-size:clamp(18px,5vw,26px);font-weight:900;letter-spacing:2px;text-align:center;overflow-wrap:anywhere}
+#monitorPairForm{display:grid;gap:8px}
+#monitorCodeInput{width:100%;min-width:0;font-size:18px;letter-spacing:1px;text-transform:uppercase}
+#monitorViewer{padding:5px}
+.bot-tabs.monitor-tabs{grid-template-columns:minmax(0,1fr)}
+.bot-tabs button[hidden]{display:none}
 </style></head><body><main>
 <div class="brand"><div class="brand-copy"><div class="xtreme-logo-wrap" aria-label="Logo Xtreme Tiger animada"><img class="xtreme-logo xtreme-logo-fallback" src="/assets/xtreme_tiger_logo.webp?v=1" alt="Xtreme Tiger — tigre dourado com gráficos de mercado" width="600" height="200" loading="eager" decoding="async"><video id="xtremeLogoVideo" class="xtreme-logo-video" autoplay muted loop playsinline preload="metadata" poster="/assets/xtreme_tiger_logo.webp?v=1" aria-label="Xtreme Tiger animado"><source src="/assets/xtreme_tiger_logo_animada.mp4?v=1" type="video/mp4"></video></div></div></div>
-<nav class="bot-tabs" aria-label="Abas do aplicativo"><button type="button" id="tabBot" class="tab-selected" aria-selected="true">◉ Bot</button><button type="button" id="tabSettings" aria-selected="false">⚙ Configurações</button><button type="button" id="tabStudy" aria-selected="false">◈ Estudo de velas</button></nav><div id="botPanel"><section class="card"><div class="row"><div><h2 id="runnerText">Robô parado</h2><div class="subtitle">Executor PRACTICE · análise contínua</div></div><div class="clock" id="mainTimer">—</div></div><div class="bar" role="progressbar" aria-label="Tempo restante da operação"><div id="orderProgressBar"></div></div><div class="small green" id="activeStatus">● AGUARDANDO ENTRADA</div><p class="muted" id="botStatus">Robô parado.</p><p class="muted" id="limitStatus">Limite configurado: 10 operações · Stop Win US$ 20 · Stop Loss US$ 10</p></section>
+<nav class="bot-tabs" aria-label="Abas do aplicativo"><button type="button" id="tabBot" class="tab-selected" aria-selected="true">◉ Bot</button><button type="button" id="tabSettings" aria-selected="false">⚙ Configurações</button><button type="button" id="tabStudy" aria-selected="false">◈ Estudo de velas</button></nav><div id="botPanel">
+<section class="card" id="monitorCard">
+<h2>ACOMPANHAR PELO CELULAR</h2>
+<div id="monitorHost" hidden>
+<p class="muted">O PC é o controle principal. Gere um código temporário e digite-o no celular, sem precisar entrar de novo na Bullex. O celular será somente leitura.</p>
+<button type="button" class="btn outline" id="monitorCodeBtn">Gerar código para o celular</button>
+<p id="monitorCodeBox" class="monitor-code" hidden aria-live="polite"></p>
+<button type="button" class="btn outline" id="monitorRevokeBtn">Revogar acessos do celular</button>
+</div>
+<div id="monitorJoin">
+<p class="muted">Para acompanhar a sessão que já está no PC, peça um código no PC e informe abaixo. Não use o login Bullex duas vezes.</p>
+<form id="monitorPairForm"><label for="monitorCodeInput">Código de acompanhamento</label><input id="monitorCodeInput" maxlength="12" autocomplete="one-time-code" autocapitalize="characters" placeholder="Código do PC" required><button class="btn" id="monitorPairBtn">Acompanhar PC</button></form>
+</div>
+<div id="monitorViewer" hidden>
+<p class="muted">● MODO ACOMPANHAMENTO — placar e ordens do PC em tempo real. Este aparelho NÃO envia ordens.</p>
+<button type="button" class="btn outline" id="monitorLeaveBtn">Sair do acompanhamento</button>
+</div>
+<p id="monitorMessage" class="muted" role="status" aria-live="polite"></p>
+</section>
+<section class="card"><div class="row"><div><h2 id="runnerText">Robô parado</h2><div class="subtitle">Executor PRACTICE · análise contínua</div></div><div class="clock" id="mainTimer">—</div></div><div class="bar" role="progressbar" aria-label="Tempo restante da operação"><div id="orderProgressBar"></div></div><div class="small green" id="activeStatus">● AGUARDANDO ENTRADA</div><p class="muted" id="botStatus">Robô parado.</p><p class="muted" id="limitStatus">Limite configurado: 10 operações · Stop Win US$ 20 · Stop Loss US$ 10</p></section>
 <div class="duo"><section class="card trade"><div class="operation-heading"><h3>OPERAÇÃO ATUAL</h3><span class="operation-timeframe" aria-label="Expiração da ordem ou configuração">EXPIRAÇÃO <strong id="currentExpiry">M1</strong></span></div><div class="pair" id="opAsset">—</div><p class="muted">Somente ordens confirmadas pela Bullex</p><p class="muted" id="operationStrategyRow" hidden>Estratégia da ordem: <b id="operationStrategy"></b></p><p class="muted" id="operationPeriodRow" hidden>Análise: <b id="operationTimeframe"></b> · Expiração enviada: <b id="orderExpiry"></b></p><p class="muted" id="operationRsiRow" hidden>RSI (14) confirmado: <b id="operationRsi">—</b></p><div class="signal" id="opDirection">—<small>SEM ENTRADA ATIVA</small></div><div class="grid"><div class="metric">Ordem Bullex<strong id="opId">—</strong></div><div class="metric">Tempo restante<strong id="opClock">—</strong></div></div><p class="muted" id="opNotice">Aguardando confirmação real.</p><p class="muted" id="lastResult">Última operação: nenhuma</p></section>
 <section class="card analyzer"><div class="analyzer-title"><h3>ANÁLISE CONTÍNUA</h3><span class="analysis-live" aria-label="Análise ao vivo">● ANÁLISE AO VIVO</span></div><p class="muted">Enquanto uma ordem está ativa, o scanner procura a próxima oportunidade. Apenas uma ordem por vez.</p><div class="gladiator-frame" aria-label="Animação do tigre com binóculos analisando oportunidades"><video id="gladiatorVideo" class="gladiator-video" autoplay muted loop playsinline preload="metadata" poster="" aria-label="Tigre animado com binóculos e gráficos de mercado"><source src="/assets/tigre_binoculos.mp4?v=1" type="video/mp4"></video><div id="gladiatorFallback" class="gladiator-fallback" aria-hidden="true"><div class="ai-market-core" role="img" aria-label="Núcleo holográfico do scanner com anéis vermelhos e verdes entrelaçados e velas decorativas animadas"><div class="ai-candles"><i class="ai-candle" style="--i:0;--h:22px;--delay:-0s"></i><i class="ai-candle" style="--i:1;--h:39px;--delay:-0.41s"></i><i class="ai-candle" style="--i:2;--h:56px;--delay:-0.82s"></i><i class="ai-candle" style="--i:3;--h:73px;--delay:-1.23s"></i><i class="ai-candle" style="--i:4;--h:26px;--delay:-1.64s"></i><i class="ai-candle" style="--i:5;--h:43px;--delay:-2.05s"></i><i class="ai-candle" style="--i:6;--h:60px;--delay:-2.46s"></i><i class="ai-candle" style="--i:7;--h:77px;--delay:-0s"></i><i class="ai-candle" style="--i:8;--h:30px;--delay:-0.41s"></i><i class="ai-candle" style="--i:9;--h:47px;--delay:-0.82s"></i><i class="ai-candle" style="--i:10;--h:64px;--delay:-1.23s"></i><i class="ai-candle" style="--i:11;--h:81px;--delay:-1.64s"></i><i class="ai-candle" style="--i:12;--h:34px;--delay:-2.05s"></i><i class="ai-candle" style="--i:13;--h:51px;--delay:-2.46s"></i><i class="ai-candle" style="--i:14;--h:68px;--delay:-0s"></i><i class="ai-candle" style="--i:15;--h:85px;--delay:-0.41s"></i><i class="ai-candle" style="--i:16;--h:38px;--delay:-0.82s"></i><i class="ai-candle" style="--i:17;--h:55px;--delay:-1.23s"></i><i class="ai-candle" style="--i:18;--h:72px;--delay:-1.64s"></i><i class="ai-candle" style="--i:19;--h:25px;--delay:-2.05s"></i><i class="ai-candle" style="--i:20;--h:42px;--delay:-2.46s"></i><i class="ai-candle" style="--i:21;--h:59px;--delay:-0s"></i><i class="ai-candle" style="--i:22;--h:76px;--delay:-0.41s"></i><i class="ai-candle" style="--i:23;--h:29px;--delay:-0.82s"></i></div><div class="ai-particles"></div><div class="ai-platform"></div><div class="ai-orb"><div class="ai-orb-inner"><div class="ai-reticle"></div></div></div><div class="ai-orbit ai-orbit-green"></div><div class="ai-orbit ai-orbit-red"></div><div class="ai-orbit ai-orbit-white"></div><div class="ai-energy-beam"></div></div></div></div><div class="scanbar" role="progressbar" aria-label="Varredura de ativos"><div id="scannerProgressBar"></div></div><h2 class="cyan" id="parallelStatus">Aguardando análise</h2><div class="metric">Último sinal analisado<strong id="parallelCandidate">—</strong></div><p class="muted" id="marketStatus">Ativos: 0 · Preparados: 0 · Sinais: 0</p><p class="muted" id="rejectStatus">Aguardando sinais</p><p class="muted" id="lastSignal"></p></section></div>
 <section class="card"><div class="row"><h2>PLACAR DE OPERAÇÕES</h2><span class="muted">SESSÃO DEMO</span></div><div class="score"><div class="metric">WIN<strong id="wins">0</strong></div><div class="metric">LOSS<strong id="losses">0</strong></div><div class="metric">OPERAÇÕES<strong id="orders">0</strong></div><div class="metric">RESULTADO (USD)<strong id="pnl">0,00</strong></div></div><p class="muted">Assertividade desta sessão: <b id="accuracy">—</b> · Histórico real confirmado, sem porcentagens simuladas.</p></section>
@@ -150,7 +175,7 @@ a{color:#ffd075}
 <div id="studyPatterns"><p class="muted">Ainda não há resultados avaliados.</p></div>
 <p class="muted">Pavios e falsos rompimentos são comportamentos gráficos; não demonstram manipulação deliberada. Só adicionaremos alguma estratégia ao BOT mediante seu pedido explícito.</p>
 </section></div><div class="stop-overlay" id="stopOverlay" role="alertdialog" aria-modal="true" aria-labelledby="stopTitle" hidden><div class="stop-dialog"><div class="stop-symbol" id="stopSymbol">■</div><h2 id="stopTitle">Limite atingido</h2><p id="stopDescription"></p><button class="btn outline" type="button" id="dismissStop">Entendi</button></div></div></main><script>
-const el=id=>document.getElementById(id);let lastState={};let lastStopShown='';function switchTab(which){for(const k of ['bot','settings','study']){const active=which===k;const panel=el(k==='bot'?'botPanel':k==='settings'?'settingsPanel':'studyPanel');const tab=el(k==='bot'?'tabBot':k==='settings'?'tabSettings':'tabStudy');panel.hidden=!active;tab.classList.toggle('tab-selected',active);tab.setAttribute('aria-selected',String(active));}if(which==='study')refreshStudy();}el('tabBot').onclick=()=>switchTab('bot');el('tabSettings').onclick=()=>switchTab('settings');el('tabStudy').onclick=()=>switchTab('study');el('dismissStop').onclick=()=>{el('stopOverlay').hidden=true};let riskDirty=false;let settingsSaving=false;for(const id of ['entryAmount','stopLoss','stopWin','maxOrders','expirationMinutes']){el(id).addEventListener('input',()=>{riskDirty=true;el('saveStatus').textContent='Alterações não salvas';});}const strategyBoxes=()=>[...document.querySelectorAll('input[name="strategyChoice"]')];
+const el=id=>document.getElementById(id);let lastState={};let monitorMode=false;let lastStopShown='';function switchTab(which){for(const k of ['bot','settings','study']){const active=which===k;const panel=el(k==='bot'?'botPanel':k==='settings'?'settingsPanel':'studyPanel');const tab=el(k==='bot'?'tabBot':k==='settings'?'tabSettings':'tabStudy');panel.hidden=!active;tab.classList.toggle('tab-selected',active);tab.setAttribute('aria-selected',String(active));}if(which==='study')refreshStudy();}el('tabBot').onclick=()=>switchTab('bot');el('tabSettings').onclick=()=>switchTab('settings');el('tabStudy').onclick=()=>switchTab('study');el('dismissStop').onclick=()=>{el('stopOverlay').hidden=true};let riskDirty=false;let settingsSaving=false;for(const id of ['entryAmount','stopLoss','stopWin','maxOrders','expirationMinutes']){el(id).addEventListener('input',()=>{riskDirty=true;el('saveStatus').textContent='Alterações não salvas';});}const strategyBoxes=()=>[...document.querySelectorAll('input[name="strategyChoice"]')];
 const selectedStrategyIds=()=>strategyBoxes().filter(x=>x.checked).map(x=>x.value);
 function describeStrategies(){
  const ids=selectedStrategyIds();
@@ -176,7 +201,56 @@ describeStrategies();
 let scannerPos=0;setInterval(()=>{const bar=el('scannerProgressBar');if(!bar)return;if(lastState.running){scannerPos=(scannerPos+3)%101;bar.style.width=scannerPos+'%'}else{scannerPos=0;bar.style.width='0%'}},350);function clock(){const expiry=Number(lastState.expire_ts)||0;if(!expiry||!lastState.current_order_id){el('opClock').textContent='—';el('mainTimer').textContent='—';el('orderProgressBar').style.width='0%';return}let left=Math.max(0,Math.ceil(expiry-Date.now()/1000));el('opClock').textContent=String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');el('mainTimer').textContent=el('opClock').textContent;const duration=Math.max(1,expiry-(Number(lastState.entry_ts)||expiry-60));el('orderProgressBar').style.width=(100*Math.min(1,left/duration)).toFixed(2)+'%';if(left===0&&lastState.phase==='running_order')el('opNotice').textContent='Tempo encerrado · aguardando resultado confirmado pela Bullex';}setInterval(clock,250);
 async function send(path,body){const res=await fetch(path,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const v=await res.json();if(!res.ok)throw Error(v.error||'Erro ao conectar');return v}
 function strategyLabel(mode){return mode==='price_action'?'Price Action':mode==='both'?'Sniper + Price Action':'Xtreme Sniper + Tendência ATR 18×2';}
-function show(v){lastState=v;if(v.stop_reason&&v.stop_reason!==lastStopShown){lastStopShown=v.stop_reason;el('stopTitle').textContent=v.stop_reason.startsWith('Stop Win')?'STOP WIN ATINGIDO':v.stop_reason.startsWith('Stop Loss')?'STOP LOSS ATINGIDO':'LIMITE DE OPERAÇÕES';el('stopSymbol').textContent=v.stop_reason.startsWith('Stop Win')?'✓':'■';el('stopDescription').textContent=v.stop_reason;el('stopOverlay').hidden=false;}if(!v.stop_reason)lastStopShown='';const active=!!v.current_order_id;el('activeStatus').textContent=active?'● EM ANDAMENTO':'● AGUARDANDO ENTRADA';el('parallelStatus').textContent=v.running?'Analisando a próxima oportunidade em paralelo':'Aguardando início do robô';el('parallelCandidate').textContent=v.last_signal?(v.last_signal.asset+' · '+v.last_signal.direction):'Nenhum ativo selecionado';el('accuracy').textContent=(Number(v.wins||0)+Number(v.losses||0))?(((v.wins||0)/(Number(v.wins||0)+Number(v.losses||0))*100).toFixed(1)+'%'):'—';el('runnerText').textContent=v.running?(active?'Operação automática em andamento':'Procurando entrada válida'):'Robô parado';const research=v.research_summary||{};const labels={doji:'Doji',opposing_wick:'Pavio contrário',long_wick:'Pavio longo',engulf_against:'Engolfo contrário',near_range_edge:'Próximo a suporte/resistência'};el('researchSummary').textContent=Object.entries(labels).map(([k,name])=>name+': '+(research[k]?.wins||0)+' WIN / '+(research[k]?.losses||0)+' LOSS').join(' · ');const names={catalog:'Lendo ativos',reconnecting:'Reconectando leitura do mercado',scan:'Analisando mercado',signal:'Sinal encontrado',sending:'Enviando ordem',running_order:'Operação em andamento',result:'Resultado confirmado',uncertain:'Confirmação incerta',error:'Erro na análise'};el('livePhase').textContent='● '+(names[v.phase]||(v.running?'Preparando análise':'Robô parado'));el('marketStatus').textContent='Ativos: '+(v.markets||0)+' · Preparados: '+(v.ready||0)+' · Sinais: '+(v.signals||0);const z=v.rejections||{};el('rejectStatus').textContent='Sinais ignorados: fora da janela '+(z.late||0)+' · preparação '+(z.preflight||0)+' · ordem em curso '+(z.busy||0)+' · corretora '+(z.broker||0)+' · lateral '+(z.lateral||0)+' · fluxo cansado '+(z.exhausted||0)+' · RSI '+(z.rsi||0);el('opAsset').textContent=v.current_asset||'—';el('opDirection').textContent=v.current_direction||'—';el('opId').textContent=v.current_order_id||'—';el('lastResult').textContent=v.last_result?('Última operação: '+v.last_result.asset+' · '+v.last_result.direction+' · '+(v.last_result.strategy||'Xtreme Sniper')+' · M'+(v.last_result.timeframe_minutes||1)+' / Expiração M'+(v.last_result.expiration_minutes||1)+' · RSI '+(v.last_result.rsi_14??'—')+' · '+v.last_result.status+' · '+Number(v.last_result.profit).toFixed(2)+' USD'):'Última operação: nenhuma';el('opNotice').textContent=v.current_order_id?'Expiração informada pela Bullex · resultado depende da corretora':'Aguardando ordem confirmada; sem contador simulado.';clock();el('state').textContent=v.connected?'● Conectado à PRACTICE · '+v.balance+' '+v.currency:'● Desconectado';el('brokerForm').hidden=!!v.connected;el('preflight').disabled=!v.executor_connected||!!v.running;el('stopBot').disabled=!v.running;if(v.settings&&!riskDirty&&!settingsSaving){el('entryAmount').value=v.settings.stake||2;el('stopLoss').value=v.settings.stop_loss;el('stopWin').value=v.settings.stop_win;el('maxOrders').value=v.settings.max_orders;el('expirationMinutes').value=String(v.settings.expiration_minutes||1);const oldMode=v.settings.strategy_mode||'sniper';const selected=Array.isArray(v.settings.enabled_strategies)?v.settings.enabled_strategies:(oldMode==='both'?['sniper','price_action']:oldMode==='price_action'?['price_action']:['sniper']);for(const input of strategyBoxes())input.checked=selected.includes(input.value);el('signalPolicy').value=v.settings.signal_policy||'any';describeStrategies();}el('currentExpiry').textContent='M'+(active&&v.current_expiration_minutes?v.current_expiration_minutes:(v.settings?.expiration_minutes||1));el('operationStrategyRow').hidden=!active;el('operationPeriodRow').hidden=!active;el('operationRsiRow').hidden=!active;el('operationRsi').textContent=active&&v.current_rsi_14!=null?Number(v.current_rsi_14).toFixed(2):'—';el('operationStrategy').textContent=active?(v.current_strategy||'Estratégia não informada'):'';el('operationTimeframe').textContent=active?'M'+(v.current_timeframe_minutes||1):'';el('orderExpiry').textContent=active?'M'+(v.current_expiration_minutes||v.settings?.expiration_minutes||1):'';el('entryAmount').disabled=!!v.running||!!v.pending;for(const input of strategyBoxes())input.disabled=!!v.running||!!v.pending;for(const id of ['strategyXtremeOnly','strategyPromising','strategyWinners','strategyXtremeWinners','strategySelectAll','strategyClear','signalPolicy'])el(id).disabled=!!v.running||!!v.pending;el('expirationMinutes').disabled=!!v.running||!!v.pending;el('saveSettings').disabled=!!v.running||!!v.pending;el('botStatus').textContent=v.stop_reason||v.message||(v.running?'Analisando':'Robô parado');el('limitStatus').textContent=v.settings?('Limite configurado: '+v.settings.max_orders+' operações · Entrada US$ '+Number(v.settings.stake||2).toFixed(2)+' · Stop Win US$ '+v.settings.stop_win+' · Stop Loss US$ '+v.settings.stop_loss):'Conecte à PRACTICE para configurar limites';el('wins').textContent=v.wins||0;el('losses').textContent=v.losses||0;el('orders').textContent=v.orders||0;el('pnl').textContent=(v.profit||0).toFixed(2);el('lastSignal').textContent=v.last_signal?'Último sinal: '+v.last_signal.asset+' '+v.last_signal.direction+' · '+(v.last_signal.strategy||'Xtreme Sniper'):'';el('disconnectBtn').hidden=!v.connected;el('brokerDetail').textContent=v.connected?(v.executor_connected?'Leitura e executor conectados à PRACTICE.':'Leitura conectada; executor ainda indisponível.'):'Conta real não permitida. Apenas Bullex PRACTICE.'}
+function show(v){lastState=v;monitorMode=!!v.monitor_only;if(v.stop_reason&&v.stop_reason!==lastStopShown){lastStopShown=v.stop_reason;el('stopTitle').textContent=v.stop_reason.startsWith('Stop Win')?'STOP WIN ATINGIDO':v.stop_reason.startsWith('Stop Loss')?'STOP LOSS ATINGIDO':'LIMITE DE OPERAÇÕES';el('stopSymbol').textContent=v.stop_reason.startsWith('Stop Win')?'✓':'■';el('stopDescription').textContent=v.stop_reason;el('stopOverlay').hidden=false;}if(!v.stop_reason)lastStopShown='';const active=!!v.current_order_id;el('activeStatus').textContent=active?'● EM ANDAMENTO':'● AGUARDANDO ENTRADA';el('parallelStatus').textContent=v.running?'Analisando a próxima oportunidade em paralelo':'Aguardando início do robô';el('parallelCandidate').textContent=v.last_signal?(v.last_signal.asset+' · '+v.last_signal.direction):'Nenhum ativo selecionado';el('accuracy').textContent=(Number(v.wins||0)+Number(v.losses||0))?(((v.wins||0)/(Number(v.wins||0)+Number(v.losses||0))*100).toFixed(1)+'%'):'—';el('runnerText').textContent=v.running?(active?'Operação automática em andamento':'Procurando entrada válida'):'Robô parado';const research=v.research_summary||{};const labels={doji:'Doji',opposing_wick:'Pavio contrário',long_wick:'Pavio longo',engulf_against:'Engolfo contrário',near_range_edge:'Próximo a suporte/resistência'};el('researchSummary').textContent=Object.entries(labels).map(([k,name])=>name+': '+(research[k]?.wins||0)+' WIN / '+(research[k]?.losses||0)+' LOSS').join(' · ');const names={catalog:'Lendo ativos',reconnecting:'Reconectando leitura do mercado',scan:'Analisando mercado',signal:'Sinal encontrado',sending:'Enviando ordem',running_order:'Operação em andamento',result:'Resultado confirmado',uncertain:'Confirmação incerta',error:'Erro na análise'};el('livePhase').textContent='● '+(names[v.phase]||(v.running?'Preparando análise':'Robô parado'));el('marketStatus').textContent='Ativos: '+(v.markets||0)+' · Preparados: '+(v.ready||0)+' · Sinais: '+(v.signals||0);const z=v.rejections||{};el('rejectStatus').textContent='Sinais ignorados: fora da janela '+(z.late||0)+' · preparação '+(z.preflight||0)+' · ordem em curso '+(z.busy||0)+' · corretora '+(z.broker||0)+' · lateral '+(z.lateral||0)+' · fluxo cansado '+(z.exhausted||0)+' · RSI '+(z.rsi||0);el('opAsset').textContent=v.current_asset||'—';el('opDirection').textContent=v.current_direction||'—';el('opId').textContent=v.current_order_id||'—';el('lastResult').textContent=v.last_result?('Última operação: '+v.last_result.asset+' · '+v.last_result.direction+' · '+(v.last_result.strategy||'Xtreme Sniper')+' · M'+(v.last_result.timeframe_minutes||1)+' / Expiração M'+(v.last_result.expiration_minutes||1)+' · RSI '+(v.last_result.rsi_14??'—')+' · '+v.last_result.status+' · '+Number(v.last_result.profit).toFixed(2)+' USD'):'Última operação: nenhuma';el('opNotice').textContent=v.current_order_id?'Expiração informada pela Bullex · resultado depende da corretora':'Aguardando ordem confirmada; sem contador simulado.';clock();el('state').textContent=v.connected?'● Conectado à PRACTICE · '+v.balance+' '+v.currency:'● Desconectado';el('brokerForm').hidden=!!v.connected;el('preflight').disabled=!v.executor_connected||!!v.running;el('stopBot').disabled=!v.running;if(v.settings&&!riskDirty&&!settingsSaving){el('entryAmount').value=v.settings.stake||2;el('stopLoss').value=v.settings.stop_loss;el('stopWin').value=v.settings.stop_win;el('maxOrders').value=v.settings.max_orders;el('expirationMinutes').value=String(v.settings.expiration_minutes||1);const oldMode=v.settings.strategy_mode||'sniper';const selected=Array.isArray(v.settings.enabled_strategies)?v.settings.enabled_strategies:(oldMode==='both'?['sniper','price_action']:oldMode==='price_action'?['price_action']:['sniper']);for(const input of strategyBoxes())input.checked=selected.includes(input.value);el('signalPolicy').value=v.settings.signal_policy||'any';describeStrategies();}el('currentExpiry').textContent='M'+(active&&v.current_expiration_minutes?v.current_expiration_minutes:(v.settings?.expiration_minutes||1));el('operationStrategyRow').hidden=!active;el('operationPeriodRow').hidden=!active;el('operationRsiRow').hidden=!active;el('operationRsi').textContent=active&&v.current_rsi_14!=null?Number(v.current_rsi_14).toFixed(2):'—';el('operationStrategy').textContent=active?(v.current_strategy||'Estratégia não informada'):'';el('operationTimeframe').textContent=active?'M'+(v.current_timeframe_minutes||1):'';el('orderExpiry').textContent=active?'M'+(v.current_expiration_minutes||v.settings?.expiration_minutes||1):'';el('entryAmount').disabled=!!v.running||!!v.pending;for(const input of strategyBoxes())input.disabled=!!v.running||!!v.pending;for(const id of ['strategyXtremeOnly','strategyPromising','strategyWinners','strategyXtremeWinners','strategySelectAll','strategyClear','signalPolicy'])el(id).disabled=!!v.running||!!v.pending;el('expirationMinutes').disabled=!!v.running||!!v.pending;el('saveSettings').disabled=!!v.running||!!v.pending;el('botStatus').textContent=v.stop_reason||v.message||(v.running?'Analisando':'Robô parado');el('limitStatus').textContent=v.settings?('Limite configurado: '+v.settings.max_orders+' operações · Entrada US$ '+Number(v.settings.stake||2).toFixed(2)+' · Stop Win US$ '+v.settings.stop_win+' · Stop Loss US$ '+v.settings.stop_loss):'Conecte à PRACTICE para configurar limites';el('wins').textContent=v.wins||0;el('losses').textContent=v.losses||0;el('orders').textContent=v.orders||0;el('pnl').textContent=(v.profit||0).toFixed(2);el('lastSignal').textContent=v.last_signal?'Último sinal: '+v.last_signal.asset+' '+v.last_signal.direction+' · '+(v.last_signal.strategy||'Xtreme Sniper'):'';el('disconnectBtn').hidden=!v.connected;el('brokerDetail').textContent=v.connected?(v.executor_connected?'Leitura e executor conectados à PRACTICE.':'Leitura conectada; executor ainda indisponível.'):'Conta real não permitida. Apenas Bullex PRACTICE.';applyMonitorMode(v)}
+
+function applyMonitorMode(v){
+ const owner=!!v.connected&&!v.monitor_only;
+ const watching=!!v.connected&&!!v.monitor_only;
+ el('monitorHost').hidden=!owner;
+ el('monitorJoin').hidden=!!v.connected;
+ el('monitorViewer').hidden=!watching;
+ for(const id of ['preflight','stopBot','disconnectBtn'])if(watching)el(id).hidden=true;
+ if(owner){el('preflight').hidden=false;el('stopBot').hidden=false;el('disconnectBtn').hidden=false;}
+ if(!v.connected){el('preflight').hidden=false;el('stopBot').hidden=false;el('disconnectBtn').hidden=true;}
+ for(const id of ['tabSettings','tabStudy'])el(id).hidden=watching;
+ const nav=document.querySelector('.bot-tabs');
+ if(nav)nav.classList.toggle('monitor-tabs',watching);
+ if(watching){
+   el('brokerForm').hidden=true;
+   if(!el('botPanel').hidden)switchTab('bot');
+   if(!el('settingsPanel').hidden||!el('studyPanel').hidden)switchTab('bot');
+   el('state').textContent='● Acompanhando Bullex PRACTICE do PC';
+   el('brokerDetail').textContent='Somente leitura · não abre ordens neste aparelho.';
+ }
+ if(!v.connected&&!watching){
+   el('brokerDetail').textContent='Conecte no PC para operar, ou use o código acima no celular.';
+ }
+}
+el('monitorCodeBtn').onclick=async()=>{
+ el('monitorCodeBtn').disabled=true;
+ try{const data=await send('/api/monitor/code',{});el('monitorCodeBox').hidden=false;el('monitorCodeBox').textContent=data.code+' · válido por 5 minutos';el('monitorMessage').textContent='No celular: abra este mesmo site, procure Acompanhar pelo celular e digite o código.';}
+ catch(e){el('monitorMessage').textContent='Não foi possível gerar código: '+e.message;}
+ finally{el('monitorCodeBtn').disabled=false;}
+};
+el('monitorPairForm').onsubmit=async(e)=>{
+ e.preventDefault();el('monitorPairBtn').disabled=true;
+ try{
+  const v=await send('/api/monitor/pair',{code:el('monitorCodeInput').value.trim().toUpperCase()});
+  el('monitorCodeInput').value='';
+  el('monitorMessage').textContent='Conectado ao mesmo robô do PC em modo leitura.';
+  switchTab('bot');show(v);
+ }catch(error){el('monitorMessage').textContent='Pareamento não concluído: '+error.message;}
+ finally{el('monitorPairBtn').disabled=false;}
+};
+el('monitorLeaveBtn').onclick=async()=>{
+ try{const v=await send('/api/monitor/leave',{});el('monitorMessage').textContent='Acompanhamento encerrado neste aparelho.';show(v);}
+ catch(e){el('monitorMessage').textContent=e.message;}
+};
+el('monitorRevokeBtn').onclick=async()=>{
+ try{await send('/api/monitor/revoke',{});el('monitorCodeBox').hidden=true;el('monitorMessage').textContent='Acessos de acompanhamento revogados. O bot no PC continua funcionando.';}
+ catch(e){el('monitorMessage').textContent=e.message;}
+};
+
 el('brokerForm').onsubmit=async e=>{e.preventDefault();el('connectBtn').disabled=true;el('brokerDetail').textContent='Autenticando na Bullex PRACTICE (leitura e executor)...';const pwd=el('password').value;el('password').value='';try{let v=await send('/api/connect',{email:el('email').value,password:pwd});show(v);let saved=null;try{saved=JSON.parse(localStorage.getItem('xtreme-demo-settings-v1')||'null')}catch(_e){}if(saved&&Number.isInteger(saved.max_orders)&&saved.max_orders>=10&&saved.max_orders<=1000&&Number(saved.stop_loss)>=2&&Number(saved.stop_win)>=2){try{v=await send('/api/settings',saved);show(v);el('saveStatus').textContent='Configurações anteriores restauradas e confirmadas na PRACTICE'}catch(e){el('saveStatus').textContent='Não foi possível restaurar configurações: '+e.message}}}catch(err){el('brokerDetail').textContent='Não foi possível conectar: '+(err.message||'erro desconhecido')+' · verifique o login PRACTICE e tente novamente';}finally{el('connectBtn').disabled=false}};
 el('disconnectBtn').onclick=async()=>{show(await send('/api/disconnect',{}))};el('preflight').onclick=async()=>{try{show(await send('/api/start',{}))}catch(e){el('botStatus').textContent=e.message}};
 el('saveSettings').onclick=async()=>{if(settingsSaving)return;settingsSaving=true;try{let v=await send('/api/settings',{stop_loss:Number(el('stopLoss').value),stop_win:Number(el('stopWin').value),max_orders:Number(el('maxOrders').value),expiration_minutes:Number(el('expirationMinutes').value),enabled_strategies:selectedStrategyIds(),signal_policy:el('signalPolicy').value,stake:Number(el('entryAmount').value)});riskDirty=false;settingsSaving=false;show(v);try{localStorage.setItem('xtreme-demo-settings-v1',JSON.stringify({stop_loss:v.settings.stop_loss,stop_win:v.settings.stop_win,max_orders:v.settings.max_orders,expiration_minutes:v.settings.expiration_minutes,enabled_strategies:v.settings.enabled_strategies,signal_policy:v.settings.signal_policy,stake:v.settings.stake}))}catch(_e){}el('saveStatus').textContent='Configurações salvas nesta sessão e neste navegador'}catch(e){settingsSaving=false;el('saveStatus').textContent=e.message}};el('stopBot').onclick=async()=>{try{show(await send('/api/stop',{}))}catch(e){el('botStatus').textContent=e.message}};
@@ -295,6 +369,10 @@ archiveEl('tabSettings').addEventListener('click',()=>{if(lastState.connected)re
 </script><script>(function(){const v=document.getElementById('gladiatorVideo'),f=document.querySelector('.gladiator-frame');if(!v||!f)return;v.addEventListener('loadeddata',()=>{f.classList.add('video-ready');const p=v.play();if(p&&p.catch)p.catch(()=>{});});v.addEventListener('error',()=>{f.classList.remove('video-ready');if(!v.dataset.fallback){v.dataset.fallback='1';v.src='/assets/gladiador_bot.mp4';v.load();const p=v.play();if(p&&p.catch)p.catch(()=>{});}});})();</script><script>(function(){const v=document.getElementById("xtremeLogoVideo");if(!v)return;const wrap=v.closest(".xtreme-logo-wrap");const show=()=>wrap&&wrap.classList.add("logo-playing");const hide=()=>wrap&&wrap.classList.remove("logo-playing");v.muted=true;v.addEventListener("playing",show);v.addEventListener("error",hide);v.addEventListener("stalled",hide);if(v.readyState>=2&&!v.paused)show();const p=v.play();if(p&&typeof p.catch==="function")p.catch(hide);})();</script></body></html>'''
 ROOT=Path(__file__).resolve().parent.parent
 sessions={}
+monitor_codes={}
+monitor_viewers={}
+monitor_failures={}
+monitor_alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 guard=threading.RLock()
 def respond(start,status,data,headers=None):
     raw=json.dumps(data).encode()
@@ -320,7 +398,17 @@ def app(environ,start_response):
     except Exception:pass
     sid=cookie.get('xb_session')
     token=sid.value if sid else None
-    with guard: current=sessions.get(token)
+    with guard:
+        current=sessions.get(token)
+        viewer_cookie=cookie.get('xb_viewer')
+        viewer_token=viewer_cookie.value if viewer_cookie else None
+        viewer_info=monitor_viewers.get(viewer_token) if viewer_token else None
+        monitored=None
+        if viewer_info:
+            if viewer_info['expires']<=time.time() or viewer_info['owner'] not in sessions:
+                monitor_viewers.pop(viewer_token,None)
+            else:
+                monitored=sessions.get(viewer_info['owner'])
     if path=='/assets/xtreme_tiger_logo_animada.mp4':
         logo_video=Path(__file__).resolve().parent/'xtreme_tiger_logo_animada.mp4'
         if not logo_video.is_file():
@@ -356,7 +444,10 @@ def app(environ,start_response):
     if path=='/health':return respond(start_response,'200 OK',{'ok':True,'orders_enabled':False,'supabase_archive_configured':configured()})
     if path=='/api/state':
         if current:current['last_seen']=time.time()
-        return respond(start_response,'200 OK',state_view(current))
+        if not current and monitored:
+            monitored['last_seen']=time.time()
+            return respond(start_response,'200 OK',state_view(monitored)|{'monitor_only':True})
+        return respond(start_response,'200 OK',state_view(current)|{'monitor_only':False})
     if path=='/api/study':
         if not current:return respond(start_response,'401 Unauthorized',{'error':'Conecte a Bullex PRACTICE para acessar o estudo'})
         study=current.get('study')
@@ -370,10 +461,56 @@ def app(environ,start_response):
         data=HTML.encode()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),('Content-Length',str(len(data))),('Cache-Control','no-store')])
         return [data]
-    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings'):
+    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings','/api/monitor/code','/api/monitor/pair','/api/monitor/leave','/api/monitor/revoke'):
         origin=environ.get('HTTP_ORIGIN','')
         host=environ.get('HTTP_HOST','')
         if origin and origin not in ('https://'+host,'http://'+host):return respond(start_response,'403 Forbidden',{'error':'Origem inválida'})
+        if path=='/api/monitor/code':
+            if not current:return respond(start_response,'403 Forbidden',{'error':'Somente o PC principal pode gerar códigos'})
+            with guard:
+                for key,data in list(monitor_codes.items()):
+                    if data['owner']==token or data['expires']<=time.time():monitor_codes.pop(key,None)
+                code=''.join(secrets.choice(monitor_alphabet) for _ in range(10))
+                monitor_codes[code]={'owner':token,'expires':time.time()+300}
+            return respond(start_response,'200 OK',{'code':code,'expires_in_seconds':300})
+        if path=='/api/monitor/revoke':
+            if not current:return respond(start_response,'403 Forbidden',{'error':'Somente o PC principal revoga acessos'})
+            with guard:
+                for key,data in list(monitor_codes.items()):
+                    if data['owner']==token:monitor_codes.pop(key,None)
+                for key,data in list(monitor_viewers.items()):
+                    if data['owner']==token:monitor_viewers.pop(key,None)
+            return respond(start_response,'200 OK',{'revoked':True})
+        if path=='/api/monitor/leave':
+            if viewer_token:
+                with guard:monitor_viewers.pop(viewer_token,None)
+            return respond(start_response,'200 OK',{'connected':False},[('Set-Cookie','xb_viewer=; Max-Age=0; HttpOnly; Secure; SameSite=Strict; Path=/')])
+        if path=='/api/monitor/pair':
+            if current:return respond(start_response,'409 Conflict',{'error':'Este aparelho já controla uma sessão; desconecte antes de acompanhar outra'})
+            size=int(environ.get('CONTENT_LENGTH') or 0)
+            if size<2 or size>128:return respond(start_response,'400 Bad Request',{'error':'Código inválido'})
+            try:details=json.loads(environ['wsgi.input'].read(size))
+            except (TypeError,ValueError):details={}
+            code=str(details.get('code','')).strip().upper()
+            ip=environ.get('REMOTE_ADDR','unknown')
+            now=time.time()
+            with guard:
+                recent=[x for x in monitor_failures.get(ip,[]) if x>now-60]
+                monitor_failures[ip]=recent
+                if len(recent)>=8:return respond(start_response,'429 Too Many Requests',{'error':'Muitas tentativas. Aguarde um minuto'})
+                pairing=monitor_codes.get(code)
+                if not pairing or pairing['expires']<=now or pairing['owner'] not in sessions:
+                    monitor_failures[ip].append(now)
+                    return respond(start_response,'400 Bad Request',{'error':'Código inválido ou expirado. Gere outro no PC'})
+                monitor_codes.pop(code,None)
+                owner=sessions[pairing['owner']]
+                watch_token=secrets.token_urlsafe(32)
+                monitor_viewers[watch_token]={'owner':pairing['owner'],'expires':now+43200}
+            return respond(start_response,'200 OK',state_view(owner)|{'monitor_only':True},
+                [('Set-Cookie','xb_viewer='+watch_token+'; Max-Age=43200; HttpOnly; Secure; SameSite=Strict; Path=/')])
+        # Read-only viewers have no access to bot controls, even via direct requests.
+        if monitored and not current:
+            return respond(start_response,'403 Forbidden',{'error':'Acompanhamento somente leitura; controle o robô no PC'})
         if path=='/api/settings':
             if not current:return respond(start_response,'401 Unauthorized',{'error':'Conecte à PRACTICE primeiro'})
             if current['running'] or current['pending']:return respond(start_response,'409 Conflict',{'error':'Pare o robô e conclua a ordem antes de alterar os stops'})
@@ -448,6 +585,8 @@ def app(environ,start_response):
                         if p:
                             try:p.terminate()
                             except Exception:pass
+                if any(v.get('archive_account')==account_id(email.strip().lower()) for v in sessions.values()):
+                    raise RuntimeError('Esta conta Bullex já está conectada. No celular, use Acompanhar pelo celular; não entre duas vezes')
                 if len(sessions)>=8:raise RuntimeError('Limite de sessões simultâneas. Desconecte abas antigas e tente novamente.')
             proc=subprocess.Popen([sys.executable,str(ROOT/'worker.py')],cwd=str(ROOT),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
             try:
