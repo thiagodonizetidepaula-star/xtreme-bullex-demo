@@ -2,6 +2,18 @@ import sys,pathlib,json,logging,time,contextlib,math,signal
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor_iq'))
 logging.disable(logging.CRITICAL)
 from iqoptionapi.stable_api import IQ_Option as Bullex
+from iqoptionapi.api import IQOptionAPI
+
+# Only retain the HTTP status of the provider's login response.
+# Never store, print, or return passwords, cookies, session tokens, or the response body.
+_iq_original_http=IQOptionAPI.send_http_request_v2
+def _iq_login_status(self,url,method,*args,**kwargs):
+    response=_iq_original_http(self,url,method,*args,**kwargs)
+    if method=='POST' and url=='https://auth.iqoption.com/api/v2/login':
+        code=getattr(response,'status_code',None)
+        self._xtreme_login_http_status=code if type(code) is int and 100<=code<=599 else None
+    return response
+IQOptionAPI.send_http_request_v2=_iq_login_status
 # A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
 # Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
 from iqoptionapi.ws.objects.timesync import TimeSync
@@ -88,7 +100,22 @@ def dispatch(c):
                 raise RuntimeError('A IQ Option exige verificação de segurança. Conclua-a no site oficial; o bot não contorna CAPTCHA.')
             if '429' in reason_text or 'rate_limit' in reason_text:
                 raise RuntimeError('A IQ Option limitou as tentativas. Aguarde antes de tentar novamente.')
-            raise RuntimeError('A IQ Option não autorizou a conexão via API comunitária. Confirme o acesso no site oficial.')
+            http_status=getattr(getattr(api,'api',None),'_xtreme_login_http_status',None)
+            if http_status==401:
+                raise RuntimeError('IQ Option: login recusado (HTTP 401). Confirme o método de acesso no site oficial, inclusive se a conta usa Google.')
+            if http_status==403:
+                raise RuntimeError('IQ Option: conexão automatizada bloqueada (HTTP 403). Use o acesso oficial; o bot não contorna bloqueios de segurança.')
+            if http_status==429:
+                raise RuntimeError('IQ Option: tentativas limitadas (HTTP 429). Não repita o login continuamente.')
+            if http_status in (400,422):
+                raise RuntimeError('IQ Option: login rejeitado pela API comunitária (HTTP '+str(http_status)+'). Confirme se a conta exige verificação ou outro método de login.')
+            if type(http_status) is int and http_status>=500:
+                raise RuntimeError('IQ Option: serviço de autenticação indisponível (HTTP '+str(http_status)+'). Tente apenas depois que a corretora normalizar.')
+            if http_status==200:
+                raise RuntimeError('IQ Option: servidor respondeu, mas não forneceu sessão compatível com a API comunitária. O acesso pelo site oficial pode funcionar normalmente.')
+            if 'websocket' in reason_text or 'connection closed' in reason_text:
+                raise RuntimeError('IQ Option: canal de conexão recusado ou fechado. A biblioteca não consegue estabelecer a sessão.')
+            raise RuntimeError('IQ Option: conexão não autorizada via API comunitária. Confirme o acesso no site oficial; sem uma sessão aceita, o bot não pode operar.')
         with stage('seleção e saldo da conta demo',10):
             api.change_balance('PRACTICE');demo()
             balance=api.get_balance();currency=api.get_currency();balance_cache=balance;balance_at=time.time()
