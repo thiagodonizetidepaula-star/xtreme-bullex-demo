@@ -32,29 +32,33 @@ assert 'CERT_NONE' not in (ROOT/'vendor/bullexapi/api.py').read_text()
 print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout.')
 
 
-# Vendor isolation: keep IQ Option's community library separate from Bullex.
-IQ_SHA='8a903cc094a74af1ed935a56a2d6b5a9ed3319d7'
+# Keep IQ Option 2026 fork isolated from Bullex.
+IQ_SHA='acac6e08333466ae188c7dfa7fd2a03174e34ca2'
 try:
-    iq_url=f'https://codeload.github.com/iqoptionapi/iqoptionapi/zip/{IQ_SHA}'
+    iq_url=f'https://codeload.github.com/victalejo/iqoptionapi/zip/{IQ_SHA}'
     iq_data=urllib.request.urlopen(iq_url,timeout=30).read()
-    with zipfile.ZipFile(io.BytesIO(iq_data)) as archive:
-        for member in archive.infolist():
-            components=pathlib.PurePosixPath(member.filename).parts
-            if (len(components)>2 and components[1]=='iqoptionapi'
-                    and member.filename.endswith('.py')):
-                destination=ROOT/'vendor_iq'/pathlib.Path(*components[1:])
-                destination.parent.mkdir(parents=True,exist_ok=True)
-                destination.write_bytes(archive.read(member))
+    allowed={'__init__.py','api.py','stable_api.py','constants.py','country_id.py',
+             'expiration.py','global_value.py','http','ws'}
+    with zipfile.ZipFile(io.BytesIO(iq_data)) as iqzip:
+        for member in iqzip.infolist():
+            parts=pathlib.PurePosixPath(member.filename).parts
+            if len(parts)<2 or not member.filename.endswith('.py'):continue
+            relative=parts[1:]
+            if relative[0] not in allowed:continue
+            dest=ROOT/'vendor_iq/iqoptionapi'/pathlib.Path(*relative)
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            dest.write_bytes(iqzip.read(member))
     iq_api=ROOT/'vendor_iq/iqoptionapi/api.py'
-    source=iq_api.read_text()
-    assert 'self.session.verify = False' in source
-    assert '"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"' in source
-    source=source.replace('self.session.verify = False','self.session.verify = True')
-    source=source.replace('"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"','"check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED')
-    tree=Patch().visit(ast.parse(source));ast.fix_missing_locations(tree);iq_api.write_text(ast.unparse(tree))
     iq_stable=ROOT/'vendor_iq/iqoptionapi/stable_api.py'
+    if not iq_api.is_file() or not iq_stable.is_file():raise RuntimeError('Pacote IQ incompleto')
+    src=iq_api.read_text()
+    assert 'self.session.verify = False' in src
+    assert '"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"' in src
+    src=src.replace('self.session.verify = False','self.session.verify = True')
+    src=src.replace('"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"','"check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED')
+    tree=Patch().visit(ast.parse(src));ast.fix_missing_locations(tree);iq_api.write_text(ast.unparse(tree))
     tree=Patch().visit(ast.parse(iq_stable.read_text()));ast.fix_missing_locations(tree);iq_stable.write_text(ast.unparse(tree))
-    assert 'CERT_NONE' not in iq_api.read_text() and 'self.session.verify = False' not in iq_api.read_text()
-    print('IQ Option comunitária preparada isoladamente, com TLS verificado.')
+    assert 'CERT_NONE' not in iq_api.read_text()
+    print('IQ Option 2026: biblioteca comunitária isolada e TLS verificado.')
 except Exception as err:
-    print('IQ Option temporariamente indisponível (Bullex não afetada): '+str(err)[:150])
+    print('IQ Option indisponível no bootstrap; Bullex preservada: '+type(err).__name__)

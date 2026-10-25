@@ -77,7 +77,18 @@ def dispatch(c):
         api=Bullex(c['email'],c['password'])
         with stage('autenticação e abertura da sessão',35):
             ok,reason=api.connect()
-        if not ok: raise RuntimeError('A corretora pediu 2FA. Esta versão não suporta 2FA.' if reason=='2FA' else 'Login recusado ou integração incompatível. Verifique os dados e acesso à corretora.')
+        if not ok:
+            # Never echo raw provider messages, possibly containing session tokens.
+            reason_text=str(reason).lower()
+            if '2fa' in reason_text or 'verification' in reason_text or 'two_factor' in reason_text:
+                raise RuntimeError('IQ Option exige verificação em duas etapas. Faça login no site oficial; este bot não solicita códigos.')
+            if 'invalid_credentials' in reason_text or 'wrong_password' in reason_text or 'incorrect_password' in reason_text:
+                raise RuntimeError('A IQ Option rejeitou as credenciais. Confirme o acesso diretamente no site oficial.')
+            if 'captcha' in reason_text or 'cloudflare' in reason_text or 'challenge' in reason_text:
+                raise RuntimeError('A IQ Option exige verificação de segurança. Conclua-a no site oficial; o bot não contorna CAPTCHA.')
+            if '429' in reason_text or 'rate_limit' in reason_text:
+                raise RuntimeError('A IQ Option limitou as tentativas. Aguarde antes de tentar novamente.')
+            raise RuntimeError('A IQ Option não autorizou a conexão via API comunitária. Confirme o acesso no site oficial.')
         with stage('seleção e saldo da conta demo',10):
             api.change_balance('PRACTICE');demo()
             balance=api.get_balance();currency=api.get_currency();balance_cache=balance;balance_at=time.time()
