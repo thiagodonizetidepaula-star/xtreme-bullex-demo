@@ -2,6 +2,7 @@ import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math
 from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
+from candle_patterns import PATTERNS
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -9,7 +10,7 @@ app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2','pattern_mode':'all','pattern_selected':list(PATTERNS)}}
 
 def log(s):
     state['message']=s
@@ -47,7 +48,7 @@ def management():
     return {'wins':wins,'losses':losses,'ties':sum(t['status']=='EMPATE' for t in done),'profit':profit,'used':len(ts),'remaining':max(0,c['limit']-len(ts)),'stop_win_remaining':round(max(0,c['stop_win']-profit),2),'stop_loss_remaining':round(max(0,c['stop_loss']+profit),2),'can_trade':risk_ok(c,profit,len(ts))}
 def comparison():
     out=[]
-    for key,name in STRATEGIES.items():
+    for key,name in list(STRATEGIES.items())+[(('pattern:'+key),name) for key,name in PATTERNS.items()]:
         ts=[t for t in state['trades'] if t.get('strategy_key','rejection')==key and t['status'] in ('WIN','LOSS','EMPATE')]
         payouts=[t['payout'] for t in ts if isinstance(t.get('payout'),(int,float))]
         out.append({'strategy':name,'operations':len(ts),'wins':sum(t['status']=='WIN' for t in ts),'losses':sum(t['status']=='LOSS' for t in ts),'ties':sum(t['status']=='EMPATE' for t in ts),'profit':round(sum(t['profit'] for t in ts),2),'payout_mean':round(sum(payouts)/len(payouts),2) if payouts else None})
@@ -65,7 +66,7 @@ def loop(c):
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest','patterns') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
@@ -73,7 +74,7 @@ def loop(c):
             selected=None
             for item in batch['items']:
                 try:
-                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
+                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'),c.get('pattern_mode','all'),c.get('pattern_selected'))
                 except (ValueError,KeyError,TypeError) as e:
                     invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
                     if invalid_key not in seen:
@@ -106,7 +107,7 @@ def loop(c):
                 last=(c['asset'],a['candle']);state['last_candle']=last
                 with lock:
                     if stop.is_set():break
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
+                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':('pattern:'+a['pattern_key'] if c.get('strategy')=='patterns' and a.get('pattern_key') else c.get('strategy','rejection')),'strategy':(a.get('pattern') or STRATEGIES[c.get('strategy','rejection')]),'expiration':a['candle']+120}
                     state['trades'].append(trade)
                     state['uncertain']=True
                 order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))

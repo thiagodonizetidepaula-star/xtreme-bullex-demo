@@ -64,7 +64,7 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
-STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência','retest':'Xtreme Reteste M1'}
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência','retest':'Xtreme Reteste M1','patterns':'Padrões de Candles M1'}
 
 def repetition(candles, now):
     bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
@@ -190,7 +190,10 @@ def retest(candles, now):
             break
     return result
 
-def analyze_selected(candles, now, strategy='rejection', source='hl2'):
+def analyze_selected(candles, now, strategy='rejection', source='hl2', pattern_mode='all', pattern_selected=None):
+    if strategy=='patterns':
+        from candle_patterns import analyze_patterns
+        return analyze_patterns(candles,now,pattern_mode,pattern_selected)
     if strategy=='retest':return retest(candles,now)
     if strategy=='sniper':return sniper(candles,now,source)
     if strategy=='repetition':return repetition(candles,now)
@@ -211,6 +214,9 @@ def validate_config(c):
         if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
     if c.get('sniper_source','hl2') not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')
     if c.get('strategy','rejection') not in STRATEGIES:raise ValueError('Estratégia inválida')
+    if c.get('strategy')=='patterns':
+        from candle_patterns import chosen_patterns, PATTERNS
+        chosen_patterns(c.get('pattern_mode','all'),c.get('pattern_selected',list(PATTERNS)))
     if c['stake']<=0 or c['stop_win']<=0 or c['stop_loss']<c['stake']: raise ValueError('Entrada e stops inválidos. Stop loss deve cobrir uma entrada.')
     if not 0<=c['payout']<=100 or int(c['limit'])!=c['limit'] or not 1<=c['limit']<=100: raise ValueError('Payout ou limite inválido')
     import re
