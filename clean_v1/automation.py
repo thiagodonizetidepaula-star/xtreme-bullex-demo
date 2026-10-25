@@ -4,6 +4,7 @@ from clean_v1.xtreme_sniper import decision
 from clean_v1.price_action import decision as price_action_decision
 from clean_v1.m5_bars import normalized5
 from clean_v1.rsi_filter import confirms as rsi_confirms
+from clean_v1.candle_patterns import patterns,pattern_id
 from clean_v1.trend_regime import trending
 from clean_v1.exhaustion_guard import exhausted
 from clean_v1.candle_research import features,summarize
@@ -111,19 +112,29 @@ def run(state, call):
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
                 if len(bars)<55 or bars[-1]['t']!=boundary-60:continue
-                mode=state.get('strategy_mode','sniper')
-                # Assess both independently, using only completed broker candles.
-                # Do not force 300-second candles through the 60-second scanner.
+                enabled=frozenset(state.get('enabled_strategies',('sniper',)))
+                policy=state.get('signal_policy','any')
+                # A single deterministic classifier, shared with the read-only
+                # candle study: exactly the same definitions, no future bars.
                 def proposal(candles,period_seconds):
-                    a=decision(candles,period_seconds) if mode in ('sniper','both') else 0
-                    p,setup=(price_action_decision(candles,period_seconds)
-                             if mode in ('price_action','both') else (0,''))
-                    if a and p and a!=p:return None
-                    direction=a or p
-                    if not direction:return None
-                    name=('Xtreme Sniper + Price Action' if a and p else
-                          'Xtreme Sniper + Tendência ATR 18×2' if a else
-                          'Price Action · '+setup)
+                    timeframe=period_seconds//60
+                    candidates=[]
+                    if 'sniper' in enabled:
+                        sniper=decision(candles,period_seconds)
+                        if sniper:candidates.append((sniper,'Xtreme Sniper + Tendência ATR 18×2'))
+                    if 'price_action' in enabled:
+                        pa_signal,pa_setup=price_action_decision(candles,period_seconds)
+                        if pa_signal:candidates.append((pa_signal,'Price Action · '+pa_setup))
+                    for pattern_name,direction_name in patterns(candles):
+                        identifier=pattern_id(pattern_name,timeframe)
+                        if identifier in enabled:
+                            candidates.append((1 if direction_name=='CALL' else -1,pattern_name))
+                    if not candidates:return None
+                    # Opposing signals are never turned into an order.
+                    directions={direction for direction,_ in candidates}
+                    if len(directions)!=1:return None
+                    if policy=='agree' and len(candidates)<2:return None
+                    direction=next(iter(directions))
                     accepted,rsi_value=rsi_confirms(candles,direction)
                     if not accepted:
                         key_rsi=(boundary,item['asset'],period_seconds)
@@ -133,11 +144,12 @@ def run(state, call):
                             state['rejections']['rsi']+=1
                             state['last_rsi_rejection']={'asset':item['asset'],
                                 'direction':'CALL' if direction==1 else 'PUT',
-                                'timeframe_minutes':period_seconds//60,'rsi_14':rsi_value}
+                                'timeframe_minutes':timeframe,'rsi_14':rsi_value}
                             if len(rsi_seen)>600:
                                 state['rsi_seen']={x for x in rsi_seen if x[0]>boundary-3600}
                         return None
-                    return direction,name+' · RSI 14',candles,period_seconds//60,rsi_value
+                    strategy_name=' + '.join(name for _,name in candidates)
+                    return direction,strategy_name[:190]+' · RSI 14',candles,timeframe,rsi_value
                 m1=proposal(bars,60)
                 m5=None
                 if boundary%300==0:
