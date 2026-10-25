@@ -57,9 +57,10 @@ class CandlePatternTests(unittest.TestCase):
         self.assertEqual(result["matches"], [])
 
     def test_malformed_config_blocks_selection(self):
-        from app import state
-        defaults = state["config"]
-        self.assertIs(validate_config({**defaults, "strategy": "patterns",
+        defaults = {"strategy": "patterns", "stake": 2, "stop_win": 20,
+                    "stop_loss": 10, "payout": 80, "limit": 5,
+                    "asset": "EURUSD", "pattern_mode": "all", "pattern_selected": list(PATTERNS)}
+        self.assertEqual(validate_config({**defaults, "strategy": "patterns",
                                        "pattern_mode": "one",
                                        "pattern_selected": ["engulf_bull"]}).get("strategy"), "patterns")
         invalid = [
