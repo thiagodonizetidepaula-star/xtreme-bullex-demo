@@ -5,6 +5,7 @@ from clean_v1.price_action import decision as price_action_decision
 from clean_v1.m5_bars import normalized5
 from clean_v1.rsi_filter import confirms as rsi_confirms
 from clean_v1.candle_patterns import patterns,pattern_id
+from clean_v1.illustrated_patterns import proposals as illustrated_proposals, strategy_id as illustrated_id
 from clean_v1.trend_regime import trending
 from clean_v1.exhaustion_guard import exhausted
 from clean_v1.candle_research import features,summarize
@@ -121,19 +122,28 @@ def run(state, call):
                     candidates=[]
                     if 'sniper' in enabled:
                         sniper=decision(candles,period_seconds)
-                        if sniper:candidates.append((sniper,'Xtreme Sniper + Tendência ATR 18×2'))
+                        if sniper:candidates.append((sniper,'Xtreme Sniper + Tendência ATR 18×2','sniper'))
                     if 'price_action' in enabled:
                         pa_signal,pa_setup=price_action_decision(candles,period_seconds)
-                        if pa_signal:candidates.append((pa_signal,'Price Action · '+pa_setup))
+                        if pa_signal:candidates.append((pa_signal,'Price Action · '+pa_setup,'price_action'))
                     for pattern_name,direction_name in patterns(candles):
                         identifier=pattern_id(pattern_name,timeframe)
                         if identifier in enabled:
-                            candidates.append((1 if direction_name=='CALL' else -1,pattern_name))
+                            family=identifier.rsplit('_m',1)[0]
+                            candidates.append((1 if direction_name=='CALL' else -1,pattern_name,family))
+                    for pattern_name,direction_name in illustrated_proposals(candles,period_seconds):
+                        identifier=illustrated_id(pattern_name,timeframe)
+                        if identifier in enabled:
+                            family=identifier.rsplit('_m',1)[0].removeprefix('fig_')
+                            family={'martelo_suporte':'martelo','estrela_resistencia':'estrela_cadente'}.get(family,family)
+                            candidates.append((1 if direction_name=='CALL' else -1,pattern_name,family))
                     if not candidates:return None
                     # Opposing signals are never turned into an order.
-                    directions={direction for direction,_ in candidates}
+                    directions={direction for direction,_,_ in candidates}
                     if len(directions)!=1:return None
-                    if policy=='agree' and len(candidates)<2:return None
+                    # O mesmo padrão, nas versões genérica e confirmada, não
+                    # equivale a duas estratégias independentes concordando.
+                    if policy=='agree' and len({family for _,_,family in candidates})<2:return None
                     direction=next(iter(directions))
                     accepted,rsi_value=rsi_confirms(candles,direction)
                     if not accepted:
@@ -148,7 +158,7 @@ def run(state, call):
                             if len(rsi_seen)>600:
                                 state['rsi_seen']={x for x in rsi_seen if x[0]>boundary-3600}
                         return None
-                    strategy_name=' + '.join(name for _,name in candidates)
+                    strategy_name=' + '.join(name for _,name,_ in candidates)
                     return direction,strategy_name[:190]+' · RSI 14',candles,timeframe,rsi_value
                 m1=proposal(bars,60)
                 m5=None

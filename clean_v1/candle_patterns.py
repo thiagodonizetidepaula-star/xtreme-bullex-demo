@@ -45,7 +45,8 @@ PATTERN_METADATA={
     "Falso rompimento de suporte":("falso_romp_suporte","CALL"),
 }
 STUDY_STRATEGY_IDS=tuple(slug+'_m'+str(tf) for slug,_ in PATTERN_METADATA.values() for tf in (1,5))
-ALL_STRATEGY_IDS=frozenset(('sniper','price_action')+STUDY_STRATEGY_IDS)
+from clean_v1.illustrated_patterns import IDS as ILLUSTRATED_STRATEGY_IDS
+ALL_STRATEGY_IDS=frozenset(('sniper','price_action')+STUDY_STRATEGY_IDS) | ILLUSTRATED_STRATEGY_IDS
 
 def pattern_id(name,timeframe):
     metadata=PATTERN_METADATA.get(name)
