@@ -79,8 +79,11 @@ class CandlePatternTests(unittest.TestCase):
         now = b[-1]["from"] + 61
         with self.assertRaises(ValueError):
             analyze_patterns(b[:-3] + [b[-1]] * 3, now)
+        gap = [dict(x) for x in b]
+        for candle in gap[40:]:
+            candle["from"] += 60
         with self.assertRaises(ValueError):
-            analyze_patterns(b[:-4] + b[-3:], now)
+            analyze_patterns(gap, now + 60)
 
 
 if __name__ == "__main__":
