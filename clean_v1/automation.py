@@ -2,6 +2,7 @@
 import os,time,threading,math
 from clean_v1.xtreme_sniper import decision
 from clean_v1.price_action import decision as price_action_decision
+from clean_v1.m5_bars import normalized5
 from clean_v1.trend_regime import trending
 from clean_v1.exhaustion_guard import exhausted
 from clean_v1.candle_research import features,summarize
@@ -14,7 +15,7 @@ def limit_reason(state):
     if state['orders']>=state['max_orders']:return 'Quantidade máxima atingida: '+str(state['orders'])+' de '+str(state['max_orders'])+' operações'
     return None
 
-def settle(state,call,order,asset,direction,candle_features,expiration_minutes,strategy_name):
+def settle(state,call,order,asset,direction,candle_features,expiration_minutes,strategy_name,timeframe_minutes):
     """Only settlement blocks the next order; scanner stays independent."""
     try:
         result=call('exec',{'op':'demo_result','id':order['id'],'h':expiration_minutes},expiration_minutes*60+120)
@@ -22,7 +23,7 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
         state['profit']+=pnl
         if pnl>0:state['wins']+=1
         elif pnl<0:state['losses']+=1
-        state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name}
+        state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name,'expiration_minutes':expiration_minutes,'timeframe_minutes':timeframe_minutes}
         state.setdefault('research',[]).append({'asset':asset,'direction':direction,'status':result['status'],'profit':pnl,'features':candle_features,'at':time.time()})
         state['research']=state['research'][-300:]
         state['research_summary']=summarize(state['research'])
@@ -30,7 +31,7 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
             state['archive_last_saved']=archive.record(state,order,asset,direction,result,candle_features)
         except Exception:
             state['archive_last_saved']=False
-        state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['current_strategy']='';state['expire_ts']=0
+        state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['current_strategy']='';state['current_expiration_minutes']=0;state['current_timeframe_minutes']=0;state['expire_ts']=0
         reason=limit_reason(state)
         if reason:
             state['running']=False;state['stop'].set();state['stop_reason']=reason
@@ -91,7 +92,7 @@ def run(state, call):
             else:
                 rot+=10
             try:
-                snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True},15)
+                snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True,'enable_m5':True},15)
                 state['read_failures']=0
             except (OSError,RuntimeError,TimeoutError,ValueError):
                 state['read_failures']=state.get('read_failures',0)+1
@@ -109,27 +110,36 @@ def run(state, call):
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
                 if len(bars)<55 or bars[-1]['t']!=boundary-60:continue
-                # Single strategy chosen in Settings. In BOTH mode either can
-                # propose an entry; conflicting directions are ignored.
                 mode=state.get('strategy_mode','sniper')
-                sniper_signal=decision(bars) if mode in ('sniper','both') else 0
-                pa_signal,pa_setup=(price_action_decision(bars)
-                                    if mode in ('price_action','both') else (0,''))
-                if sniper_signal and pa_signal and sniper_signal!=pa_signal:
-                    continue
-                signal=sniper_signal or pa_signal
-                if not signal:continue
-                if sniper_signal and pa_signal:
-                    strategy_name='Xtreme Sniper + Price Action'
-                elif sniper_signal:
-                    strategy_name='Xtreme Sniper + Tendência ATR 18×2'
-                else:
-                    strategy_name='Price Action · '+pa_setup
+                # Assess both independently, using only completed broker candles.
+                # Do not force 300-second candles through the 60-second scanner.
+                def proposal(candles,period_seconds):
+                    a=decision(candles,period_seconds) if mode in ('sniper','both') else 0
+                    p,setup=(price_action_decision(candles,period_seconds)
+                             if mode in ('price_action','both') else (0,''))
+                    if a and p and a!=p:return None
+                    direction=a or p
+                    if not direction:return None
+                    name=('Xtreme Sniper + Price Action' if a and p else
+                          'Xtreme Sniper + Tendência ATR 18×2' if a else
+                          'Price Action · '+setup)
+                    return direction,name,candles,period_seconds//60
+                m1=proposal(bars,60)
+                m5=None
+                if boundary%300==0:
+                    bars5=normalized5(item.get('candles5',[]),server_now)
+                    if len(bars5)>=62 and bars5[-1]['t']==boundary-300:
+                        m5=proposal(bars5,300)
+                # Avoid contradicting orders across timeframes at the same close.
+                if m1 and m5 and m1[0]!=m5[0]:continue
+                chosen=m5 or m1
+                if not chosen:continue
+                signal,strategy_name,signal_bars,timeframe_minutes=chosen
                 key=(boundary,item['asset'])
                 if key in state['seen']:continue
                 state['seen'].add(key)
                 state['signals']+=1
-                state['last_signal']={'asset':item['asset'],'direction':'CALL' if signal==1 else 'PUT','time':boundary,'strategy':strategy_name}
+                state['last_signal']={'asset':item['asset'],'direction':'CALL' if signal==1 else 'PUT','time':boundary,'strategy':strategy_name,'timeframe_minutes':timeframe_minutes}
                 state['phase']='signal'
                 if len(state['seen'])>600:state['seen']={x for x in state['seen'] if x[0]>boundary-3600}
                 # Broker order window is only five seconds; never send stale signals.
@@ -137,11 +147,11 @@ def run(state, call):
                     state['rejections']['late']+=1;continue
                 if not state['running'] or state['pending']:
                     state['rejections']['busy']+=1;continue
-                if not trending(bars,signal):
+                if not trending(signal_bars,signal):
                     state['rejections']['lateral']+=1
                     state['message']='Mercado sem tendência confirmada; entrada descartada'
                     continue
-                if exhausted(bars,signal):
+                if exhausted(signal_bars,signal):
                     state['rejections']['exhausted']+=1
                     state['message']='Fluxo de velas já estendido; entrada descartada'
                     continue
@@ -157,7 +167,7 @@ def run(state, call):
                     state['pending']=True
                     state['phase']='sending';state['message']='Sinal válido, enviando ordem DEMO...'
                 try:
-                    expiration_minutes=state['expiration_minutes']
+                    expiration_minutes=5 if timeframe_minutes==5 else state['expiration_minutes']
                     order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':state['stake'],'h':expiration_minutes,'candle':boundary-60,'min_payout':80},13)
                     if order.get('sent') and order.get('id'):
                         state['orders']+=1
@@ -168,9 +178,11 @@ def run(state, call):
                         state['current_direction']='CALL' if signal==1 else 'PUT'
                         state['current_order_id']=str(order['id'])
                         state['current_strategy']=strategy_name
+                        state['current_timeframe_minutes']=timeframe_minutes
+                        state['current_expiration_minutes']=expiration_minutes
                         state['message']='Ordem em andamento; analisando outros ativos'
-                        state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id']),'strategy':strategy_name}
-                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],{**features(bars,state['current_direction']),'strategy':strategy_name},expiration_minutes,strategy_name),daemon=True).start()
+                        state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes}
+                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],{**features(signal_bars,state['current_direction']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes},expiration_minutes,strategy_name,timeframe_minutes),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
                         reason=str(order.get('reason','Ordem não aceita'))[:150]

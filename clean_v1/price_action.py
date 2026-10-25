@@ -6,12 +6,12 @@ No historical win-rate claims are made by this detector.
 """
 import math
 
-def decision(bars):
-    """Return (direction, setup), where direction is -1, 0 or +1."""
+def decision(bars,period_seconds=60):
+    """Return (direction, setup) on strictly closed M1 or native M5 candles."""
     if len(bars) < 62:
         return (0, '')
     recent=bars[-62:]
-    if any(y['t']-x['t']!=60 for x,y in zip(recent,recent[1:])):
+    if period_seconds not in (60,300) or any(y['t']-x['t']!=period_seconds for x,y in zip(recent,recent[1:])):
         return (0, '')
     # Incoming candles are already normalized by the engine.
     candle=bars[-1]
