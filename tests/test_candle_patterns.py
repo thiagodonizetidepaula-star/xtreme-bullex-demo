@@ -28,7 +28,64 @@ def bars_for_engulf(direction):
     return series
 
 
+
+def bars_for_rejection(direction):
+    b = bars_for_engulf("call" if direction == "call" else "put")
+    prev, confirm = b[-2], b[-1]
+    if direction == "call":
+        prev.update(open=100.70, close=100.75, min=100.45, max=100.78)
+        confirm.update(open=100.75, close=100.90, min=100.71, max=100.94)
+    else:
+        prev.update(open=99.30, close=99.25, min=99.22, max=99.55)
+        confirm.update(open=99.25, close=99.10, min=99.06, max=99.29)
+    return b
+
+
+def bars_for_pullback(direction):
+    up = direction == "call"
+    b = []
+    for i in range(77):
+        opening = (100 + i * .02) if up else (110 - i * .02)
+        closing = opening + (.01 if up else -.01)
+        b.append({
+            "from": i * 60, "open": opening, "close": closing,
+            "max": max(opening, closing) + .06,
+            "min": min(opening, closing) - .06,
+        })
+    if up:
+        tail = [
+            (101.54, 101.43, 101.58, 101.37),
+            (101.44, 101.36, 101.48, 101.32),
+            (101.36, 101.50, 101.54, 101.31),
+        ]
+    else:
+        tail = [
+            (108.46, 108.57, 108.63, 108.42),
+            (108.56, 108.64, 108.68, 108.52),
+            (108.64, 108.50, 108.69, 108.46),
+        ]
+    for i, (o, cl, h, l) in enumerate(tail, start=77):
+        b.append({"from": i * 60, "open": o, "close": cl, "max": h, "min": l})
+    return b
+
+
 class CandlePatternTests(unittest.TestCase):
+    def test_martelo_e_estrela(self):
+        for direction, key in (("call", "hammer_support"), ("put", "shooting_resistance")):
+            with self.subTest(key=key):
+                b = bars_for_rejection(direction)
+                r = analyze_patterns(b, b[-1]["from"] + 61, "one", [key])
+                self.assertEqual(r["direction"], direction, r["reason"])
+                self.assertEqual(r["pattern_key"], key)
+
+    def test_retracoes_confirmadas(self):
+        for direction, key in (("call", "pullback_up"), ("put", "pullback_down")):
+            with self.subTest(key=key):
+                b = bars_for_pullback(direction)
+                r = analyze_patterns(b, b[-1]["from"] + 61, "one", [key])
+                self.assertEqual(r["direction"], direction, r["reason"])
+                self.assertEqual(r["pattern_key"], key)
+
     def test_catalog_six_unique_patterns(self):
         self.assertEqual(len(PATTERNS), 6)
         self.assertEqual(set(chosen_patterns("all", [])), set(PATTERNS))
