@@ -31,3 +31,30 @@ p=ROOT/'vendor/bullexapi/stable_api.py';tree=Patch().visit(ast.parse(p.read_text
 assert 'CERT_NONE' not in (ROOT/'vendor/bullexapi/api.py').read_text()
 print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout.')
 
+
+# Vendor isolation: keep IQ Option's community library separate from Bullex.
+IQ_SHA='8a903cc094a74af1ed935a56a2d6b5a9ed3319d7'
+try:
+    iq_url=f'https://codeload.github.com/iqoptionapi/iqoptionapi/zip/{IQ_SHA}'
+    iq_data=urllib.request.urlopen(iq_url,timeout=30).read()
+    with zipfile.ZipFile(io.BytesIO(iq_data)) as archive:
+        for member in archive.infolist():
+            components=pathlib.PurePosixPath(member.filename).parts
+            if (len(components)>2 and components[1]=='iqoptionapi'
+                    and member.filename.endswith('.py')):
+                destination=ROOT/'vendor_iq'/pathlib.Path(*components[1:])
+                destination.parent.mkdir(parents=True,exist_ok=True)
+                destination.write_bytes(archive.read(member))
+    iq_api=ROOT/'vendor_iq/iqoptionapi/api.py'
+    source=iq_api.read_text()
+    assert 'self.session.verify = False' in source
+    assert '"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"' in source
+    source=source.replace('self.session.verify = False','self.session.verify = True')
+    source=source.replace('"check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"','"check_hostname": True, "cert_reqs": ssl.CERT_REQUIRED')
+    tree=Patch().visit(ast.parse(source));ast.fix_missing_locations(tree);iq_api.write_text(ast.unparse(tree))
+    iq_stable=ROOT/'vendor_iq/iqoptionapi/stable_api.py'
+    tree=Patch().visit(ast.parse(iq_stable.read_text()));ast.fix_missing_locations(tree);iq_stable.write_text(ast.unparse(tree))
+    assert 'CERT_NONE' not in iq_api.read_text() and 'self.session.verify = False' not in iq_api.read_text()
+    print('IQ Option comunitária preparada isoladamente, com TLS verificado.')
+except Exception as err:
+    print('IQ Option temporariamente indisponível (Bullex não afetada): '+str(err)[:150])

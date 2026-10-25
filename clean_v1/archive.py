@@ -30,7 +30,7 @@ def record(state,order,asset,direction,result,features):
     if not account:return False
     at=datetime.datetime.now(datetime.timezone.utc)
     day=at.astimezone(ZONE).date().isoformat()
-    payload={'broker_order_id':str(order['id']),'account_key':account,
+    payload={'broker_order_id':str(state.get('broker','bullex'))+':'+str(order['id']),'account_key':account,
              'settled_at':at.isoformat(),'trade_day':day,'asset':asset,'direction':direction,
              'status':result['status'],'profit':round(float(result['profit']),2),
              'candle_features':features}
