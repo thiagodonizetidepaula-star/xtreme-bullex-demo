@@ -2,6 +2,7 @@ import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math,hashlib
 from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template,make_response,send_file
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
+from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -14,6 +15,7 @@ OFFICE_ORIGIN='https://trader-office-3d.onrender.com'
 office_pair_code=None # sha256 + 5 minute TTL, one-time use
 office_read_token=None # sha256 + 2 hour TTL
 office_bad_attempts={} # per-client brute-force throttle
+lab40_cache={} # Ephemeral study results only; not the live trading engine.
 def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
 def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
 def office_error(message,status):return jsonify(error=message),status
@@ -247,6 +249,52 @@ def access():
     return jsonify(csrf=session['csrf'])
 # Lightweight authenticated summary used by the 3D office dashboard.
 # The trading worker and all existing order-validation paths are unchanged.
+@app.get('/api/lab40')
+def lab40_catalog():
+    with lock:
+        asset=request.args.get('asset','').strip().upper()
+        previous=lab40_cache.get(asset) if asset else None
+        return jsonify(count=len(CANDIDATES),strategies=list(CANDIDATES),
+                       min_observations=MIN_OBSERVATIONS,threshold=60,
+                       latest=previous,connected=bool(state['connected']),
+                       running=bool(state['running']),source='BULLEX_PRACTICE_HISTORICAL_ONLY')
+
+@app.post('/api/lab40/run')
+def lab40_run():
+    # This research endpoint cannot create or modify broker orders. To avoid
+    # blocking the broker worker's critical path, never fetch during execution.
+    import re
+    with lock:
+        data=request.get_json(silent=True) or {}
+        asset=data.get('asset','')
+        if not isinstance(asset,str) or not re.fullmatch(r'[A-Za-z0-9_-]{3,40}',asset):
+            return jsonify(error='Informe um ativo M1 válido.'),400
+        asset=asset.upper()
+        if state['running'] or (bot and bot.is_alive()):
+            return jsonify(error='Pare o robô e aguarde a conclusão da ordem atual antes de rodar a pesquisa de velas. Não interrompemos operações para fazer backtest.'),409
+        if state['uncertain']:
+            return jsonify(error='Existe ordem pendente/incerta. Confira a Bullex antes do laboratório.'),409
+        if not state['connected'] or client is None:
+            return jsonify(error='Conecte a conta PRACTICE no escritório para acessar velas reais.'),409
+        if asset not in state['assets']:
+            return jsonify(error='Ativo não reconhecido na conexão PRACTICE.'),400
+        try:
+            candle_data=client.call('lab_candles',timeout=28,asset=asset)
+            if candle_data.get('source')!='PRACTICE':
+                return jsonify(error='Resposta não autenticada como conta PRACTICE.'),502
+            outcome=evaluate_lab40(candle_data['candles'],asset)
+            outcome['created_at']=datetime.now(timezone.utc).isoformat(timespec='seconds')
+            outcome['source']='HISTORICO_BULLEX_PRACTICE'
+            outcome['execution']='SOMENTE_ESTUDO_SEM_ORDENS'
+            lab40_cache[asset]=outcome
+            if len(lab40_cache)>6:
+                del lab40_cache[next(iter(lab40_cache))]
+            return jsonify(result=outcome)
+        except (ValueError,KeyError,TypeError) as e:
+            return jsonify(error=str(e)),400
+        except Exception as e:
+            return jsonify(error='Não foi possível obter/analisar histórico da Bullex: '+str(e)[:190]),502
+
 @app.get('/api/office/overview')
 def office_overview():
     with lock:
