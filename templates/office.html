@@ -183,7 +183,7 @@ function refreshPipeline(){
   b.className=signal.status==='WIN'?'approved':signal.status==='LOSS'?'rejected':'';
   el.append(a,b);feed.append(el);
  }
- charts.filter(c=>c.big&&c.roomView).forEach(drawBigChart);
+ charts.filter(c=>c.big&&(c.roomView||c.reception)).forEach(drawBigChart);
  if(typeof refreshInspector==='function')refreshInspector();
 }
 const positions=[[-6.55,-3.5],[-4.5,-3.5],[-2.55,-3.5],[2.55,-3.5],[4.5,-3.5],[6.55,-3.5],[-6.55,.6],[-4.5,.6],[-2.55,.6],[2.55,.6],[4.5,.6],[6.55,.6]];
@@ -337,7 +337,73 @@ const labelRoom=(label,x)=>{
 };
 // Removed hanging room signs that obstructed the corridor and screen views.
 
+// Reception screen uses ONLY closed OHLC candles from the authenticated PRACTICE backend.
+// Never show pseudo-random prices, invented candles or fake real-time updates.
+function drawReceptionTV(c){
+ const g=c.ctx,w=c.cv.width,h=c.cv.height,shot=officeSnapshot||null;
+ const chart=shot&&shot.chart||null;
+ const valid=chart&&chart.source==='BULLEX_PRACTICE_M1_CLOSED'&&Array.isArray(chart.bars);
+ const bars=valid?chart.bars.filter(b=>b&&[b.open,b.close,b.max,b.min,b.from].every(x=>Number.isFinite(Number(x)))&&
+ Number(b.min)<=Math.min(Number(b.open),Number(b.close))&&Math.max(Number(b.open),Number(b.close))<=Number(b.max)).slice(-34):[];
+ const newest=shot&&Array.isArray(shot.trades)?shot.trades.at(-1):null;
+ const m=shot&&shot.management||{wins:0,losses:0,profit:0};
+ const fresh=chart&&chart.updated_at&&shot&&Number.isFinite(shot.server_now)&&shot.server_now-chart.updated_at<125;
+ const connected=!!shot?.connected;
+ g.fillStyle='#071a26';g.fillRect(0,0,w,h);g.lineWidth=1;g.textAlign='left';
+ g.font='bold 25px system-ui';g.fillStyle='#ddf8ee';g.fillText('RECEPÇÃO · BULLEX PRACTICE',28,38);
+ g.font='bold 17px system-ui';g.fillStyle=fresh&&connected?'#77e7b6':'#ffc17a';
+ g.fillText(!connected?'SEM CONEXÃO CONFIRMADA':!bars.length?'AGUARDANDO VELAS REAIS':fresh?'VELAS M1 REAIS · ATUALIZADAS':'HISTÓRICO M1 · ATUALIZAÇÃO PENDENTE',29,66);
+ g.fillStyle='#a6d3d5';g.font='bold 18px system-ui';
+ g.fillText((chart?.asset||shot?.config?.asset||'—')+' · M1 · '+(bars.length?bars.length+' velas fechadas':'Sem histórico disponível'),29,93);
+ const left=52,right=w-90,top=105,bottom=282;
+ if(bars.length>=2&&connected){
+  const low=Math.min(...bars.map(b=>Number(b.min))),high=Math.max(...bars.map(b=>Number(b.max)));
+  const extent=Math.max(high-low,Math.abs(high)*.000015);
+  const min=low-extent*.10,max=high+extent*.10;
+  const py=x=>bottom-(Number(x)-min)/(max-min)*(bottom-top);
+  const digits=max<10?5:max<100?4:2;
+  for(let k=0;k<5;k++){
+   const y=top+k*(bottom-top)/4;
+   g.strokeStyle='#214451';g.beginPath();g.moveTo(left,y);g.lineTo(right,y);g.stroke();
+   g.font='14px monospace';g.fillStyle='#b0cbd0';g.fillText((max-k*(max-min)/4).toFixed(digits),right+9,y+4);
+  }
+  const dx=(right-left)/(bars.length+1);
+  for(let i=0;i<bars.length;i++){
+   const b=bars[i],x=left+(i+1)*dx,up=b.close>=b.open;
+   const color=up?'#49e3aa':'#ff7082',yo=py(b.open),yc=py(b.close);
+   g.lineWidth=1.8;g.strokeStyle=color;g.fillStyle=color;
+   g.beginPath();g.moveTo(x,py(b.max));g.lineTo(x,py(b.min));g.stroke();
+   g.fillRect(x-Math.max(2,dx*.32),Math.min(yo,yc),Math.max(4,dx*.64),Math.max(2,Math.abs(yo-yc)));
+  }
+  // A 10-bar simple moving average computed exclusively from actual close values.
+  g.strokeStyle='#ffc866';g.lineWidth=2.8;g.beginPath();
+  for(let i=9;i<bars.length;i++){
+   let sum=0;for(let j=i-9;j<=i;j++)sum+=Number(bars[j].close);
+   const x=left+(i+1)*dx,y=py(sum/10);
+   if(i===9)g.moveTo(x,y);else g.lineTo(x,y);
+  }
+  g.stroke();g.fillStyle='#d5b978';g.font='14px system-ui';g.fillText('Linha dourada: média móvel de 10 fechamentos',left,bottom+22);
+ }else{
+  g.strokeStyle='#304d5c';g.strokeRect(35,116,w-70,169);
+  g.fillStyle='#b6c8d5';g.font='bold 22px system-ui';
+  g.fillText('Nenhuma cotação inventada nesta tela.',60,184);
+  g.font='17px system-ui';g.fillText('Conecte a conta PRACTICE ou atualize as velas M1.',60,220);
+ }
+ g.fillStyle='#0d3041';g.fillRect(0,324,w,108);
+ g.fillStyle='#f1d395';g.font='bold 17px system-ui';g.fillText('OPERAÇÕES PRACTICE · DADOS DO SERVIDOR',28,348);
+ const profit=Number(m.profit||0),currency=shot?.currency||'USD';
+ g.fillStyle='#e2eff0';g.font='bold 19px system-ui';
+ g.fillText('WIN '+Number(m.wins||0)+' / LOSS '+Number(m.losses||0),28,376);
+ g.fillStyle=profit>=0?'#64e7a5':'#ff8c9c';
+ g.fillText('RESULTADO '+currency+' '+profit.toFixed(2),370,376);
+ g.font='16px system-ui';g.fillStyle='#bbdce2';
+ const status=newest?(String(newest.asset||'')+' · '+String(newest.direction||'').toUpperCase()+' · '+String(newest.status||'?')+
+ (typeof newest.profit==='number'?' · '+currency+' '+newest.profit.toFixed(2):'')):'Nenhuma operação registrada pelo bot';
+ g.fillText('ÚLTIMA: '+status.slice(0,83),28,406);
+ c.tex.needsUpdate=true;
+}
 function drawBigChart(c){
+  if(c.reception){drawReceptionTV(c);return;}
   if(c.roomView){drawRoomTV(c);return;}
   const g=c.ctx,w=c.cv.width,h=c.cv.height,p=c.prices,top=65,bottom=h-119,left=48,right=w-74;
   g.fillStyle='#06141e';g.fillRect(0,0,w,h);g.lineWidth=1;g.strokeStyle='#1b3947';
@@ -407,12 +473,16 @@ function bigTV(pair,x,y,z,w,h,seed){
  const cv=document.createElement('canvas');cv.width=768;cv.height=432;
  const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
  const roomView=pair==='LABORATÓRIO'?'lab':pair==='OPERAÇÕES DEMO'?'operations':null;
- const ch={ctx,cv,tex,seed,big:true,pair,roomView,prices:Array.from({length:38},(_,i)=>76+Math.sin(i*.44+seed)*9+Math.sin(i*.16)*7+(i-18)*.23)};
+ const reception=pair==='RECEPÇÃO BULLEX';
+ const ch={ctx,cv,tex,seed,big:true,pair,roomView,reception,prices:Array.from({length:38},(_,i)=>76+Math.sin(i*.44+seed)*9+Math.sin(i*.16)*7+(i-18)*.23)};
  charts.push(ch);drawBigChart(ch);box(w+.22,h+.2,.12,mat('#0b1a24'),x,y,z-.07);
  const surface=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
- surface.position.set(x,y,z+.02);surface.userData.screen=roomView?{kind:roomView}:{kind:"tv",asset:pair};screenTargets.push(surface);scene.add(surface);return surface
+ surface.position.set(x,y,z+.02);surface.userData.screen=roomView?{kind:roomView}:reception?{kind:'reception',asset:'Bullex PRACTICE'}:{kind:"tv",asset:pair};screenTargets.push(surface);scene.add(surface);return surface
 }
-setInterval(()=>{if(document.hidden)return;charts.filter(c=>c.big).forEach(c=>{const p=c.prices;p.shift();p.push(Math.max(35,Math.min(120,p[p.length-1]+(Math.random()-.48)*8)));drawBigChart(c)})},2200);
+// TV textures change only when real data arrives; no fabricated candle motion.
+setInterval(()=>{if(document.hidden||!sceneVisible)return;
+ charts.filter(c=>c.big&&!c.reception).forEach(c=>drawBigChart(c));
+},12500);
 // TVs on back wall of each office, never on the central glass partition.
 bigTV('LABORATÓRIO',-4,2.6,-5.72,3.2,1.9,6);bigTV('OPERAÇÕES DEMO',4,2.6,-5.72,3.2,1.9,16);
 // Separate waiting room beyond the office glass: carpet, sofa, coffee table and TV.
@@ -426,7 +496,7 @@ for(const d of [-1,1])box(.22,.73,1.1,sofa,-5.75+d*1.36,.82,8.35);
 box(1.45,.12,.8,wood,-3.6,.43,6.85);
 for(const d of [-1,1])box(.08,.39,.08,steel,-3.6+d*.56,.21,6.85);
 box(3.0,2.65,.09,mat('#27404c'),-5.7,1.55,5.20);
-bigTV('USD/JPY',-5.7,2.0,5.34,2.15,1.18,28);
+bigTV('RECEPÇÃO BULLEX',-5.7,2.0,5.34,2.15,1.18,28);
 // Compact employee restroom accessed from reception, with a hinged door.
 // The roof is intentionally open so the bathroom remains visible from the 3D camera.
 const restroomWall=mat('#e7ded0'),restroomTile=mat('#aaa49e'),restroomFixture=mat('#f4f2e9'),restroomMetal=mat('#b6aaa1',.32);
@@ -1294,6 +1364,7 @@ function hubLoadLive(p){
  $('hubAssets').replaceChildren(...(p.assets||[]).slice(0,200).map(a=>{const op=document.createElement('option');op.value=a;return op}));
  if(!hubLoadedConfig&&!p.running){hubApplyConfig(p.config);hubLoadedConfig=true;}
  officeRefreshUI();hubLockButtons();
+ const receptionTV=charts.find(c=>c.reception);if(receptionTV)drawReceptionTV(receptionTV);
  if(!lab40Initialized)lab40Setup();
 }
 async function hubRefresh(){
