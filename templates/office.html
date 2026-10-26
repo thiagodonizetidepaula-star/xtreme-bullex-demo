@@ -1237,13 +1237,14 @@ async function hubApi(endpoint,body){
 }
 function hubNote(text,warning=false){const e=$('hubFeedback');e.textContent=text;e.className=warning?'formHint warning':'formHint';}
 function hubLockButtons(){
- $('hubStartBtn').disabled=hubBusy||!hubState||hubState.running!==false||!hubState.connected||hubState.uncertain||hubState.management?.can_trade!==true;
+ $('hubStartBtn').disabled=hubBusy||lab40Working||!hubState||hubState.running!==false||!hubState.connected||hubState.uncertain||hubState.management?.can_trade!==true;
  $('hubStopBtn').disabled=hubBusy||!hubState||hubState.running!==true;
  $('hubConnectBtn').disabled=hubBusy||hubState?.running===true;
  $('hubSaveBtn').disabled=hubBusy||hubState?.running===true;
  $('hubLogoutBtn').disabled=hubBusy||hubState?.running===true||hubState?.uncertain===true;
  $('hubRefreshBtn').disabled=hubBusy;
  $('hubLoginBtn').disabled=hubBusy;
+ $('lab40Run').disabled=hubBusy||lab40Working||!hubState?.connected||hubState?.running||hubState?.uncertain;
 }
 function hubLockData(){
  $('hubControlArea').hidden=true;$('hubLoginForm').hidden=false;
@@ -1252,7 +1253,7 @@ function hubLockData(){
  $('realBridgePanel').hidden=true;
  $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
  hubNote('Entre com a chave do painel para acessar os controles de sua conta.',false);
- $('hubStartBtn').disabled=true;$('hubStopBtn').disabled=true;
+ $('hubStartBtn').disabled=true;$('hubStopBtn').disabled=true;$('lab40Run').disabled=true;
  refreshPipeline();
 }
 function hubApplyConfig(c){
@@ -1293,6 +1294,7 @@ function hubLoadLive(p){
  $('hubAssets').replaceChildren(...(p.assets||[]).slice(0,200).map(a=>{const op=document.createElement('option');op.value=a;return op}));
  if(!hubLoadedConfig&&!p.running){hubApplyConfig(p.config);hubLoadedConfig=true;}
  officeRefreshUI();hubLockButtons();
+ if(!lab40Initialized)lab40Setup();
 }
 async function hubRefresh(){
  if(hubRefreshing)return;hubRefreshing=true;
@@ -1354,6 +1356,54 @@ $('hubLogoutBtn').onclick=async()=>{
  if(hubBusy||hubState?.running||hubState?.uncertain)return;
  await hubExecute('logout',{},'Saindo do painel…');hubLockData();
 };
+
+const LAB40_CACHE_KEY='xtreme-tiger-lab40-validated-v1';
+function lab40Message(message){$('lab40Status').textContent=message;}
+function lab40Use(result,fromCache=false){
+ if(!result||!Array.isArray(result.strategies)||result.strategies.length!==40)return;
+ lab40Latest=result;lab40Rows=result.strategies;
+ $('lab40Asset').value=result.asset||$('lab40Asset').value;
+ const date=result.created_at?new Date(result.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'sem horário';
+ lab40Message((fromCache?'💾 Histórico salvo neste navegador. Refaça o teste para atualizar. ':'✅ Estudo finalizado. ')+
+ 'Ativo '+result.asset+' · '+result.bars+' velas M1 fechadas · '+result.approved+
+ ' aprovadas em estudo · '+date+'. Nenhuma ordem enviada.');
+ refreshPipeline();
+}
+async function lab40Setup(){
+ if(lab40Initialized)return;lab40Initialized=true;
+ try{
+  const resp=await hubApi('lab40');
+  if(resp.count!==40||!Array.isArray(resp.strategies)||resp.strategies.length!==40)throw Error('Catálogo de estratégias incompleto.');
+  lab40Catalog=resp.strategies;
+  const stored=JSON.parse(localStorage.getItem(LAB40_CACHE_KEY)||'null');
+  if(stored&&stored.source==='HISTORICO_BULLEX_PRACTICE'&&Array.isArray(stored.strategies)&&stored.strategies.length===40)lab40Use(stored,true);
+  else lab40Message('40 estratégias prontas. Selecione um ativo M1, mantenha o robô parado e toque em “Testar 40 estratégias”. Resultados não são ordens reais.');
+  refreshPipeline();
+ }catch(e){lab40Initialized=false;lab40Message('Não foi possível carregar o catálogo: '+e.message);refreshPipeline();}
+}
+$('lab40Run').onclick=async()=>{
+ if(lab40Working||!hubState?.connected||hubState?.running||hubState?.uncertain){
+  lab40Message('Para testar, conecte a conta PRACTICE, pare o robô e aguarde todas as ordens serem concluídas.');return;
+ }
+ const asset=$('lab40Asset').value.trim().toUpperCase();
+ if(!/^[A-Z0-9_-]{3,40}$/.test(asset)){lab40Message('Ativo inválido. Use o nome do ativo disponível na Bullex.');return;}
+ lab40Working=true;hubLockButtons();
+ const beforeAsset=lab40Latest?.asset;
+ lab40Message('⏳ Baixando até 900 velas M1 fechadas de '+asset+' e testando 40 variações... Aguarde, sem sair da página. Não serão feitas ordens.');
+ try{
+  const payload=await hubApi('lab40/run',{asset});
+  if(!payload.result||payload.result.strategies?.length!==40||payload.result.execution!=='SOMENTE_ESTUDO_SEM_ORDENS'){
+   throw Error('Resposta não comprovou as 40 estratégias ou a execução somente de estudo.');
+  }
+  lab40Use(payload.result);
+  try{localStorage.setItem(LAB40_CACHE_KEY,JSON.stringify(payload.result));}
+  catch(e){lab40Message($('lab40Status').textContent+' ⚠️ Não foi possível salvar o estudo neste navegador.');}
+ }catch(e){
+  lab40Message('⚠️ Estudo não concluído: '+e.message+' Nenhum sinal foi liberado para operações.');
+  if(beforeAsset!==asset){lab40Rows=[];lab40Latest=null;refreshPipeline();}
+ }finally{lab40Working=false;hubLockButtons();}
+};
+
 hubRefresh();
 hubPolling=setInterval(()=>{if(!document.hidden&&!hubBusy)hubRefresh();},6500);
 
