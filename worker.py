@@ -62,8 +62,12 @@ def market(force=False):
     for asset_id,a in info.get('turbo',{}).get('actives',{}).items():
         name=str(a.get('name','')).split('.',1)[-1]
         commission=a.get('option',{}).get('profit',{}).get('commission')
-        if not name or not isinstance(commission,(int,float)) or not math.isfinite(commission) or not 0<=commission<=100:continue
-        payout=100-float(commission)
+        if not name:continue
+        # Keep open symbols in the catalog even if payout is unavailable;
+        # they count as open but are never eligible for orders without payout.
+        valid_commission=(isinstance(commission,(int,float)) and not isinstance(commission,bool)
+                          and math.isfinite(commission) and 0<=commission<=100)
+        payout=100-float(commission) if valid_commission else 0.0
         fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
     market_cache=fresh;market_at=requested_at
