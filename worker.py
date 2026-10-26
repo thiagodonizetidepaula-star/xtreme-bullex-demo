@@ -120,6 +120,18 @@ def dispatch(c):
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
             items.append({'asset':asset,'candles':closed})
         return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
+    if op=='lab_candles':
+        # Historical study is read-only. App blocks this while the trading
+        # thread is active to avoid delaying real-time PRACTICE execution.
+        now=broker_now()
+        asset=c['asset']
+        if asset not in api.get_all_ACTIVES_OPCODE():raise ValueError('Ativo não reconhecido na conta PRACTICE.')
+        with stage('histórico de pesquisa de velas M1',20):
+            # More candles are required for a meaningful chronological OOS split.
+            bars=api.get_candles(asset,60,900,int(now))
+        if not isinstance(bars,list):raise RuntimeError('A Bullex não entregou histórico M1 para o laboratório.')
+        return {'candles':[b for b in bars if isinstance(b,dict) and b.get('from',now)+60<=now],
+                'now':now,'source':'PRACTICE'}
     if op=='candles':
         now=broker_now()
         if not now or abs(time.time()-now)>10: raise RuntimeError('Relógio fora de sincronia')
