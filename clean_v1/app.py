@@ -145,6 +145,18 @@ a{color:#ffd075}
 <p class="muted">Digite um código apenas no primeiro pareamento. Marcando a opção abaixo, o celular poderá continuar autorizado sem buscar outro código a cada acesso.</p>
 <form id="monitorPairForm"><label for="monitorCodeInput">Código de acompanhamento</label><input id="monitorCodeInput" maxlength="12" autocomplete="one-time-code" autocapitalize="characters" placeholder="Código do PC" required><label class="strategy-option"><input id="trustPhone" type="checkbox" checked><span>Confiar neste celular por 30 dias<small>Pode ser revogado no PC. Uma sessão Bullex no PC, sem segunda conexão.</small></span></label><button class="btn" id="monitorPairBtn">Acompanhar PC</button></form>
 </div>
+<div id="monitorReconnect" hidden>
+<h3>RECONEXÃO PELO CELULAR · PRACTICE</h3>
+<p class="muted">O Render foi reiniciado e sua autorização continua válida. Reconecte a mesma conta Bullex diretamente deste celular. Seu login e senha não serão salvos no Supabase.</p>
+<form id="monitorReconnectForm">
+<label for="mobileBrokerEmail">E-mail da Bullex</label>
+<input id="mobileBrokerEmail" type="email" autocomplete="username" inputmode="email" maxlength="254" placeholder="E-mail da sua conta autorizada" required>
+<label for="mobileBrokerPassword">Senha da Bullex</label>
+<input id="mobileBrokerPassword" type="password" autocomplete="current-password" maxlength="256" required>
+<button class="btn" id="monitorReconnectBtn" type="submit">Reconectar PRACTICE neste celular</button>
+</form>
+<p class="muted">Ao reconectar, confira stops, valor e estratégias antes de ativar. A conta REAL continua bloqueada.</p>
+</div>
 <div id="monitorViewer" hidden>
 <p class="muted" id="monitorViewerText">● MODO ACOMPANHAMENTO — placar e ordens do PC em tempo real. Este aparelho NÃO envia ordens.</p>
 <button type="button" class="btn outline" id="monitorLeaveBtn">Sair do acompanhamento</button>
@@ -220,6 +232,9 @@ function applyMonitorMode(v){
  el('monitorHost').hidden=!owner;
  el('monitorJoin').hidden=!!v.connected;
  el('monitorViewer').hidden=!watching;
+ const waitingRemote=!!v.trusted_waiting&&!!v.remote_control;
+ el('monitorReconnect').hidden=!waitingRemote;
+ if(waitingRemote)el('brokerForm').hidden=true;
  el('monitorViewerText').textContent=remote
   ?'● CONTROLE REMOTO AUTORIZADO · configure, inicie ou pare a automação PRACTICE do PC. Não há botão de compra/venda manual neste aparelho.'
   :'● MODO ACOMPANHAMENTO · somente leitura das operações e placar do PC.';
@@ -241,10 +256,13 @@ function applyMonitorMode(v){
     :'Somente leitura · nenhuma ordem pode ser enviada por este aparelho.';
  }
  if(!v.connected&&!watching){
-   el('brokerDetail').textContent='Conecte no PC para operar, ou use o código acima no celular.';
+   el('brokerDetail').textContent='Você pode conectar a Bullex PRACTICE diretamente neste aparelho quando não houver sessão ativa.';
    if(v.trusted_waiting){
      el('monitorJoin').hidden=true;
-     el('monitorMessage').textContent='Este celular já está autorizado. Aguardando conectar o robô no PC; não precisa de novo código.';
+     el('brokerForm').hidden=true;
+     el('monitorMessage').textContent=v.remote_control
+       ?'Celular autorizado · reconecte a conta PRACTICE abaixo, sem ir ao PC.'
+       :'Celular autorizado somente para acompanhamento. Aguardando conexão Bullex.';
    }
  }
 }
@@ -273,6 +291,22 @@ el('monitorPairForm').onsubmit=async(e)=>{
   switchTab('bot');show(v);
  }catch(error){el('monitorMessage').textContent='Pareamento não concluído: '+error.message;}
  finally{el('monitorPairBtn').disabled=false;}
+};
+el('monitorReconnectForm').onsubmit=async(e)=>{
+ e.preventDefault();
+ const btn=el('monitorReconnectBtn');
+ btn.disabled=true;
+ const pwd=el('mobileBrokerPassword').value;
+ el('mobileBrokerPassword').value='';
+ el('monitorMessage').textContent='Conectando à Bullex PRACTICE pela nuvem...';
+ try{
+  let v=await send('/api/monitor/reconnect',{email:el('mobileBrokerEmail').value.trim(),password:pwd});
+  show(v);
+  el('monitorMessage').textContent='PRACTICE reconectada pelo celular. Confira e salve configurações e stops antes de iniciar a automação.';
+  switchTab('bot');
+ }catch(err){
+  el('monitorMessage').textContent='Reconexão não concluída: '+err.message;
+ }finally{btn.disabled=false;}
 };
 el('monitorLeaveBtn').onclick=async()=>{
  try{const v=await send('/api/monitor/leave',{});el('monitorMessage').textContent='Acompanhamento encerrado neste aparelho.';show(v);}
@@ -401,6 +435,7 @@ archiveEl('tabSettings').addEventListener('click',()=>{if(lastState.connected)re
 </script><script>(function(){const v=document.getElementById('gladiatorVideo'),f=document.querySelector('.gladiator-frame');if(!v||!f)return;v.addEventListener('loadeddata',()=>{f.classList.add('video-ready');const p=v.play();if(p&&p.catch)p.catch(()=>{});});v.addEventListener('error',()=>{f.classList.remove('video-ready');if(!v.dataset.fallback){v.dataset.fallback='1';v.src='/assets/gladiador_bot.mp4';v.load();const p=v.play();if(p&&p.catch)p.catch(()=>{});}});})();</script><script>(function(){const v=document.getElementById("xtremeLogoVideo");if(!v)return;const wrap=v.closest(".xtreme-logo-wrap");const show=()=>wrap&&wrap.classList.add("logo-playing");const hide=()=>wrap&&wrap.classList.remove("logo-playing");v.muted=true;v.addEventListener("playing",show);v.addEventListener("error",hide);v.addEventListener("stalled",hide);if(v.readyState>=2&&!v.paused)show();const p=v.play();if(p&&typeof p.catch==="function")p.catch(hide);})();</script></body></html>'''
 ROOT=Path(__file__).resolve().parent.parent
 sessions={}
+connecting_accounts=set()
 monitor_codes={}
 monitor_viewers={}
 monitor_failures={}
@@ -522,7 +557,7 @@ def app(environ,start_response):
         data=HTML.encode()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),('Content-Length',str(len(data))),('Cache-Control','no-store')])
         return [data]
-    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings','/api/monitor/code','/api/monitor/control-code','/api/monitor/pair','/api/monitor/leave','/api/monitor/revoke'):
+    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings','/api/monitor/code','/api/monitor/control-code','/api/monitor/pair','/api/monitor/leave','/api/monitor/revoke','/api/monitor/reconnect'):
         origin=environ.get('HTTP_ORIGIN','')
         host=environ.get('HTTP_HOST','')
         if origin and origin not in ('https://'+host,'http://'+host):return respond(start_response,'403 Forbidden',{'error':'Origem inválida'})
@@ -597,6 +632,19 @@ def app(environ,start_response):
             return respond(start_response,'200 OK',state_view(owner)|{
                 'monitor_only':True,'remote_control':scope=='control','remembered':remember,'persisted':persisted},
                 [('Set-Cookie','xb_viewer='+watch_token+'; Max-Age='+str(ttl)+'; HttpOnly; Secure; SameSite=Strict; Path=/')])
+        # Trusted-control mobile may reconnect its same broker account AFTER a
+        # Render restart. The mobile never receives the owner's session cookie.
+        mobile_reconnect=(path=='/api/monitor/reconnect' and not current and not monitored
+            and viewer_info is not None and viewer_info.get('durable') is True
+            and viewer_info.get('scope')=='control')
+        if path=='/api/monitor/reconnect':
+            if not mobile_reconnect:return respond(start_response,'403 Forbidden',{'error':'Somente celular confiável autorizado para controle remoto pode reconectar a PRACTICE'})
+            try:
+                verification=trusted.find(viewer_token)
+            except Exception:
+                return respond(start_response,'503 Service Unavailable',{'error':'Não foi possível validar este celular no Supabase'})
+            if not verification or verification.get('scope')!='control' or verification.get('account_key')!=viewer_info.get('account_key'):
+                return respond(start_response,'403 Forbidden',{'error':'Autorização revogada ou expirada; pareie o celular novamente'})
         # Permission is enforced server-side, never inferred from mobile buttons.
         # Remote controllers only operate the EXISTING PRACTICE automation.
         # They cannot call demo_order, prepare, connect, disconnect or create codes.
@@ -674,6 +722,7 @@ def app(environ,start_response):
                     old['proc'].terminate()
                     if old.get('executor'):old['executor'].terminate()
             return respond(start_response,'200 OK',{'connected':False},[('Set-Cookie','xb_session=; Max-Age=0; HttpOnly; Secure; SameSite=Strict; Path=/')])
+        claimed_account=None
         try:
             size=int(environ.get('CONTENT_LENGTH') or 0)
             if size>3000 or size<=0:raise ValueError('Dados inválidos')
@@ -681,6 +730,9 @@ def app(environ,start_response):
             email=str(data.get('email','')).strip()
             pwd=str(data.get('password',''))
             if not email or len(email)>254 or not pwd or len(pwd)>256:raise ValueError('Informe e-mail e senha válidos')
+            account_key=account_id(email.strip().lower())
+            if mobile_reconnect and account_key!=viewer_info.get('account_key'):
+                raise ValueError('Somente a conta Bullex previamente autorizada pode ser reconectada por este celular')
             with guard:
                 # Reclaim idle, disconnected sessions; never interrupt an active order.
                 stale=[k for k,v in sessions.items() if not v.get('running') and not v.get('pending') and time.time()-v.get('last_seen',0)>1800]
@@ -691,9 +743,11 @@ def app(environ,start_response):
                         if p:
                             try:p.terminate()
                             except Exception:pass
-                if any(v.get('archive_account')==account_id(email.strip().lower()) for v in sessions.values()):
-                    raise RuntimeError('Esta conta Bullex já está conectada. No celular, use Acompanhar pelo celular; não entre duas vezes')
-                if len(sessions)>=8:raise RuntimeError('Limite de sessões simultâneas. Desconecte abas antigas e tente novamente.')
+                if any(v.get('archive_account')==account_key for v in sessions.values()) or account_key in connecting_accounts:
+                    raise RuntimeError('Esta conta Bullex já está conectada ou iniciando. Use a sessão existente, sem entrar duas vezes')
+                if len(sessions)+len(connecting_accounts)>=8:raise RuntimeError('Limite de sessões simultâneas. Desconecte abas antigas e tente novamente.')
+                connecting_accounts.add(account_key)
+                claimed_account=account_key
             proc=subprocess.Popen([sys.executable,str(ROOT/'worker.py')],cwd=str(ROOT),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
             try:
                 answer=proc_call(proc,{'op':'connect','email':email,'password':pwd})
@@ -708,17 +762,29 @@ def app(environ,start_response):
                     executor=None
                 new=secrets.token_urlsafe(32)
                 with guard:sessions[new]={'proc':proc,'executor':executor,'exec_lock':threading.Lock(),'read_lock':threading.Lock(),'order_lock':threading.Lock(),'stop':threading.Event(),'running':False,'pending':False,'uncertain':False,'message':'Conectado à PRACTICE','phase':'idle','current_asset':'','current_direction':'','current_order_id':'','entry_ts':0,'expire_ts':0,'stake':2,'max_orders':10,'expiration_minutes':1,'strategy_mode':'sniper','enabled_strategies':('sniper',),'signal_policy':'any','martingale_mode':'off','martingale_multiplier':2,'martingale_pending':None,'martingale_status':'Desligado','current_stake':0,'current_martingale':False,'current_strategy':'','current_expiration_minutes':0,'current_timeframe_minutes':0,'current_rsi_14':None,'stop_loss':10,'stop_win':20,'profit':0.,'wins':0,'losses':0,'orders':0,'signals':0,'seen':set(),'markets':0,'ready':0,'balance':answer.get('balance'),'currency':answer.get('currency'),'archive_account':account_id(email.strip().lower()),'last_seen':time.time()}
+                if mobile_reconnect:
+                    with guard:
+                        active_viewer=monitor_viewers.get(viewer_token)
+                        if not active_viewer or active_viewer.get('scope')!='control' or active_viewer.get('account_key')!=account_key:
+                            raise RuntimeError('Celular não autorizado após reconexão')
+                        active_viewer['owner']=new
                 try:
                     study=CandleStudy(sessions[new],proc_call)
                     sessions[new]['study']=study
                     study.start()
                 except Exception:pass
+                if mobile_reconnect:
+                    return respond(start_response,'200 OK',state_view(sessions[new])|{
+                        'monitor_only':True,'remote_control':True})
                 return respond(start_response,'200 OK',state_view(sessions[new]),[('Set-Cookie','xb_session='+new+'; HttpOnly; Secure; SameSite=Strict; Path=/')])
             except Exception:
                 proc.terminate()
                 raise
         except (RuntimeError,ValueError,KeyError) as e:return respond(start_response,'400 Bad Request',{'error':str(e)})
         except Exception:return respond(start_response,'502 Bad Gateway',{'error':'Falha na autenticação da Bullex'})
+        finally:
+            if claimed_account is not None:
+                with guard:connecting_accounts.discard(claimed_account)
     return respond(start_response,'404 Not Found',{'error':'Não encontrado'})
 if __name__=='__main__':
     from wsgiref.simple_server import make_server
