@@ -6,7 +6,7 @@ from pathlib import Path
 from socketserver import ThreadingMixIn
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from clean_v1.automation import run as run_bot
-from clean_v1.archive import account_id,configured,history,_request,_server_key
+from clean_v1.archive import account_id,configured,history,_request,_server_key,credential_state
 from clean_v1.candle_study import CandleStudy
 from clean_v1.candle_patterns import ALL_STRATEGY_IDS
 from clean_v1 import trusted_mobile as trusted
@@ -562,6 +562,13 @@ def app(environ,start_response):
             code=str(details.get('code','')).strip().upper()
             remember=details.get('remember',True)
             if type(remember) is not bool:return respond(start_response,'400 Bad Request',{'error':'Preferência de aparelho inválida'})
+            # Reject bad configuration BEFORE spending the one-use PC code.
+            if remember and not trusted.configured():
+                detail=('O Render está enviando chave PÚBLICA sb_publishable. '
+                    'Em Environment, troque SUPABASE_SECRET_KEY pela chave PRIVADA sb_secret do projeto.'
+                    if credential_state()=='publishable_key_not_allowed' else
+                    'Configure no Render SUPABASE_SECRET_KEY com a chave privada sb_secret válida do projeto.')
+                return respond(start_response,'503 Service Unavailable',{'error':detail})
             ip=environ.get('REMOTE_ADDR','unknown')
             now=time.time()
             with guard:
@@ -581,7 +588,10 @@ def app(environ,start_response):
             persisted=False
             if remember and trusted.configured():
                 try:persisted=trusted.save(watch_token,account,scope,now+ttl)
-                except Exception:return respond(start_response,'503 Service Unavailable',{'error':'Não foi possível salvar aparelho confiável; gere outro código no PC'})
+                except Exception as exc:
+                    code=getattr(exc,'code',None)
+                    print('XTREME_SUPABASE: trusted_phone_insert_failed '+str(code if type(code) is int else type(exc).__name__),flush=True)
+                    return respond(start_response,'503 Service Unavailable',{'error':'Falha ao salvar aparelho no Supabase. Confira sua chave privada e tente novamente com novo código.'})
             with guard:
                 monitor_viewers[watch_token]={'owner':pairing['owner'],'account_key':account,'expires':now+ttl,'scope':scope,'durable':persisted}
             return respond(start_response,'200 OK',state_view(owner)|{
@@ -717,7 +727,7 @@ if __name__=='__main__':
     subprocess.run([sys.executable,str(ROOT/'bootstrap.py')],cwd=str(ROOT),check=True,timeout=90)
     # Log only readiness/probe, NEVER a key or URL.
     if not configured():
-        print('XTREME_SUPABASE: pending_private_configuration',flush=True)
+        print('XTREME_SUPABASE: '+credential_state(),flush=True)
     else:
         try:
             _request('GET','?select=token_hash&limit=0',table='xtreme_trusted_phones')

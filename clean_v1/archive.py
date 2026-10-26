@@ -2,24 +2,45 @@
 Uses the existing RLS-protected public.xtreme_clean_demo_trades table.
 Credentials are read only from Render environment variables, never sent to clients.
 """
-import os,json,urllib.request,urllib.error,datetime,hashlib,time
+import os,json,urllib.request,urllib.error,datetime,hashlib,time,base64
 from urllib.parse import quote
 
 TABLE='xtreme_clean_demo_trades'
 ZONE=datetime.timezone(datetime.timedelta(hours=-3))
 
+def _legacy_service_role(value):
+    if not value.startswith('eyJ'):return False
+    try:
+        segment=value.split('.')[1]
+        claims=json.loads(base64.urlsafe_b64decode(segment+'='*(-len(segment)%4)))
+        return claims.get('role')=='service_role'
+    except (ValueError,IndexError,TypeError):return False
+
 def _server_key():
-    # The modern sb_secret key is preferred. Legacy service_role JWTs still work.
-    return os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+    secret=os.environ.get('SUPABASE_SECRET_KEY','').strip()
+    if secret.startswith('sb_secret_'):return secret
+    legacy=os.environ.get('SUPABASE_SERVICE_ROLE_KEY','').strip()
+    if _legacy_service_role(legacy):return legacy
+    return None
+
+def credential_state():
+    if not os.environ.get('SUPABASE_URL','').strip():return 'missing_url'
+    if _server_key():return 'ready'
+    secret=os.environ.get('SUPABASE_SECRET_KEY','').strip()
+    legacy=os.environ.get('SUPABASE_SERVICE_ROLE_KEY','').strip()
+    if secret.startswith('sb_publishable_') or legacy.startswith('sb_publishable_'):
+        return 'publishable_key_not_allowed'
+    if secret or legacy:return 'invalid_private_key'
+    return 'missing_secret_key'
 
 def configured():
-    return bool(os.environ.get('SUPABASE_URL') and _server_key())
+    return credential_state()=='ready'
 
 def _request(method,params='',payload=None,table=TABLE):
     if table not in (TABLE,'xtreme_trusted_phones'):raise ValueError('Tabela não permitida')
     url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/'+table+params
     key=_server_key()
-    if not key:raise RuntimeError('Chave privada Supabase ausente')
+    if not configured() or not key:raise RuntimeError('Chave privada Supabase ausente ou inválida')
     data=json.dumps(payload,ensure_ascii=False).encode('utf-8') if payload is not None else None
     headers={'apikey':key,'Content-Type':'application/json'}
     # Modern sb_secret is an API key, not a JWT: do not send as Bearer.
