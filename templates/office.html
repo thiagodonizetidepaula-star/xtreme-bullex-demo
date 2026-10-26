@@ -906,9 +906,9 @@ refreshPipeline();
 const isMobile=matchMedia('(max-width: 750px)').matches;
 const weakDesktop=!isMobile&&((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4);
 const qualityModes=['Auto','Econômica','Alta','Ultraleve'];
-let qualityIndex=isMobile?1:weakDesktop?3:0,qualityFps=0;let fpsFrames=0,fpsLast=0;
-renderer.setPixelRatio(Math.min(devicePixelRatio,qualityIndex===3?.55:isMobile?.72:1.15));
-renderer.shadowMap.enabled=!isMobile&&!weakDesktop;
+let qualityIndex=weakDesktop?3:1,qualityFps=0;let fpsFrames=0,fpsLast=0;
+renderer.setPixelRatio(Math.min(devicePixelRatio,qualityIndex===3?.55:isMobile?.72:.80));
+renderer.shadowMap.enabled=qualityIndex===2;
 sun.castShadow=renderer.shadowMap.enabled;
 $('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex]+(qualityIndex===3?' · 12 fps':'');
 $('fullScreenToggle').onclick=async()=>{
