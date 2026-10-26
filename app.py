@@ -20,7 +20,7 @@ def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
 def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
 def office_error(message,status):return jsonify(error=message),status
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'chart_asset':None,'chart_updated_at':None,'candles':[],'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
     state['message']=s
@@ -103,7 +103,7 @@ def loop(c):
             item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
-            state['analysis']=a;state['candles']=data['candles'][-50:]
+            state['analysis']=a;state['candles']=data['candles'][-50:];state['chart_asset']=item['asset'];state['chart_updated_at']=time.time()
             if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
                 evaluated=(c['asset'],a['candle'])
                 checks=a.get('checks',{})
@@ -295,6 +295,30 @@ def lab40_run():
         except Exception as e:
             return jsonify(error='Não foi possível obter/analisar histórico da Bullex: '+str(e)[:190]),502
 
+@app.post('/api/office/chart/refresh')
+def office_chart_refresh():
+    # Never compete with the trading loop for the worker's live execution.
+    with lock:
+        if state['running'] or (bot and bot.is_alive()):
+            return jsonify(error='Com robô ativo, o gráfico usa velas do streaming para não atrasar entradas.'),409
+        if state['uncertain'] or not state['connected'] or client is None:
+            return jsonify(error='Aguarde conexão PRACTICE confirmada e sem ordens pendentes.'),409
+        requested=(request.get_json(silent=True) or {}).get('asset',state['config']['asset'])
+        if not isinstance(requested,str) or requested not in state['assets']:
+            return jsonify(error='Ativo não reconhecido na conta PRACTICE.'),400
+        try:
+            response=client.call('candles',timeout=22,asset=requested)
+            now=float(response['now'])
+            bars=[b for b in response['candles'] if isinstance(b,dict)
+                  and isinstance(b.get('from'),(int,float)) and b['from']+60<=now]
+            if len(bars)<10:return jsonify(error='Histórico M1 insuficiente para o gráfico.'),502
+            state['candles']=bars[-45:]
+            state['chart_asset']=requested
+            state['chart_updated_at']=time.time()
+            return jsonify(ok=True,asset=requested,count=len(state['candles']))
+        except Exception as e:
+            return jsonify(error='Não foi possível ler as velas PRACTICE: '+str(e)[:150]),502
+
 @app.get('/api/office/overview')
 def office_overview():
     with lock:
@@ -308,7 +332,13 @@ def office_overview():
             uncertain=bool(state['uncertain']),message=str(state['message'])[:240],
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
-            trades=recent,stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
+            trades=recent,
+            chart={'asset':state.get('chart_asset'),
+                   'updated_at':state.get('chart_updated_at'),
+                   'bars':state.get('candles',[])[-45:],
+                   'source':'BULLEX_PRACTICE_M1_CLOSED',
+                   'mode':'CLOSED_CANDLES_NOT_TICKS'},
+            stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
             analyzed_count=state.get('analyzed_count',0),server_now=time.time())
 
 @app.get('/api/state')
