@@ -30,3 +30,15 @@ tree=Patch().visit(tree);ast.fix_missing_locations(tree);p.write_text(ast.unpars
 p=ROOT/'vendor/bullexapi/stable_api.py';tree=Patch().visit(ast.parse(p.read_text()));ast.fix_missing_locations(tree);p.write_text(ast.unparse(tree))
 assert 'CERT_NONE' not in (ROOT/'vendor/bullexapi/api.py').read_text()
 print('Biblioteca preparada: certificados verificados; chamadas HTTP com timeout.')
+# Run dependency-free candle-lab regression checks at every deployment.
+import unittest,sys,py_compile
+sys.path.insert(0,str(ROOT))
+py_compile.compile(str(ROOT/'sniper_lab40.py'),doraise=True)
+py_compile.compile(str(ROOT/'app.py'),doraise=True)
+py_compile.compile(str(ROOT/'worker.py'),doraise=True)
+suite=unittest.defaultTestLoader.discover(str(ROOT),pattern='test_sniper_lab40.py')
+result=unittest.TextTestRunner(verbosity=1).run(suite)
+if not result.wasSuccessful():
+    raise RuntimeError('Falha nos testes de regressão do laboratório Xtreme Sniper 40.')
+print('Laboratório Xtreme Sniper: testes de regressão aprovados.')
+
