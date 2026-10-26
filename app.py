@@ -1,6 +1,6 @@
-import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math
+import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math,hashlib
 from datetime import datetime,timezone,timedelta
-from flask import Flask,request,jsonify,session,render_template
+from flask import Flask,request,jsonify,session,render_template,make_response
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
@@ -9,6 +9,15 @@ app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
+# Secure, read-only office bridge. Never exports Bullex credentials or allows orders.
+OFFICE_ORIGIN='https://trader-office-3d.onrender.com'
+office_pair_code=None # sha256 + 5 minute TTL, one-time use
+office_read_token=None # sha256 + 2 hour TTL
+office_bad_attempts={} # per-client brute-force throttle
+def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
+def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
+def office_error(message,status):return jsonify(error=message),status
+
 state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'rejection','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 def log(s):
@@ -130,6 +139,12 @@ def loop(c):
 
 @app.before_request
 def auth():
+    # The only two cross-origin routes use one-time pairing and read-only bearer auth,
+    # never cookies or CSRF exceptions for any trading command.
+    if request.path in ['/api/office/exchange','/api/office/state']:
+        if not office_origin_allowed():return office_error('Origem não autorizada.',403)
+        if request.method=='OPTIONS':return make_response('',204)
+        return
     if request.path in ['/','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
@@ -138,7 +153,70 @@ def auth():
 def security(r):
     r.headers['Cache-Control']='no-store';r.headers['X-Content-Type-Options']='nosniff';r.headers['X-Frame-Options']='DENY';r.headers['Referrer-Policy']='no-referrer'
     r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+    if request.path in ['/api/office/exchange','/api/office/state'] and office_origin_allowed():
+        r.headers['Access-Control-Allow-Origin']=OFFICE_ORIGIN
+        r.headers['Access-Control-Allow-Methods']='GET,POST,OPTIONS'
+        r.headers['Access-Control-Allow-Headers']='Authorization, Content-Type'
+        r.headers['Access-Control-Max-Age']='300'
+        r.headers['Vary']='Origin'
     return r
+
+# Both endpoints below are intentionally read-only. Only the existing
+# authenticated backend can connect/start/stop the PRACTICE broker session.
+@app.post('/api/office/pair')
+def office_generate_pair():
+    global office_pair_code,office_read_token
+    with lock:
+        code=secrets.token_urlsafe(24)
+        office_pair_code=(office_digest(code),time.monotonic()+300)
+        # Creating a new pairing code revokes an older office viewer.
+        office_read_token=None
+    return jsonify(code=code,expires_in=300,bridge='read_only',mode='PRACTICE')
+
+@app.post('/api/office/exchange')
+def office_exchange():
+    global office_pair_code,office_read_token
+    data=request.get_json(silent=True) or {}
+    code=data.get('code')
+    if not isinstance(code,str) or len(code)>256 or len(code)<25:return office_error('Código inválido.',400)
+    ip=request.remote_addr or 'unknown'
+    now=time.monotonic()
+    with lock:
+        office_bad_attempts[ip]=[t for t in office_bad_attempts.get(ip,[]) if now-t<300]
+        if len(office_bad_attempts[ip])>=8:return office_error('Muitas tentativas; aguarde cinco minutos.',429)
+        if not office_pair_code or now>office_pair_code[1] or not secrets.compare_digest(office_digest(code),office_pair_code[0]):
+            office_bad_attempts[ip].append(now)
+            return office_error('Código expirado ou incorreto. Gere outro no bot.',401)
+        office_pair_code=None
+        token=secrets.token_urlsafe(32)
+        office_read_token=(office_digest(token),now+7200)
+    return jsonify(token=token,expires_in=7200,bridge='read_only',mode='PRACTICE')
+
+@app.get('/api/office/state')
+def office_bridge_state():
+    token=request.headers.get('Authorization','')
+    if not token.startswith('Bearer ') or len(token)>250:return office_error('Vínculo não autorizado.',401)
+    raw=token[7:]
+    with lock:
+        if not office_read_token or time.monotonic()>office_read_token[1] or not secrets.compare_digest(office_digest(raw),office_read_token[0]):
+            return office_error('Vínculo expirado. Vincule o escritório novamente.',401)
+        trades=[]
+        for t in state['trades'][-60:]:
+            trades.append({k:t[k] for k in ('id','time','asset','direction','strategy','strategy_key','status','profit','stake','payout','expiration','result_time')
+                           if k in t})
+        analysis=state.get('analysis') or {}
+        safe_analysis={k:analysis[k] for k in ('signal','direction','reason','candle') if k in analysis and isinstance(analysis[k],(str,int,float,type(None)))}
+        result={
+            'source':'XTREME_BULLEX_DEMO_BACKEND','mode':'PRACTICE','read_only':True,
+            'connected':bool(state['connected']),'running':bool(state['running']),
+            'uncertain':bool(state['uncertain']),'message':str(state['message'])[:350],
+            'balance':state['balance'],'currency':state['currency'],
+            'analyzed_count':state.get('analyzed_count',0),'stream_ready':state.get('stream_ready',0),
+            'stream_total':state.get('stream_total',0),'scan_assets':state.get('scan_assets',[])[:30],
+            'analysis':safe_analysis,'comparison':comparison(),'management':management(),
+            'trades':trades,'server_now':time.time()
+        }
+    return jsonify(result)
 
 @app.get('/')
 def home():return render_template('index.html')
@@ -194,8 +272,9 @@ def halt():
     return jsonify(ok=True)
 @app.post('/api/logout')
 def logout():
-    global client
+    global client,office_pair_code,office_read_token
     with lock:
+        office_pair_code=None;office_read_token=None
         if state['running'] or state['uncertain']:return jsonify(error='Pare e aguarde ou revise a operação antes de sair.'),409
         if client:client.close()
         state['connected']=False;session.clear()
