@@ -1,5 +1,5 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101c2a"><title>Xtreme Tiger | Escritório de Controle Bullex DEMO</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#e5f4f5;font:14px system-ui,sans-serif}header{padding:12px 16px;background:#152536;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}h1{font-size:18px;margin:0}small,.hint{color:#a6bfc6}button{border:1px solid #476270;background:#233d4b;color:#eefbfb;padding:10px 13px;border-radius:9px;cursor:pointer}button.primary{background:#19795f;border-color:#2ebc90}button:disabled{opacity:.5}main{max-width:1300px;margin:auto;padding:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.room{background:#132b39;border:1px solid #46657a;border-radius:13px;padding:14px;min-width:0}.room h3{margin:0 0 8px}.room .roomdesc{font-size:12px;color:#a6bfc6;margin-bottom:10px}.room small{display:block;padding:5px 0;border-bottom:1px solid #294453}.pipelineItem{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #304a5d;padding:5px 0;font-size:12px}.pipelineItem .approved{color:#54e6ad}.pipelineItem .rejected{color:#edb5ac}.roomStats{display:flex;gap:12px;flex-wrap:wrap;color:#b8e6ef;font-size:13px;margin:9px 0}.roomStats b{color:#81edb7}.pairRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}.pairRow input{flex:1;min-width:190px;background:#0c1d2a;color:#effff6;border:1px solid #4c7584;border-radius:9px;padding:10px}.bridgeMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}.bridgeMetrics span{padding:10px;border:1px solid #335368;background:#132c38;border-radius:8px}.bridgeMetrics b{display:block;font-size:19px;color:#89edc5}.brokerTrade{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #365061;padding:7px 0;font-size:12px}.bridgePanel{margin:12px 0;background:#102c3b;border:1px solid #3b8378;border-radius:11px;padding:13px}.bridgePanel[hidden]{display:none}#localStats[hidden]{display:none}#simHistory[hidden],#simHistoryTitle[hidden]{display:none}@media(max-width:620px){.bridgeMetrics{grid-template-columns:1fr 1fr}}
+<style>*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#e5f4f5;font:14px system-ui,sans-serif}header{padding:12px 16px;background:#152536;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}h1{font-size:18px;margin:0}small,.hint{color:#a6bfc6}button{border:1px solid #476270;background:#233d4b;color:#eefbfb;padding:10px 13px;border-radius:9px;cursor:pointer}button.primary{background:#19795f;border-color:#2ebc90}button:disabled{opacity:.5}main{max-width:1300px;margin:auto;padding:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.room{background:#132b39;border:1px solid #46657a;border-radius:13px;padding:14px;min-width:0}.room h3{margin:0 0 8px}.room .roomdesc{font-size:12px;color:#a6bfc6;margin-bottom:10px}.room small{display:block;padding:5px 0;border-bottom:1px solid #294453}.lab40Controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:10px 0}.lab40Controls label{font-size:12px;flex:1;min-width:120px;color:#b5dce0}.lab40Controls input{width:100%;display:block;background:#0e2634;border:1px solid #587080;border-radius:8px;color:#fff;padding:9px;margin-top:4px}.lab40Controls button{white-space:normal}.lab40List{max-height:390px;overflow:auto;border:1px solid #305165;border-radius:9px;padding:5px}.lab40List .pipelineItem{align-items:center}.lab40List .pipelineItem span:first-child{flex:1;min-width:0}.lab40List .pipelineItem span:last-child{text-align:right;min-width:90px}.lab40Help{font-size:12px;color:#a8c6cd;padding:8px 0}@media(max-width:700px){.lab40List{max-height:330px}}.pipelineItem{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #304a5d;padding:5px 0;font-size:12px}.pipelineItem .approved{color:#54e6ad}.pipelineItem .rejected{color:#edb5ac}.roomStats{display:flex;gap:12px;flex-wrap:wrap;color:#b8e6ef;font-size:13px;margin:9px 0}.roomStats b{color:#81edb7}.pairRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}.pairRow input{flex:1;min-width:190px;background:#0c1d2a;color:#effff6;border:1px solid #4c7584;border-radius:9px;padding:10px}.bridgeMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}.bridgeMetrics span{padding:10px;border:1px solid #335368;background:#132c38;border-radius:8px}.bridgeMetrics b{display:block;font-size:19px;color:#89edc5}.brokerTrade{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #365061;padding:7px 0;font-size:12px}.bridgePanel{margin:12px 0;background:#102c3b;border:1px solid #3b8378;border-radius:11px;padding:13px}.bridgePanel[hidden]{display:none}#localStats[hidden]{display:none}#simHistory[hidden],#simHistoryTitle[hidden]{display:none}@media(max-width:620px){.bridgeMetrics{grid-template-columns:1fr 1fr}}
 #brokerLinkControl{display:none}
 #localStats,#simHistory,#simHistoryTitle{display:none}
 .controls>#start,.controls>#pause,.controls>#reset{display:none}
@@ -94,7 +94,14 @@
  <p id="hubFeedback" role="status" aria-live="polite" class="formHint">Aguardando login no servidor protegido.</p>
 </section>
 <div class="rooms">
-<section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório de Estratégias</h3><div class="roomdesc" id="labRoomDesc">Testes sintéticos de demonstração, não backtests reais. Aprovadas somente as estratégias com <strong>mais de 60%</strong> e pelo menos <strong>30 testes</strong>.</div><div class="roomStats"><span>Aprovadas: <b id="approvedCount">0</b></span><span>Em estudo: <b id="labCount">12</b></span></div><div id="labStrategies"></div></section>
+<section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper · 40 estratégias</h3>
+<div class="roomdesc" id="labRoomDesc">40 combinações experimentais de velas M1, SMA1/SMA34, WMA5 e filtros de tendência. São estudos, não ordens.</div>
+<div class="lab40Controls"><label>Ativo M1 para estudo<input id="lab40Asset" list="hubAssets" value="EURUSD" autocomplete="off" spellcheck="false"></label>
+<button id="lab40Run" class="primary" disabled>🧪 Testar 40 estratégias</button></div>
+<div id="lab40Status" class="lab40Help" aria-live="polite">Entre no escritório e conecte sua conta PRACTICE para consultar velas reais. Pare o robô antes de iniciar o teste.</div>
+<div class="roomStats"><span>Aprovadas em estudo: <b id="approvedCount">0</b></span><span>Estratégias: <b id="labCount">40</b></span></div>
+<div class="lab40Help">Critério: <strong>mais de 60%</strong> em pelo menos <strong>30 resultados fora da amostra</strong>. Divisão cronológica 70% treino / 30% validação. Resultado = direção da próxima vela fechada; não considera payout, execução ou corretagem. Amostras insuficientes ficam sem aprovação.</div>
+<div id="labStrategies" class="lab40List"></div></section>
 <section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais aprovados pelo laboratório. Envio e resultados apenas na <strong>simulação local</strong>; sem ordens na corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div id="operationsFeed"><small>Aguardando sinais. Clique em Iniciar demo.</small></div></section></div>
 <div class="panel" id="dataStatus" aria-live="polite"><strong>📡 Origem: DEMONSTRAÇÃO · Sem corretora conectada</strong><div id="lastOperation">Inicie a demonstração para ver os resultados das operações simuladas nas telas do escritório.</div></div>
 <div class="stats" id="localStats"><div class="stat"><span>Operações fictícias</span><b id="total">0</b></div><div class="stat"><span>Vitórias</span><b class="win" id="wins">0</b></div><div class="stat"><span>Derrotas</span><b class="loss" id="losses">0</b></div><div class="stat"><span>Saldo simulado</span><b id="balance">R$ 0,00</b></div><div class="stat"><span>Assertividade demo</span><b id="winRate">0,0%</b></div></div>
@@ -126,6 +133,7 @@ const demoLedger={total:0,wins:0,losses:0,balance:0,last:null,recent:[],lastByTr
 const studyWinSeeds=[22,17,19,15,23,16,18,21,17,20,14,24];
 const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],samples:30,source:'SINTÉTICO'}));
 let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
+let lab40Catalog=[],lab40Rows=[],lab40Latest=null,lab40Initialized=false,lab40Working=false;
 function actualStudies(){
  if(!bridgeLinked||!officeSnapshot)return [];
  return (officeSnapshot.comparison||[]).map(c=>({
@@ -133,13 +141,18 @@ function actualStudies(){
   samples:Number(c.wins||0)+Number(c.losses||0),source:'BULLEX_PRACTICE'
  }));
 }
-function displayedStudies(){return bridgeLinked?actualStudies():labStudies}
+function displayedStudies(){
+ if(officeIntegratedMode&&lab40Catalog.length){
+  return lab40Rows.length?lab40Rows:lab40Catalog.map(x=>({...x,wins:0,samples:0,rate:null,train_samples:0,train_rate:null,source:'AGUARDANDO'}));
+ }
+ return bridgeLinked?actualStudies():labStudies
+}
 let labStudies=makeStudy(),signalQueue=[],signalLog=[],nextSignalId=0,flowEpoch=0;
 const pendingSettlements=new Set();
 function studyRate(x){return x.samples?100*x.wins/x.samples:0}
 function approvedStudies(){return displayedStudies().filter(x=>x.samples>=30&&studyRate(x)>60)}
 function studyForName(name){return displayedStudies().find(x=>x.name===name)}
-function formatRate(x){return studyRate(x).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'}
+function formatRate(x){return x.samples?studyRate(x).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—'}
 function refreshPipeline(){
  const approved=approvedStudies();$('approvedCount').textContent=approved.length;
  $('labCount').textContent=displayedStudies().length;
@@ -149,7 +162,14 @@ function refreshPipeline(){
  for(const study of [...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a))){
   const el=document.createElement('div');el.className='pipelineItem';
   const a=document.createElement('span'),b=document.createElement('span');
-  a.textContent=study.name+' · '+study.samples+(bridgeLinked?' resultados confirmados':' testes fictícios');b.textContent=formatRate(study)+' '+(approved.includes(study)?'✓':'—');
+  if(officeIntegratedMode&&lab40Catalog.length){
+   a.textContent=study.name+' · treino '+(study.train_samples??0)+' / validação '+(study.samples??0);
+   b.textContent=formatRate(study)+' '+(approved.includes(study)?'✓ Estudo':'');
+   b.title=study.samples<30?'Sem amostra de validação suficiente':study.status||'';
+  }else{
+   a.textContent=study.name+' · '+study.samples+(bridgeLinked?' resultados confirmados':' testes fictícios');
+   b.textContent=formatRate(study)+' '+(approved.includes(study)?'✓':'—');
+  }
   b.className=approved.includes(study)?'approved':'rejected';el.append(a,b);labHost.append(el);
  }
  const feed=$('operationsFeed');feed.replaceChildren();
@@ -361,7 +381,7 @@ function drawRoomTV(c){
    g.textAlign='right';g.fillText(formatRate(x)+' / '+x.samples+' FINALIZADAS',w-27,y);g.textAlign='left';
   });
   g.fillStyle='#e0c89a';g.font='bold 16px system-ui';
-  g.fillText(live?'RESULTADOS PRACTICE / FILTRO NAO CONTROLA O BOT':'DADOS FICTICIOS / NAO SAO BACKTESTS REAIS',28,h-18);
+  g.fillText(lab40Rows.length?'VELAS M1 HISTORICAS / VALIDACAO FORA DA AMOSTRA':'40 ESTRATEGIAS XS / AGUARDANDO TESTES',28,h-18);
  }else{
   const management=live?(shot?.management||{}):{wins:demoLedger.wins,losses:demoLedger.losses,profit:demoLedger.balance};
   const trades=live?[...(shot?.trades||[])].reverse():signalLog;
@@ -474,7 +494,7 @@ function refreshInspector(){
  const boxes=lab?[
   ['Aprovadas (>60%; mín. 30)',approvedStudies().length],
   ['Estratégias observadas',studies.length],
-  ['Fonte',linked?'BOT PRACTICE':'SINTÉTICA'],
+  ['Fonte',lab40Rows.length?'VELAS HISTÓRICAS PRACTICE':'AGUARDANDO TESTES'],
   ['Automação pelo filtro','NÃO']
  ]:linked?[
   ['Ordens observadas',trades.length],
@@ -491,7 +511,7 @@ function refreshInspector(){
  if(!entries.length){const p=document.createElement('p');p.textContent='Ainda não há dados para esta tela.';area.append(p);}
  for(const x of entries.slice(0,12)){
   const e=document.createElement('div');e.className='miniOp';
-  e.textContent=lab?x.name+' · '+formatRate(x)+' · '+x.samples+(linked?' ordens finalizadas':' testes fictícios')+' · '+(approvedStudies().includes(x)?'APROVADA NO FILTRO':'EM ESTUDO'):
+  e.textContent=lab?x.name+' · '+formatRate(x)+' · '+x.samples+' validações / '+(x.train_samples||0)+' treinos · '+(approvedStudies().includes(x)?'APROVADA EM ESTUDO':x.samples>=30?'EM ESTUDO':'AMOSTRA INSUFICIENTE'):
   linked?String(x.time||'')+' · '+String(x.asset||'')+' · '+String(x.direction||'').toUpperCase()+' · '+String(x.status||'')+' · '+String(x.strategy||'')+' · '+(Number.isFinite(Number(x.profit))&&x.profit!==undefined?officeMoney(x.profit,shot?.currency||'USD'):'Pendente'):
   x.time+' · '+x.name+' · '+x.asset+' · '+(x.win?'WIN':'LOSS')+' · '+money(x.v);
   area.append(e);
@@ -613,7 +633,7 @@ function officeRefreshUI(){
  $('brokerMessage').textContent=officeIntegratedMode?'Controles integrados da conta PRACTICE no escritório.':'Visualização autenticada, somente leitura. Atualização ~5s. Comandos do bot permanecem no painel Bullex DEMO.';
  $('realBridgePanel').hidden=false;
  $('localStats').hidden=true;$('simHistory').hidden=true;$('simHistoryTitle').hidden=true;
- $('labRoomDesc').textContent='Resultados PRACTICE por estratégia (mínimo 30 operações finalizadas). O filtro visual acima de 60% não bloqueia ou envia ordens; a estratégia efetiva é escolhida nas Configurações.';
+ $('labRoomDesc').textContent='40 variações Xtreme Sniper M1 testadas em velas históricas PRACTICE, com validação cronológica. Os resultados não controlam nem ativam o motor de operações.';
  $('opsRoomDesc').textContent='Ordens e sinais da conta PRACTICE. Use os botões Iniciar, Parar e Configurações da Central de Controle acima.';
  const m=s.management||{},trades=[...(s.trades||[])].reverse();
  const metrics=[['Saldo PRACTICE',officeMoney(s.balance,s.currency||'USD')],['WIN / LOSS hoje',(m.wins||0)+' / '+(m.losses||0)],['Resultado hoje',officeMoney(m.profit||0,s.currency||'USD')],['Ordens registradas',trades.length],['Ativos analisados',Number(s.analyzed_count||0)],['Status',s.uncertain?'⚠️ INCERTO':s.running?'RODANDO':s.connected?'PARADO':'DESCONECTADO']];
