@@ -11,6 +11,7 @@ from clean_v1.exhaustion_guard import exhausted
 from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
 from clean_v1 import martingale as mg
+from clean_v1 import study_selector
 from engine import normalized
 
 def limit_reason(state):
@@ -33,6 +34,7 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
         state['research']=state['research'][-300:]
         state['research_summary']=summarize(state['research'])
         mg.after_result(state,pnl,asset,timeframe_minutes,was_recovery)
+        study_selector.trigger(state)  # refresh the auto-study list after each confirmed operation
         try:
             state['archive_last_saved']=archive.record(state,order,asset,direction,result,candle_features)
         except Exception:
@@ -56,11 +58,14 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
 def run(state, call):
     try:
         state['phase']='catalog';state['message']='Lendo ativos abertos da PRACTICE'
-        last_catalog=0;assets=[];rot=0;last_prepare=-1
+        last_catalog=0;assets=[];rot=0;last_prepare=-1;last_study_selection=0
         state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0,'lateral':0,'exhausted':0,'rsi':0}
         while not state['stop'].is_set():
             now=time.time();sec=now%60
             if not state['running']:break
+            if state.get('auto_study_enabled') and now-last_study_selection>120:
+                study_selector.trigger(state)
+                last_study_selection=now
             reason=limit_reason(state)
             if reason:
                 state['running']=False;state['stop_reason']=reason;state['message']=reason;state['phase']='limit_reached';break
@@ -122,7 +127,8 @@ def run(state, call):
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
                 if len(bars)<55 or bars[-1]['t']!=boundary-60:continue
-                enabled=frozenset(state.get('enabled_strategies',('sniper',)))
+                enabled=study_selector.effective(state)
+                if not enabled:continue  # never execute unvalidated study patterns
                 policy=state.get('signal_policy','any')
                 # A single deterministic classifier, shared with the read-only
                 # candle study: exactly the same definitions, no future bars.

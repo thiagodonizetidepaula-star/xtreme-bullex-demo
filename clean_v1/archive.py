@@ -2,7 +2,7 @@
 Uses the existing RLS-protected public.xtreme_clean_demo_trades table.
 Credentials are read only from Render environment variables, never sent to clients.
 """
-import os,json,urllib.request,urllib.error,datetime,hashlib,time,base64
+import os,json,urllib.request,urllib.error,datetime,hashlib,time,base64,re
 from urllib.parse import quote
 
 TABLE='xtreme_clean_demo_trades'
@@ -108,6 +108,20 @@ def history(account):
                                 'profit':amount,'order_id':str(r['broker_order_id'])[:100]})
     return {'days':sorted(days.values(),key=lambda x:x['date'],reverse=True),
             'totals':totals,'truncated':truncated}
+
+def clear_history(account):
+    """Owner-authorized server call only; delete stored orders for this account."""
+    if not configured():raise RuntimeError('Supabase indisponível')
+    if not isinstance(account,str) or not re.fullmatch(r'[0-9a-f]{64}',account):
+        raise ValueError('Identificador da conta inválido')
+    # Include a mandatory equality filter, never allow unfiltered deletion.
+    filt='?account_key=eq.'+quote(account,safe='')
+    _request('DELETE',filt)
+    # Re-read to ensure the database really removed this account's records.
+    remaining=_request('GET','?select=broker_order_id&account_key=eq.'+quote(account,safe='')+'&limit=1')
+    if remaining:
+        raise RuntimeError('O Supabase ainda apresenta operações desta conta. Nenhum sucesso confirmado.')
+    return True
 
 def daily(account):
     return history(account)['days']
