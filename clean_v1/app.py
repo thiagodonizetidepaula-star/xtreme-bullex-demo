@@ -578,6 +578,10 @@ def app(environ,start_response):
                     current['running']=False;current['stop'].set();current['phase']='stopped';current['message']='Parada solicitada. Ordem já enviada continuará em confirmação.'
                     return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
                 if current['running']:return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
+                # A stop may have arrived while the scanner was fetching data.
+                # Never replace its stop event before that loop fully exits.
+                if current.get('bot_thread') and current['bot_thread'].is_alive():
+                    return respond(start_response,'409 Conflict',{'error':'Aguardando o scanner anterior concluir a parada; tente iniciar novamente'})
                 if current['pending'] or current.get('uncertain'):return respond(start_response,'409 Conflict',{'error':'Há ordem anterior incerta; confira a Bullex'})
                 if current['orders']>=current['max_orders'] or current['profit']<=-current['stop_loss'] or current['profit']>=current['stop_win']:
                     return respond(start_response,'409 Conflict',{'error':'Limite ou stop da sessão atingido; conecte nova sessão PRACTICE para reiniciar o placar'})
@@ -591,7 +595,8 @@ def app(environ,start_response):
                             if current.get('study'):current['study'].offer(answer)
                         except Exception:pass
                     return answer
-            threading.Thread(target=run_bot,args=(current,ccall),daemon=True).start()
+            current['bot_thread']=threading.Thread(target=run_bot,args=(current,ccall),daemon=True)
+            current['bot_thread'].start()
             return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
         if path=='/api/prepare':
             if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor DEMO desconectado'})
