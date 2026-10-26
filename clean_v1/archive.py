@@ -8,15 +8,22 @@ from urllib.parse import quote
 TABLE='xtreme_clean_demo_trades'
 ZONE=datetime.timezone(datetime.timedelta(hours=-3))
 
+def _server_key():
+    # The modern sb_secret key is preferred. Legacy service_role JWTs still work.
+    return os.environ.get('SUPABASE_SECRET_KEY') or os.environ.get('SUPABASE_SERVICE_ROLE_KEY')
+
 def configured():
-    return bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_SERVICE_ROLE_KEY'))
+    return bool(os.environ.get('SUPABASE_URL') and _server_key())
 
 def _request(method,params='',payload=None,table=TABLE):
     if table not in (TABLE,'xtreme_trusted_phones'):raise ValueError('Tabela não permitida')
     url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/'+table+params
-    key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
+    key=_server_key()
+    if not key:raise RuntimeError('Chave privada Supabase ausente')
     data=json.dumps(payload,ensure_ascii=False).encode('utf-8') if payload is not None else None
-    headers={'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+    headers={'apikey':key,'Content-Type':'application/json'}
+    # Modern sb_secret is an API key, not a JWT: do not send as Bearer.
+    if not key.startswith('sb_secret_'):headers['Authorization']='Bearer '+key
     if method=='POST':headers['Prefer']='resolution=ignore-duplicates,return=minimal'
     if method=='PATCH':headers['Prefer']='return=minimal'
     req=urllib.request.Request(url,data=data,headers=headers,method=method)

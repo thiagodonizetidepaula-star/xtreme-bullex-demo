@@ -6,7 +6,7 @@ from pathlib import Path
 from socketserver import ThreadingMixIn
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from clean_v1.automation import run as run_bot
-from clean_v1.archive import account_id,configured,history
+from clean_v1.archive import account_id,configured,history,_request,_server_key
 from clean_v1.candle_study import CandleStudy
 from clean_v1.candle_patterns import ALL_STRATEGY_IDS
 from clean_v1 import trusted_mobile as trusted
@@ -715,5 +715,14 @@ if __name__=='__main__':
     # Render clean service uses this entry point without an external build command.
     subprocess.run([sys.executable,'-m','pip','install','-r',str(ROOT/'requirements.txt')],check=True,timeout=180)
     subprocess.run([sys.executable,str(ROOT/'bootstrap.py')],cwd=str(ROOT),check=True,timeout=90)
+    # Log only readiness/probe, NEVER a key or URL.
+    if not configured():
+        print('XTREME_SUPABASE: pending_private_configuration',flush=True)
+    else:
+        try:
+            _request('GET','?select=token_hash&limit=0',table='xtreme_trusted_phones')
+            print('XTREME_SUPABASE: private_table_access_ok',flush=True)
+        except Exception as exc:
+            print('XTREME_SUPABASE: private_table_probe_failed '+type(exc).__name__,flush=True)
     class ThreadServer(ThreadingMixIn, type(make_server('127.0.0.1',0,app))):daemon_threads=True
     make_server('0.0.0.0',int(os.environ.get('PORT','10000')),app,server_class=ThreadServer).serve_forever()

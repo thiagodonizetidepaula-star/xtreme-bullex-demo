@@ -10,19 +10,21 @@ from urllib.parse import quote
 from engine import normalized
 from clean_v1.m5_bars import normalized5
 from clean_v1.candle_patterns import patterns
+from clean_v1.archive import _server_key
 
 TABLE='xtreme_candle_study_events'
 PATTERN_VERSION='study_v1_closed_forward'
 MAX_LOCAL=4000
 
 def configured():
-    return bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_SERVICE_ROLE_KEY'))
+    return bool(os.environ.get('SUPABASE_URL') and _server_key())
 
 def _rest(method,query='',records=None):
     if not configured():raise RuntimeError('Supabase não configurado no servidor')
     url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/'+TABLE+query
-    key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
-    headers={'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'}
+    key=_server_key()
+    headers={'apikey':key,'Content-Type':'application/json'}
+    if not key.startswith('sb_secret_'):headers['Authorization']='Bearer '+key
     if method=='POST':headers['Prefer']='resolution=merge-duplicates,return=minimal'
     req=urllib.request.Request(url,method=method,headers=headers,
           data=json.dumps(records,ensure_ascii=False).encode('utf-8') if records is not None else None)
