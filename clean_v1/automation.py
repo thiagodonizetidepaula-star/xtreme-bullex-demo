@@ -12,6 +12,7 @@ from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
 from clean_v1 import martingale as mg
 from clean_v1 import study_selector
+from clean_v1.market_selection import classify,rotate
 from engine import normalized
 
 def limit_reason(state):
@@ -59,6 +60,7 @@ def run(state, call):
     try:
         state['phase']='catalog';state['message']='Lendo ativos abertos da PRACTICE'
         last_catalog=0;assets=[];rot=0;last_prepare=-1;last_study_selection=0
+        frozen_subset=[];frozen_minute=None
         state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0,'lateral':0,'exhausted':0,'rsi':0}
         while not state['stop'].is_set():
             now=time.time();sec=now%60
@@ -71,21 +73,30 @@ def run(state, call):
                 state['running']=False;state['stop_reason']=reason;state['message']=reason;state['phase']='limit_reached';break
             if now-last_catalog>90 and 7<sec<44:
                 try:
-                    market=call('read',{'op':'market','payout':80,'strategy':'sniper'},24)
+                    market=call('read',{'op':'market','payout':80,'strategy':'sniper','include_all_open':True},24)
                     state['read_failures']=0
                 except (OSError,RuntimeError,TimeoutError,ValueError) as err:
                     state['read_failures']=state.get('read_failures',0)+1
                     state['phase']='reconnecting'
+                    # A failed refresh must never keep a potentially stale OPEN list.
+                    assets=[];last_catalog=0;state['markets']=0;state['market_active_batch']=[]
                     state['message']='Leitura temporariamente indisponível; nova tentativa sem alterar as ordens'
                     state['stop'].wait(min(12,2*state['read_failures']))
                     continue
-                assets=sorted([x for x in market.get('assets',[]) if x.get('payout',0)>=80],key=lambda x:-x['payout'])
+                counts,assets=classify(market.get('assets',[]),state.get('market_mode','all'),80)
+                counts['checked_at']=int(market.get('checked_at') or now)
                 last_catalog=now
+                rot=rot%len(assets) if assets else 0
                 state['markets']=len(assets)
+                state['market_counts']=counts
                 state['phase']='scan'
-                state['message']=f'{len(assets)} ativos elegíveis. Preparando candles M1...'
+                state['message']=(f'{len(assets)} ativos binários elegíveis: '
+                                  f'{counts["eligible_regular"]} regulares / {counts["eligible_otc"]} OTC. '
+                                  'Preparando candles M1/M5...')
             if not assets:
-                state['phase']='catalog';state['message']='Aguardando catálogo de ativos binários abertos'
+                state['phase']='catalog'
+                state['ready']=0;state['market_active_batch']=[]
+                state['message']='Nenhum ativo aberto elegível no mercado escolhido (payout ≥80%). Reconsultando regularmente.'
                 state['stop'].wait(2);continue
             if 56<=sec<59 and last_prepare!=int(now//60):
                 try:
@@ -93,20 +104,30 @@ def run(state, call):
                     last_prepare=int(now//60)
                     state['message']='Saldo e payout validados; analisando sinais M1'
                 except Exception as ex:state['message']='Pré-validação: '+str(ex)[:100]
-            # Prioritize payout and rotate the rest without losing the watched group.
-            subset=assets[:12]+([assets[12+((rot+i)%(len(assets)-12))] for i in range(min(10,len(assets)-12))] if len(assets)>12 else [])
-            # Keep a fixed candidate batch across candle close, rather than
-            # rotating the batch during the 0-3 second execution window.
+            # Catalog covers ALL open assets; scan in rotating batches to avoid
+            # overwhelming broker streams. No permanently privileged top 12.
             minute=int(now//60)
             if sec>=52:
-                frozen_subset=subset;frozen_minute=minute+1
-            elif sec<=3.5 and locals().get('frozen_minute')==minute:
-                subset=frozen_subset
+                if frozen_minute!=minute+1:
+                    frozen_subset=rotate(assets,rot,22)
+                    frozen_minute=minute+1
+                subset=list(frozen_subset)
+            elif sec<=3.5 and frozen_minute==minute:
+                subset=list(frozen_subset)
             else:
-                rot+=10
+                subset=rotate(assets,rot,22)
+                rot=(rot+len(subset))%len(assets)
+            # An optional next-candle recovery can follow only an asset
+            # that is STILL open, above payout threshold and within the chosen mode.
             pending_watch=state.get('martingale_pending')
-            if pending_watch and pending_watch.get('mode')=='next_candle' and pending_watch['asset'] not in [x['asset'] for x in subset]:
-                subset=[{'asset':pending_watch['asset']}] + subset[:21]
+            eligible_names={x['asset'] for x in assets}
+            if pending_watch and pending_watch.get('mode')=='next_candle':
+                if pending_watch['asset'] not in eligible_names:
+                    mg.cancel(state,'Próxima vela cancelada: ativo fechado ou fora do mercado selecionado')
+                elif pending_watch['asset'] not in [x['asset'] for x in subset]:
+                    pinned=next(x for x in assets if x['asset']==pending_watch['asset'])
+                    subset=[pinned]+subset[:21]
+            state['market_active_batch']=[x['asset'] for x in subset]
             try:
                 snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True,'enable_m5':True},15)
                 state['read_failures']=0

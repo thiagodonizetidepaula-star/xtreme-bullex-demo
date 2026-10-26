@@ -86,6 +86,12 @@ def dispatch(c):
     demo()
     if op=='market':
         available=market(force=True)
+        if c.get('include_all_open') is True:
+            # Xtreme Tiger opt-in: list every OPEN regular and OTC turbo symbol,
+            # even if payout is too low. Eligibility is evaluated by the scanner;
+            # executor never relaxes its live open/payout safety check.
+            return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open']],
+                    'checked_at':int(time.time())}
         return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest') else v['payout']>max(80,c['payout']))]}
     if op=='snapshot':
         now=broker_now()
