@@ -1,0 +1,1319 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101c2a"><title>Xtreme Tiger | Escritório de Controle Bullex DEMO</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#e5f4f5;font:14px system-ui,sans-serif}header{padding:12px 16px;background:#152536;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}h1{font-size:18px;margin:0}small,.hint{color:#a6bfc6}button{border:1px solid #476270;background:#233d4b;color:#eefbfb;padding:10px 13px;border-radius:9px;cursor:pointer}button.primary{background:#19795f;border-color:#2ebc90}button:disabled{opacity:.5}main{max-width:1300px;margin:auto;padding:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.room{background:#132b39;border:1px solid #46657a;border-radius:13px;padding:14px;min-width:0}.room h3{margin:0 0 8px}.room .roomdesc{font-size:12px;color:#a6bfc6;margin-bottom:10px}.room small{display:block;padding:5px 0;border-bottom:1px solid #294453}.pipelineItem{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #304a5d;padding:5px 0;font-size:12px}.pipelineItem .approved{color:#54e6ad}.pipelineItem .rejected{color:#edb5ac}.roomStats{display:flex;gap:12px;flex-wrap:wrap;color:#b8e6ef;font-size:13px;margin:9px 0}.roomStats b{color:#81edb7}.pairRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}.pairRow input{flex:1;min-width:190px;background:#0c1d2a;color:#effff6;border:1px solid #4c7584;border-radius:9px;padding:10px}.bridgeMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}.bridgeMetrics span{padding:10px;border:1px solid #335368;background:#132c38;border-radius:8px}.bridgeMetrics b{display:block;font-size:19px;color:#89edc5}.brokerTrade{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #365061;padding:7px 0;font-size:12px}.bridgePanel{margin:12px 0;background:#102c3b;border:1px solid #3b8378;border-radius:11px;padding:13px}.bridgePanel[hidden]{display:none}#localStats[hidden]{display:none}#simHistory[hidden],#simHistoryTitle[hidden]{display:none}@media(max-width:620px){.bridgeMetrics{grid-template-columns:1fr 1fr}}
+#brokerLinkControl{display:none}
+#localStats,#simHistory,#simHistoryTitle{display:none}
+.controls>#start,.controls>#pause,.controls>#reset{display:none}
+.hubDock{background:#0c2331;border:1px solid #519c8e;border-radius:14px;padding:14px;margin:12px 0;box-shadow:0 8px 25px #0005}
+.hubDock h2{font-size:17px;margin:0 0 9px;color:#b5ffe0}
+.hubDock h3{margin:10px 0;font-size:15px}
+.hubDock label{display:block;color:#b2cad5;font-size:12px;margin-top:9px}
+.hubDock input,.hubDock select{display:block;width:100%;border:1px solid #426675;background:#102a39;border-radius:9px;padding:9px;color:#eaffff;font:inherit;margin-top:4px;min-height:40px}
+.hubDock input[type=checkbox]{display:inline;width:auto;min-height:0;margin:0 7px 0 0}
+.hubDock .rowButtons{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.hubDock button{font-weight:650}
+.hubDock .danger{background:#6f2b31;border-color:#bd5259}
+.hubDock .hubInfo{padding:11px 12px;border:1px solid #47677b;border-radius:9px;background:#112f40;margin:8px 0;line-height:1.45}
+.hubDock .hubMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+.hubDock .hubMetrics>div{background:#152d3a;border:1px solid #345464;border-radius:9px;padding:11px;font-size:12px}
+.hubDock .hubMetrics b{display:block;font-size:17px;color:#8aefc3;margin-top:5px}
+.hubDock .hubFormGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.hubDock fieldset{border:1px solid #34566c;border-radius:9px;margin:10px 0;padding:10px}
+.hubDock legend{padding:0 7px;color:#c1edd9;font-weight:600}
+.hubDock [hidden]{display:none!important}
+.hubDock .formHint{font-size:12px;color:#afc7cf}
+.hubDock .warning{color:#ffc8ae}
+@media(max-width:650px){.hubDock .hubFormGrid,.hubDock .hubMetrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.statusNote{background:#152938;border:1px solid #43616f;border-radius:9px;padding:12px;margin:10px 0;font-size:13px}#brokerDetails{margin-top:9px;line-height:1.6}#brokerDetails[hidden]{display:none}@media(max-width:700px){.rooms{grid-template-columns:1fr}}.cameraTools{width:100%;background:#152837;border:1px solid #344f60;border-radius:9px;padding:8px 11px}.cameraTools summary{cursor:pointer;font-weight:600;color:#b6dde3}.cameraTools .controls{padding-top:10px;margin:0}.stage{height:min(66vh,720px);min-height:390px;border:1px solid #405e70;position:relative;overflow:hidden;border-radius:15px;background:linear-gradient(#1b3344,#475f70)}#scene{width:100%;height:100%;display:block;touch-action:none}.board{position:absolute;top:10px;left:10px;background:#071b27e8;border:1px solid #60d4a6;border-radius:10px;padding:10px 12px;max-width:min(330px,75%);pointer-events:none}.screenInspector{display:none;position:absolute;z-index:15;top:56px;right:10px;width:min(390px,calc(100% - 20px));max-height:calc(100% - 68px);overflow:auto;background:#071c29f2;border:1px solid #70cdb0;border-radius:14px;box-shadow:0 12px 42px #000a;padding:13px 14px;backdrop-filter:blur(9px);pointer-events:auto}.screenInspector.open{display:block}.screenInspector h3{margin:0 0 7px;font-size:17px;color:#bdf6dc}.screenInspector .inspectorHeader{display:flex;gap:8px;align-items:center;justify-content:space-between}.screenInspector .inspectorHeadButtons{display:flex;gap:5px}.screenInspector button{padding:7px 9px}.screenInspector .summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:9px 0}.screenInspector .summary span{background:#18394a;padding:8px;border-radius:7px;font-size:12px}.screenInspector .summary b{font-size:15px;color:#a9f3c6}.screenInspector .miniOp{padding:6px;border-bottom:1px solid #2c5263;font-size:12px}.screenInspector .miniOp strong{font-weight:700}.confettiPiece{position:absolute;z-index:14;pointer-events:none;top:-20px;width:9px;height:14px;animation:fallConfetti var(--dur,2.5s) linear forwards;transform:rotate(0)}@keyframes fallConfetti{to{top:110%;transform:translateX(var(--dx,0px)) rotate(var(--turn,620deg));opacity:0}}.winToast{display:none;position:absolute;z-index:16;top:20%;left:50%;transform:translateX(-50%);width:max-content;max-width:90%;padding:13px 18px;border-radius:16px;background:#103828ee;border:2px solid #73f4a9;color:#dcffe9;font-weight:900;font-size:24px;pointer-events:none;text-align:center;box-shadow:0 8px 25px #000a}.winToast.active{display:block;animation:winPulse .25s ease-out}@keyframes winPulse{from{transform:translateX(-50%) scale(.75)}to{transform:translateX(-50%) scale(1)}}.board strong{display:block;color:#75f1b9;font-size:12px}.board span{display:block;font-size:13px}.info{position:absolute;right:10px;bottom:10px;background:#071b27db;border-radius:8px;padding:8px 10px;pointer-events:none;font-size:12px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.stat,.panel{background:#182d3d;border:1px solid #345364;padding:13px;border-radius:11px}.stat b{display:block;font-size:23px}.stat span{font-size:12px;color:#a6bfc6}.win{color:#5bdfaa}.loss{color:#ff8f93}.panel{margin:12px 0}section{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}td,th{text-align:left;border-bottom:1px solid #304859;padding:9px}th{color:#b3cbd4}.hint{font-size:12px}#fallback{display:none;position:absolute;inset:30% 8%;text-align:center} @media(max-width:620px){.stage{height:62vh;min-height:440px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.board{padding:8px}.board span{font-size:12px}}</style>
+<script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/"}}</script></head>
+<body><header><h1>🐯 XTREME TIGER <small>· Escritório 3D</small></h1><b class="win">● BULLEX PRACTICE</b></header><main>
+<div class="controls"><button id="start" class="primary">▶ Iniciar fluxo DEMO</button><button id="pause">⏸ Pausar</button><button id="reset">↺ Zerar</button><button id="camera">🎥 Vista geral</button><details class="cameraTools"><summary>🎥 Mais câmeras e desempenho</summary><div class="controls"><button id="camLeft">🏢 Sala esquerda</button><button id="camRight">📈 Sala direita</button><button id="camHall">🚶 Corredor</button><button id="camLounge">☕ Recepção</button><button id="quality">⚙️ Qualidade: Auto</button></div></details><button id="soundToggle" aria-pressed="false">🔇 Ativar sons</button><button id="phoneTest" title="Ouvir agora o telefone da recepção">☎️ Testar telefone</button><button id="avatarTest" class="primary">↩ Ver equipe original</button><small id="avatarStatus" aria-live="polite">🐯 Equipe Tiger · 6 homens e 6 mulheres · rodízio automático</small><small>Arraste para girar · toque numa TV/monitor para ampliar · no foco, arraste para centralizar</small></div>
+<div class="stage"><canvas id="scene"></canvas><div id="fallback">Não foi possível carregar o motor 3D. Verifique a conexão com a internet.</div><div class="board"><strong>🐯 XTREME TIGER · LOUSA DIGITAL</strong><span id="headline">Equipe analisando o mercado fictício…</span></div><div class="info">🏙️ 2 salas de luxo · Toque numa tela para visualizar</div><div id="inspector" class="screenInspector" role="region" aria-label="Resultados na tela"><div class="inspectorHeader"><h3 id="screenTitle">📊 Tela</h3><div class="inspectorHeadButtons"><button id="focusReset">🎯</button><button id="closeInspector" aria-label="Fechar inspeção">✕</button></div></div><small id="screenSource">SIMULAÇÃO · Sem corretora</small><div class="summary" id="screenSummary"></div><strong id="inspectorListTitle">Últimas operações nesta tela</strong><div id="screenOps"></div><small>Arraste sobre o cenário para deslocar o foco. Pinça para zoom. Volte ao escritório para girar 360°.</small></div><div id="winToast" class="winToast" aria-live="polite"></div></div>
+<div class="statusNote" id="brokerLinkControl"><strong>🔌 Bullex DEMO: <span id="brokerState" class="loss">NÃO VINCULADA</span></strong> · Visualização em tempo real do bot, sem enviar ordens pelo escritório.
+<div class="pairRow"><input id="officePairCode" type="text" placeholder="Cole o código gerado no bot Bullex" maxlength="256" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="bindOffice" class="primary">🔗 Vincular DEMO</button><button id="unbindOffice" hidden>Desvincular</button></div><small id="brokerMessage" aria-live="polite">Abra seu bot Bullex DEMO, entre com a chave do painel, toque em “Gerar código para o escritório” e cole aqui. O código é de uso único.</small><div style="margin-top:8px"><a href="https://xtreme-bullex-demo.onrender.com" target="_blank" rel="noopener noreferrer" style="color:#a1eed1">Abrir bot Bullex DEMO para gerar código</a></div>
+<button id="brokerInfo" aria-expanded="false">Como funciona a conexão segura</button><div id="brokerDetails" hidden>Encontrei seu painel existente no Render, <strong>xtreme-bullex-demo</strong>, com autenticação própria. Você pode abri-lo com segurança para trabalhar na conta de demonstração. <a href="https://xtreme-bullex-demo.onrender.com" target="_blank" rel="noopener noreferrer" style="color:#9ce6c5">Abrir meu bot Bullex DEMO</a>. <strong>Atenção:</strong> com o código temporário, o escritório recebe o estado e as operações da conta PRACTICE. A visualização é SOMENTE LEITURA: não envia ordens e não controla o motor do bot. Não digite sua senha neste site nem no chat.</div></div>
+<div class="bridgePanel" id="realBridgePanel" hidden>
+<strong>📡 Conta PRACTICE no servidor autenticado · SOMENTE LEITURA</strong>
+<div class="bridgeMetrics" id="realBridgeMetrics"><span>Saldo DEMO <b>—</b></span><span>Win / Loss confirmados <b>—</b></span><span>Resultado DEMO <b>—</b></span></div>
+<div id="realBridgeStatus">Aguardando dados do servidor.</div><strong style="display:block;margin-top:8px">Ordens da conta de demonstração observadas no bot</strong><div id="realTradeFeed"></div>
+</div>
+
+<section id="hubDock" class="hubDock">
+ <h2>🐯 Central de Controle · Bullex DEMO</h2>
+ <div class="hubInfo">Tudo aqui no escritório: entrar no painel, conectar sua conta PRACTICE, configurar, iniciar e parar o robô. <strong>Não existe modo de dinheiro real nesta central.</strong></div>
+ <form id="hubLoginForm">
+  <label>Chave de acesso ao painel (Render)<input id="hubAccessKey" type="password" autocomplete="current-password" required placeholder="Sua chave privada do aplicativo"></label>
+  <div class="rowButtons"><button type="submit" class="primary" id="hubLoginBtn">🔐 Entrar no escritório</button></div>
+ </form>
+ <div id="hubControlArea" hidden>
+  <div class="hubMetrics" id="hubStats"><div>Corretora<b>Bullex DEMO</b></div><div>Conexão<b>—</b></div><div>Saldo<b>—</b></div><div>Resultado<b>—</b></div><div>Ordens de hoje<b>—</b></div><div>Robô<b>—</b></div></div>
+  <div class="hubInfo" id="hubControlState" aria-live="polite">Lendo estado do servidor...</div>
+  <form id="hubConnectForm">
+   <h3>🔗 Conectar conta Bullex DEMO</h3>
+   <div class="hubFormGrid">
+    <label>Email da Bullex<input id="hubEmail" type="email" autocomplete="username" required></label>
+    <label>Senha da Bullex<input id="hubPassword" type="password" autocomplete="off" required></label>
+   </div>
+   <label><input id="hubReviewed" type="checkbox">Conferi manualmente operações pendentes na corretora antes de reconectar.</label>
+   <div class="rowButtons"><button type="submit" id="hubConnectBtn" class="primary">🔌 Conectar PRACTICE</button></div>
+   <p class="formHint">As credenciais vão por HTTPS diretamente ao servidor da sua conta. Não são gravadas neste navegador. Não envie sua senha no chat.</p>
+  </form>
+  <div class="rowButtons">
+   <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar robô na DEMO</button>
+   <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar robô</button>
+   <button type="button" id="hubRefreshBtn">↻ Atualizar status</button>
+   <button type="button" id="hubLogoutBtn">🔒 Sair</button>
+  </div>
+  <details id="hubConfigDetails">
+   <summary>⚙️ Configurações do robô e limites de risco</summary>
+   <form id="hubConfigForm">
+    <div class="hubFormGrid">
+     <label>Estratégia
+      <select id="hubStrategy">
+       <option value="rejection">Retorno e Rejeição</option><option value="repetition">Repetição M1</option>
+       <option value="resumption">Retomada de Tendência</option><option value="retest">Xtreme Reteste</option><option value="sniper">Xtreme Sniper</option>
+      </select>
+     </label>
+     <label>Ativo inicial<input id="hubAsset" list="hubAssets" value="EURUSD" required><datalist id="hubAssets"></datalist></label>
+     <label>Fonte de preço do Sniper<select id="hubSniperSource">
+      <option value="hl2">HL2</option><option value="close">Fechamento</option><option value="open">Abertura</option>
+      <option value="high">Máxima</option><option value="low">Mínima</option><option value="hlc3">HLC3</option><option value="ohlc4">OHLC4</option>
+     </select></label>
+     <label>Valor por operação<input id="hubStake" type="number" step="0.01" min="0.01" value="2" required></label>
+     <label>Payout mínimo (%)<input id="hubPayout" type="number" min="0" max="100" step="1" value="80" required></label>
+     <label>Limite de operações/dia<input id="hubLimit" type="number" min="1" max="100" value="5" step="1" required></label>
+     <label>Stop win diário<input id="hubStopWin" type="number" min="0.01" step="0.01" value="20" required></label>
+     <label>Stop loss diário<input id="hubStopLoss" type="number" min="0.01" step="0.01" value="10" required></label>
+    </div>
+    <label><input id="hubStopWinEnabled" type="checkbox" checked>Ativar stop win</label>
+    <label><input id="hubStopLossEnabled" type="checkbox" checked>Ativar stop loss</label>
+    <p class="formHint">O bot varre ativos elegíveis, inclusive OTC, segundo sua estratégia existente. O filtro visual de 60% no escritório ainda não decide ordens automaticamente.</p>
+    <div class="rowButtons"><button type="submit" id="hubSaveBtn">💾 Salvar configurações</button></div>
+   </form>
+  </details>
+ </div>
+ <p id="hubFeedback" role="status" aria-live="polite" class="formHint">Aguardando login no servidor protegido.</p>
+</section>
+<div class="rooms">
+<section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório de Estratégias</h3><div class="roomdesc" id="labRoomDesc">Testes sintéticos de demonstração, não backtests reais. Aprovadas somente as estratégias com <strong>mais de 60%</strong> e pelo menos <strong>30 testes</strong>.</div><div class="roomStats"><span>Aprovadas: <b id="approvedCount">0</b></span><span>Em estudo: <b id="labCount">12</b></span></div><div id="labStrategies"></div></section>
+<section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais aprovados pelo laboratório. Envio e resultados apenas na <strong>simulação local</strong>; sem ordens na corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div id="operationsFeed"><small>Aguardando sinais. Clique em Iniciar demo.</small></div></section></div>
+<div class="panel" id="dataStatus" aria-live="polite"><strong>📡 Origem: DEMONSTRAÇÃO · Sem corretora conectada</strong><div id="lastOperation">Inicie a demonstração para ver os resultados das operações simuladas nas telas do escritório.</div></div>
+<div class="stats" id="localStats"><div class="stat"><span>Operações fictícias</span><b id="total">0</b></div><div class="stat"><span>Vitórias</span><b class="win" id="wins">0</b></div><div class="stat"><span>Derrotas</span><b class="loss" id="losses">0</b></div><div class="stat"><span>Saldo simulado</span><b id="balance">R$ 0,00</b></div><div class="stat"><span>Assertividade demo</span><b id="winRate">0,0%</b></div></div>
+<div class="panel" id="detail">👥 Selecione um dos 12 traders para visualizar sua estratégia.</div>
+<h3 id="simHistoryTitle">Histórico das operações simuladas localmente</h3><section id="simHistory"><table><thead><tr><th>Trader</th><th>Ativo</th><th>Estratégia</th><th>Resultado</th><th>Valor</th></tr></thead><tbody id="history"></tbody></table></section>
+<p class="hint">Esta versão usa geometria 3D original, produzida por código. A equipe Tiger tem 6 homens e 6 mulheres diferentes, com ternos e emblema original de tigre. Nove trabalham sentados, um descansa no sofá, outro toma café e um supervisiona. As pausas se alternam gradualmente a cada 80 segundos, com estados de trabalho, caminhada, descanso, supervisão e visitas ao banheiro com porta. Os lugares do sofá e do café são reservados até ficarem livres. O supervisor visita as mesas e quem termina a pausa retorna à própria estação. São avatares 3D estilizados originais, não modelos The Sims nem GLB importados. Os pacotes gratuitos de móveis Kenney/reodesuxz e animações Mixamo ainda não foram incorporados. Os gráficos de candles são ilustrativos. As telas mostram os resultados efetivamente registrados pela simulação, mas não são ordens reais, cotações reais ou saldo de corretora. Para mostrar resultados reais, é necessária uma integração autenticada com a corretora. Personagens estilizados fazem movimentos simples, não são modelos do The Sims.</p></main>
+<script type="module">
+import * as THREE from 'three';import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const $=id=>document.getElementById(id), canvas=$('scene'),scene=new THREE.Scene();scene.background=new THREE.Color('#314858');scene.fog=new THREE.Fog('#314858',24,48);
+const camera=new THREE.PerspectiveCamera(48,1,.1,100);camera.position.set(0,12.6,22);
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.1,1.4);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.05;controls.minDistance=7;controls.maxDistance=34;controls.enablePan=false;controls.update();
+scene.add(new THREE.HemisphereLight(0xddeeff,0x526474,1.65));const sun=new THREE.DirectionalLight(0xffefdc,2.8);sun.position.set(13,13,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-20;sun.shadow.camera.right=20;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-18;sun.shadow.bias=-0.0004;sun.shadow.normalBias=.018;scene.add(sun);
+const mat=(color,metalness=0)=>new THREE.MeshStandardMaterial({color,metalness,roughness:.65});const wood=mat('#927052'),steel=mat('#3d5567',.4),screen=mat('#0f2635',.1),green=mat('#3ce6ac'),wall=mat('#617d88'),tile=mat('#85969a'),chair=mat('#243b4b');
+function box(w,h,d,m,x,y,z,parent=scene){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh}
+function ball(r,m,x,y,z,parent=scene){const mesh=new THREE.Mesh(new THREE.SphereGeometry(r,12,10),m);mesh.position.set(x,y,z);mesh.castShadow=true;parent.add(mesh);return mesh}
+box(16,.3,16,tile,0,-.17,1.9);box(16,5,.18,wall,0,2.35,-6);
+for(let x=-7.6;x<8;x+=1.4)for(let z=-5.8;z<9.8;z+=1.4)box(1.36,.018,1.36,mat((Math.round(x+z)%2)?'#819397':'#8d9fa2'),x,.01,z);
+const brandCanvas=document.createElement('canvas');brandCanvas.width=1024;brandCanvas.height=256;const bc=brandCanvas.getContext('2d');bc.fillStyle='#071b2d';bc.fillRect(0,0,1024,256);bc.fillStyle='#f4b453';bc.font='bold 76px system-ui';bc.textAlign='center';bc.fillText('XTREME TIGER',512,125);bc.fillStyle='#6ae7b0';bc.font='bold 28px system-ui';bc.fillText('TRADER OFFICE 3D',512,186);const bt=new THREE.CanvasTexture(brandCanvas);bt.colorSpace=THREE.SRGBColorSpace;const bm=new THREE.Mesh(new THREE.PlaneGeometry(4.4,1.1),new THREE.MeshBasicMaterial({map:bt,side:THREE.DoubleSide}));bm.position.set(0,4.1,-5.71);bm.scale.set(.9,.87,1);scene.add(bm);
+const coffee= new THREE.Group();coffee.position.set(5.1,0,6.9);scene.add(coffee);box(2.1,.17,1.3,wood,0,1.02,0,coffee);box(.16,1,.16,steel,-.8,.5,-.4,coffee);box(.16,1,.16,steel,.8,.5,.4,coffee);box(.8,.9,.55,screen,-.45,1.53,0,coffee);box(.42,.28,.48,mat('#ced9d9'),.55,1.28,0,coffee);
+const names=['Alex','Bia','Caio','Dani','Eva','Fred','Gabi','Hugo','Lia','Leo','Maya','Rafa'],strategies=['Tendência','Bollinger','RSI','Médias móveis','Suporte','MACD','Price Action','Sniper','EMA 200','Volume','Breakout','Confluência'],colors=['#ed9478','#88adf0','#f0ce6d','#be9bf2','#f48eae','#8cddb9','#e3a46e','#78bad9','#a5ccea','#d38ea4','#77a9a3','#cea272'];
+const people=[],clickTargets=[],screenTargets=[],charts=[];
+const demoLedger={total:0,wins:0,losses:0,balance:0,last:null,recent:[],lastByTrader:Array(12).fill(null)};
+// Synthetic studies are illustrative only, NOT validated historical market testing.
+const studyWinSeeds=[22,17,19,15,23,16,18,21,17,20,14,24];
+const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],samples:30,source:'SINTÉTICO'}));
+let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
+function actualStudies(){
+ if(!bridgeLinked||!officeSnapshot)return [];
+ return (officeSnapshot.comparison||[]).map(c=>({
+  name:String(c.strategy||'Estratégia'),wins:Number(c.wins||0),
+  samples:Number(c.wins||0)+Number(c.losses||0),source:'BULLEX_PRACTICE'
+ }));
+}
+function displayedStudies(){return bridgeLinked?actualStudies():labStudies}
+let labStudies=makeStudy(),signalQueue=[],signalLog=[],nextSignalId=0,flowEpoch=0;
+const pendingSettlements=new Set();
+function studyRate(x){return x.samples?100*x.wins/x.samples:0}
+function approvedStudies(){return displayedStudies().filter(x=>x.samples>=30&&studyRate(x)>60)}
+function studyForName(name){return displayedStudies().find(x=>x.name===name)}
+function formatRate(x){return studyRate(x).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'}
+function refreshPipeline(){
+ const approved=approvedStudies();$('approvedCount').textContent=approved.length;
+ $('labCount').textContent=displayedStudies().length;
+ $('signalCount').textContent=bridgeLinked?(officeSnapshot?.trades?.length||0):signalLog.length;
+ $('pendingCount').textContent=bridgeLinked?(officeSnapshot?.trades||[]).filter(x=>['ENVIANDO','ABERTA','INCERTA'].includes(x.status)).length:signalQueue.filter(x=>x.status==='AGUARDANDO').length;
+ const labHost=$('labStrategies');labHost.replaceChildren();
+ for(const study of [...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a))){
+  const el=document.createElement('div');el.className='pipelineItem';
+  const a=document.createElement('span'),b=document.createElement('span');
+  a.textContent=study.name+' · '+study.samples+(bridgeLinked?' resultados confirmados':' testes fictícios');b.textContent=formatRate(study)+' '+(approved.includes(study)?'✓':'—');
+  b.className=approved.includes(study)?'approved':'rejected';el.append(a,b);labHost.append(el);
+ }
+ const feed=$('operationsFeed');feed.replaceChildren();
+ const displayed=bridgeLinked?[...(officeSnapshot?.trades||[])].reverse().slice(0,7):signalLog.slice(0,7);
+ $('signalLabel').firstChild.textContent=bridgeLinked?'Ordens observadas: ':'Sinais aprovados: ';
+ if(!displayed.length){const el=document.createElement('small');el.textContent=bridgeLinked?'Sem ordens registradas no bot DEMO':'Aguardando sinais aprovados';feed.append(el);}
+ for(const signal of displayed){
+  const el=document.createElement('div');el.className='pipelineItem';const a=document.createElement('span'),b=document.createElement('span');
+  a.textContent='#'+String(signal.id??'—')+' '+signal.asset+' '+String(signal.direction||'').toUpperCase()+' · '+signal.strategy;
+  b.textContent=signal.status==='AGUARDANDO'?'⏳ DEMO':signal.status==='WIN'?'✅ WIN':signal.status==='LOSS'?'❌ LOSS':signal.status==='ABERTA'?'⏳ ABERTA':signal.status==='ENVIANDO'?'⏳ ENVIANDO':signal.status==='INCERTA'?'⚠️ INCERTA':'⏸ '+signal.status;
+  b.className=signal.status==='WIN'?'approved':signal.status==='LOSS'?'rejected':'';
+  el.append(a,b);feed.append(el);
+ }
+ charts.filter(c=>c.big&&c.roomView).forEach(drawBigChart);
+ if(typeof refreshInspector==='function')refreshInspector();
+}
+const positions=[[-6.55,-3.5],[-4.5,-3.5],[-2.55,-3.5],[2.55,-3.5],[4.5,-3.5],[6.55,-3.5],[-6.55,.6],[-4.5,.6],[-2.55,.6],[2.55,.6],[4.5,.6],[6.55,.6]];
+positions.forEach(([x,z],i)=>{const work=new THREE.Group();work.position.set(x,0,z);scene.add(work);box(1.12,.16,1.25,wood,0,1.05,-.2,work);for(let dx of [-.46,.46])for(let dz of [-.65,.25])box(.1,1,.1,steel,dx,.5,dz,work);box(.92,.68,.08,screen,0,1.56,-.61,work);const cv=document.createElement('canvas');cv.width=192;cv.height=112;const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);const plane=new THREE.Mesh(new THREE.PlaneGeometry(.83,.5),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));plane.position.set(0,1.56,-.55);work.add(plane);plane.userData.screen={kind:'desk',index:i};screenTargets.push(plane);charts.push({ctx,tex,seed:i,prices:Array.from({length:18},(_,k)=>50+k*.5+Math.sin(k+i)*8)});box(.42,.05,.18,steel,0,1.12,-.37,work);box(.8,.1,.15,steel,0,1.11,.25,work);
+box(.85,.12,.7,chair,0,.62,1.03,work);box(.85,.9,.14,chair,0,1.05,1.36,work);box(.15,.6,.15,steel,0,.3,1,work);
+const person=new THREE.Group();person.position.set(x,0,z+1);person.rotation.y=Math.PI;scene.add(person);const shirt=mat(colors[i]),skin=mat(['#dfb48b','#a87c5d','#f0caa8','#9e674a'][i%4]),hair=mat(['#25222a','#603b27','#d8b065','#33232a'][i%4]);const head=new THREE.Group();head.position.y=1.49;person.add(head);ball(.24,skin,0,0,0,head);ball(.23,hair,0,.13,-.05,head);for(const side of [-1,1]){ball(.033,mat('#172735'),side*.085,.025,.216,head);ball(.013,mat('#ffffff'),side*.08,.03,.239,head)}box(.11,.018,.012,mat('#874653'),0,-.103,.23,head);box(.52,.61,.32,shirt,0,1.02,0,person);const arms=[];for(const side of [-1,1]){const joint=new THREE.Group();joint.position.set(side*.35,1.22,.18);person.add(joint);box(.18,.44,.18,shirt,0,-.25,.08,joint);ball(.075,skin,0,-.48,.20,joint);joint.rotation.x=-1.2;joint.rotation.z=side*.09;arms.push(joint)}const legs=[];for(const side of [-1,1])legs.push(box(.22,.49,.22,chair,side*.15,.52,0,person));// Distinct stylized game avatars: haircuts, eyes, brows, jackets and footwear.
+const styles=['short','bob','quiff','long','bun','curly','side','ponytail'];const style=styles[i],dark=mat('#15212d'),white=mat('#f5ffff'),lip=mat('#96535c'),outfit=mat(['#1e344d','#4e355b','#80533a','#25586b','#563e68','#2f5760','#744753','#2f4535'][i]);
+for(const side of [-1,1]){ball(.048,skin,side*.235,-.035,-.01,head);const eyeWhite=ball(.052,white,side*.085,.015,.214,head);eyeWhite.scale.set(.9,.8,.34);const iris=ball(.028,mat(['#254d60','#493021','#406a5b'][i%3]),side*.085,.015,.246,head);iris.scale.z=.6;box(.085,.018,.016,hair,side*.085,.093,.231,head);box(.16,.09,.24,outfit,side*.37,-.31,-.075,head).visible=false}
+const nose=ball(.037,skin,0,-.065,.244,head);nose.scale.set(.65,.9,1);const smile=ball(.07,lip,0,-.135,.216,head);smile.scale.set(1,.12,.32);
+const hairShape=(w,h,d,x,y,z)=>{const m=ball(.2,hair,x,y,z,head);m.scale.set(w/.4,h/.4,d/.4);return m};
+if(style==='bob'||style==='long'){hairShape(.56,.30,.53,0,.20,-.045);for(const side of [-1,1])hairShape(.15,style==='long'?.64:.39,.23,side*.22,-.11,-.035)}
+else if(style==='quiff'){hairShape(.52,.22,.42,0,.23,-.07);hairShape(.29,.18,.28,-.08,.34,.07)}
+else if(style==='bun'){hairShape(.49,.24,.48,0,.22,-.075);hairShape(.24,.24,.24,0,.39,-.23)}
+else if(style==='curly'){for(let h=0;h<7;h++)hairShape(.19,.18,.2,Math.cos(h*6.283/7)*.18,.22+Math.sin(h)*.07,Math.sin(h*6.283/7)*.13)}
+else if(style==='ponytail'){hairShape(.51,.2,.49,0,.22,-.075);hairShape(.19,.42,.21,0,-.14,-.27)}
+else{hairShape(.5,.18,.44,0,.23,-.09);if(style==='side')hairShape(.26,.14,.22,-.12,.29,.09)}
+// Blazer, colored lapels, shirt collar and shoes
+box(.48,.15,.36,outfit,0,1.24,-.015,person);box(.18,.38,.035,outfit,-.145,1.04,.183,person);box(.18,.38,.035,outfit,.145,1.04,.183,person);box(.10,.29,.032,white,0,1.05,.201,person);
+for(const side of [-1,1]){box(.23,.11,.36,dark,side*.15,.285,.125,person)}
+if(i%3===1){const skirt=new THREE.Mesh(new THREE.CylinderGeometry(.29,.36,.3,10),outfit);skirt.position.set(0,.68,0);person.add(skirt)}
+// ID card
+box(.13,.19,.02,white,.19,1.08,.187,person);
+person.traverse(obj=>{if(obj.isMesh){obj.userData.index=i;clickTargets.push(obj)}});people.push({group:person,head,arms,legs,x,z,phase:i*.7,walk:false,celebrate:0,win:true,blink:i*.48,smile});});
+function updateCharts(){charts.forEach(ch=>{if(ch.big)return;let p=ch.prices;p.push(Math.max(15,Math.min(95,p[p.length-1]+(Math.random()-.5)*12)));p.shift();const c=ch.ctx;c.fillStyle='#081a27';c.fillRect(0,0,192,112);c.strokeStyle='#2b4654';for(let y=12;y<112;y+=22){c.beginPath();c.moveTo(0,y);c.lineTo(192,y);c.stroke()}for(let k=1;k<p.length;k++){const x=k*10,up=p[k]>=p[k-1],a=104-p[k],b=104-p[k-1];c.strokeStyle=up?'#42e3aa':'#f16d85';c.fillStyle=c.strokeStyle;c.beginPath();c.moveTo(x,Math.min(a,b)-5);c.lineTo(x,Math.max(a,b)+5);c.stroke();c.fillRect(x-3,Math.min(a,b),6,Math.max(2,Math.abs(a-b)))}c.fillStyle='#bfe3ec';c.font='10px monospace';const labMonitor=[0,1,2,6,7,8].includes(ch.seed),observed=displayedStudies(),study=labMonitor?(bridgeLinked?observed[ch.seed%Math.max(1,observed.length)]:studyForName(strategies[ch.seed])):null;
+ c.fillText(labMonitor?'LAB '+(study?Math.round(studyRate(study))+'%':'—'):bridgeLinked?'OPS · PRACTICE':'OPS · DEMO',5,10);const last=demoLedger.lastByTrader[ch.seed];if(last&&!labMonitor){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=last.win?'#56efb7':'#ff8797';c.font='bold 11px sans-serif';c.fillText((last.win?'WIN ':'LOSS ')+(last.v>=0?'+':'')+'R$ '+last.v.toFixed(2),5,104)}
+ if(labMonitor&&study){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=studyRate(study)>60?'#56efb7':'#ff8797';c.font='bold 10px sans-serif';c.fillText(study.name+' · '+formatRate(study),5,104)}ch.tex.needsUpdate=true})}updateCharts();setInterval(()=>{if(!document.hidden)updateCharts()},2000);
+// Luxury high-rise suite: central corridor, distinct left/right offices and sunlit exterior windows.
+const glass=new THREE.MeshPhysicalMaterial({color:0xc8f3ff,transparent:true,opacity:.115,roughness:.13,metalness:0,depthWrite:false,side:THREE.DoubleSide}),trim=mat('#263d4b',.4);
+const brass=new THREE.MeshStandardMaterial({color:'#b89656',metalness:.82,roughness:.33}),
+marble=new THREE.MeshStandardMaterial({color:'#d5d8d5',metalness:0,roughness:.27}),
+walnut=new THREE.MeshStandardMaterial({color:'#5d4338',metalness:0,roughness:.39}),
+navy=mat('#273c55'),cream=mat('#e9e2d4'),stone=mat('#a9a9a3');
+function glassWall(x,y,z,w,h,d){box(w,h,d,glass,x,y,z);box(w,.075,d+.065,trim,x,y+h/2,z);box(w,.075,d+.065,trim,x,y-h/2,z)}
+// A 2.3m central passage running from the entrance/reception to the back wall.
+box(2.22,.055,15.5,walnut,0,.059,1.8);
+for(let z=-5.2;z<9.2;z+=1.2){box(2.18,.012,.026,brass,0,.091,z);}
+for(const side of [-1,1]){
+ const xx=side*1.17;
+ // Each room is enclosed by a glazed partition with its own wide doorway.
+ glassWall(xx,2.35,-3.05,.055,4.4,5.9);
+ glassWall(xx,2.35,3.65,.055,4.4,2.1);
+ box(.11,4.7,.11,brass,xx,2.35,-.12);
+ box(.11,4.7,.11,brass,xx,2.35,2.6);
+ box(.12,.16,.13,brass,xx-side*.13,1.33,1.8);
+ // Open doorway from the central corridor into each room, with visible door leaf.
+ // Keep the doorway open: no floating glass door leaf blocking the staff route.
+ box(.065,2.5,.065,brass,xx,1.25,2.55);
+ // Distinct luxury finishes: warm walnut lounge on left, marble/navy office on right.
+ const center=side*4.55;
+ box(6.7,.035,10.45,side<0?walnut:marble,center,.042,-.45);
+ for(let z=-5;z<4.3;z+=2.4){
+  box(6.45,.008,.022,side<0?brass:stone,center,.066,z);
+ }
+ box(5.1,.018,2.05,side<0?mat('#73534c'):navy,center,.073,-.85);
+ for(const zz of [-5.45,4.3]){
+  box(6.4,.14,.10,brass,center,4.46,zz);
+ }
+ // Modern pendant lights with warm glow, positioned above each office.
+ for(const zz of [-2.5,1.8]){
+  box(.025,.8,.025,brass,center,4.30,zz);
+  box(1.8,.085,.40,side<0?brass:cream,center,3.87,zz);
+  const lamp=new THREE.PointLight(side<0?0xffd6a2:0xe7efff,.45,5.5);
+  lamp.position.set(center,3.7,zz);scene.add(lamp);
+ }
+ // Small executive shelving and art on rear wall, away from the trading TVs.
+ box(.72,1.15,.24,side<0?walnut:navy,side*7.30,1.30,-5.38);
+ box(.7,.07,.28,brass,side*7.30,1.76,-5.16);
+ box(.7,.07,.28,brass,side*7.30,1.19,-5.16);
+}
+// Front partitions separate the office rooms from the shared reception.
+for(const side of [-1,1]){
+ const center=side*4.6;
+ glassWall(center,2.2,4.72,6.65,4.2,.055);
+ for(const x of [center-2.2,center,center+2.2])box(.07,4.25,.11,brass,x,2.15,4.72);
+}
+// Panoramic side windows on both exterior facades, divided into floor-to-ceiling panels.
+for(const side of [-1,1]){
+ const x=side*7.97;
+ for(let z=-4.5;z<=3.8;z+=2.25){
+  glassWall(x,2.28,z,.07,4.05,2.19);
+  box(.11,4.55,.14,brass,x,2.32,z-1.12);
+  box(.15,.08,2.22,brass,x,2.78,z);
+  box(.28,.24,2.22,stone,x,.22,z);
+ }
+ box(.12,4.5,.15,brass,x,2.3,4.92);
+}
+// Exterior skyline beyond the windows: original procedural city buildings.
+const skylineMat=['#728d9f','#94a9b3','#627d90','#849aa5','#a2b4bd','#647f8b'];
+for(const side of [-1,1]){
+ for(let k=0;k<15;k++){
+  const z=-7+k*1.3,far=side*(14.3+(k%3)*1.6),h=2.2+((k*7)%8)*.58;
+  const tower=box(1.25+(k%3)*.35,h,1.12,mat(skylineMat[k%6]),far,h/2-.6,z);
+  tower.castShadow=false;
+  const face=far-side*(.66+(k%3)*.17);
+  for(let yy=.35;yy<h-1.1;yy+=.47){
+   const win=box(.024,.15,.22,mat(k%3===0?'#f3d6a0':'#b8dbe2'),face,yy,z-.30);
+   win.castShadow=false;
+  }
+ }
+}
+// Outside both panoramic facades: urban streets, sidewalks, planting and animated cars.
+const exteriorTraffic=[];
+const roadSurface=mat('#313b45'),pavement=mat('#c5b9a6'),roadStripe=mat('#efe3bd'),treeTrunk=mat('#705742'),treeLeaf=mat('#3c8060');
+for(const side of [-1,1]){
+ const roadX=side*10.25;
+ const road=box(2.5,.075,25,roadSurface,roadX,-.10,1.0);road.castShadow=false;
+ const sidewalk=box(1.45,.15,25,pavement,side*12.65,-.055,1.0);sidewalk.castShadow=false;
+ for(let z=-9.2;z<11.2;z+=1.95){
+  const divider=box(.075,.012,.90,roadStripe,roadX,-.051,z);divider.castShadow=false;
+ }
+ for(let z=-8.0;z<11;z+=3.05){
+  box(.15,.82,.15,treeTrunk,side*12.55,.46,z);
+  const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(.68,0),treeLeaf);
+  crown.position.set(side*12.55,1.36,z);crown.castShadow=false;scene.add(crown);
+  const crownTop=new THREE.Mesh(new THREE.IcosahedronGeometry(.47,0),mat('#569b70'));
+  crownTop.position.set(side*12.58,1.86,z+.17);crownTop.castShadow=false;scene.add(crownTop);
+ }
+ for(let j=0;j<4;j++){
+  const car=new THREE.Group(),bodyColor=mat(['#c74e45','#e2dbd1','#375f90','#b6a2cc'][j]);
+  car.position.set(roadX+side*(j%2===0?-.50:.48),.12,-8+j*5.3);scene.add(car);
+  const chassis=box(.72,.24,1.22,bodyColor,0,.13,0,car);
+  const cabin=box(.62,.28,.67,mat('#537689'),0,.37,-.06,car);
+  const windshield=box(.56,.013,.25,mat('#a5bfc5'),0,.515,-.22,car);
+  for(const dx of [-.37,.37])for(const dz of [-.39,.40]){
+   const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,.09,10),mat('#20282f'));
+   wheel.rotation.z=Math.PI/2;wheel.position.set(dx,.035,dz);wheel.castShadow=false;car.add(wheel);
+  }
+  chassis.castShadow=false;cabin.castShadow=false;windshield.castShadow=false;
+  exteriorTraffic.push({group:car,initial:car.position.z,speed:(j%2===0?1:-1)*(1.2+j*.24)});
+ }
+}
+// Sunlight entering from the right panoramic windows, with translucent light pools.
+const sunPatch=new THREE.MeshBasicMaterial({color:0xffe3a4,transparent:true,opacity:.15,depthWrite:false,side:THREE.DoubleSide});
+for(let k=0;k<5;k++){
+ const patch=new THREE.Mesh(new THREE.PlaneGeometry(1.15,2.15),sunPatch);
+ patch.rotation.x=-Math.PI/2;patch.rotation.z=-.45;patch.position.set(5.7-k*.68,.081,-4.25+k*1.65);scene.add(patch);
+}
+// Single shadow-casting sun; avoid a second directional light on Android.
+// Hallway accents, room numbers, elevator-like entry and floor runner.
+box(2.16,.03,2.0,navy,0,.068,7.8);
+for(const side of [-1,1]){box(.13,4.5,.14,brass,side*1.17,2.25,4.72);box(.30,.15,.14,brass,side*1.18,2.8,2.65);}
+for(const z of [-3.8,0,4.0,7.6]){box(.58,.075,.48,cream,0,4.61,z);const light=new THREE.PointLight(0xffe6c0,.4,3.2);light.position.set(0,4.4,z);scene.add(light)}
+const labelRoom=(label,x)=>{
+ const cv=document.createElement('canvas');cv.width=512;cv.height=128;
+ const g=cv.getContext('2d');g.fillStyle='#13283a';g.fillRect(0,0,512,128);
+ g.strokeStyle='#e6bd72';g.lineWidth=9;g.strokeRect(6,6,500,116);
+ g.fillStyle='#f3e6c9';g.font='bold 32px sans-serif';g.textAlign='center';g.fillText(label,256,77);
+ const tx=new THREE.CanvasTexture(cv);tx.colorSpace=THREE.SRGBColorSpace;
+ const sign=new THREE.Mesh(new THREE.PlaneGeometry(2.45,.62),new THREE.MeshBasicMaterial({map:tx,side:THREE.DoubleSide}));
+ sign.position.set(x,3.65,4.80);scene.add(sign);
+};
+// Removed hanging room signs that obstructed the corridor and screen views.
+
+function drawBigChart(c){
+  if(c.roomView){drawRoomTV(c);return;}
+  const g=c.ctx,w=c.cv.width,h=c.cv.height,p=c.prices,top=65,bottom=h-119,left=48,right=w-74;
+  g.fillStyle='#06141e';g.fillRect(0,0,w,h);g.lineWidth=1;g.strokeStyle='#1b3947';
+  const lo=Math.min(...p)-6,hi=Math.max(...p)+6,y=v=>bottom-(v-lo)/(hi-lo)*(bottom-top);
+  for(let t=0;t<=6;t++){let yy=top+t*(bottom-top)/6;g.beginPath();g.moveTo(left,yy);g.lineTo(w-14,yy);g.stroke();g.fillStyle='#8daab2';g.font='18px monospace';g.fillText((hi-(hi-lo)*t/6).toFixed(2),w-68,yy-4)}
+  for(let t=0;t<10;t++){let xx=left+t*(right-left)/9;g.beginPath();g.moveTo(xx,top);g.lineTo(xx,bottom);g.stroke()}
+  g.fillStyle='#eaf7f1';g.font='bold 28px system-ui';g.fillText(c.pair+'  ·  M1',left,35);g.fillStyle='#50dca9';g.font='bold 18px system-ui';g.fillText('DEMO · SEM CORRETORA',w-300,35);
+  const dx=(right-left)/(p.length+1);
+  p.forEach((close,j)=>{const open=j?p[j-1]:close-3,xx=left+(j+1)*dx,up=close>=open,clr=up?'#36d8a0':'#ff617a',wick=2+Math.abs(Math.sin(j*2.5+c.seed))*3;
+    g.strokeStyle=clr;g.fillStyle=clr;g.lineWidth=2;g.beginPath();g.moveTo(xx,y(Math.max(open,close)+wick));g.lineTo(xx,y(Math.min(open,close)-wick));g.stroke();
+    const a=y(Math.max(open,close)),b=y(Math.min(open,close));g.fillRect(xx-5,a,10,Math.max(3,b-a))});
+  g.strokeStyle='#f4b653';g.lineWidth=3;g.beginPath();
+  for(let j=3;j<p.length;j++){const avg=(p[j]+p[j-1]+p[j-2]+p[j-3])/4,xx=left+(j+1)*dx;j===3?g.moveTo(xx,y(avg)):g.lineTo(xx,y(avg))}g.stroke();
+  g.fillStyle='#73a6b6';g.font='14px monospace';g.fillText('GRÁFICO ILUSTRATIVO · NÃO REPRESENTA COTAÇÕES REAIS',left,bottom+19);
+  g.fillStyle='#102d3c';g.fillRect(0,h-94,w,94);g.strokeStyle='#36566a';g.beginPath();g.moveTo(0,h-94);g.lineTo(w,h-94);g.stroke();
+  g.fillStyle='#f2d298';g.font='bold 18px sans-serif';g.fillText('RESULTADOS DAS OPERAÇÕES · DEMONSTRAÇÃO',left,h-68);
+  g.fillStyle='#eaf6f4';g.font='bold 20px monospace';g.fillText('OPERAÇÕES '+demoLedger.total+'  ·  W '+demoLedger.wins+' / L '+demoLedger.losses,left,h-40);
+  g.fillStyle=demoLedger.balance>=0?'#57e8ad':'#ff8f93';g.font='bold 20px monospace';g.fillText('SALDO '+(demoLedger.balance>=0?'+':'')+'R$ '+demoLedger.balance.toFixed(2),445,h-40);
+  if(demoLedger.last){const op=demoLedger.last;g.fillStyle=op.win?'#65edb6':'#ff8492';g.font='bold 17px sans-serif';g.fillText('ÚLTIMA: '+op.name+' '+op.asset+' '+(op.win?'WIN':'LOSS')+' '+(op.v>0?'+':'')+'R$ '+op.v.toFixed(2),left,h-12)}
+  else{g.fillStyle='#a6c5d1';g.font='17px sans-serif';g.fillText('Aguardando primeira operação demonstrativa...',left,h-12)}
+  c.tex.needsUpdate=true
+}
+
+function drawRoomTV(c){
+ const g=c.ctx,w=c.cv.width,h=c.cv.height,lab=c.roomView==='lab',live=bridgeLinked,shot=officeSnapshot;
+ g.fillStyle='#071c29';g.fillRect(0,0,w,h);
+ g.fillStyle=lab?'#f2c881':'#7bf0c4';g.font='bold 30px system-ui';
+ g.fillText(lab?'SALA DE ESTRATEGIAS':'SALA DE OPERACOES',25,47);
+ g.fillStyle='#b1cbd4';g.font='18px system-ui';
+ g.fillText(live?(officeIntegratedMode?'BULLEX PRACTICE / CONTROLE INTEGRADO':'BULLEX PRACTICE / SERVIDOR AUTENTICADO / SOMENTE LEITURA'):'SIMULACAO LOCAL / BULLEX NAO VINCULADA',25,78);
+ g.fillStyle='#173345';g.fillRect(18,91,w-36,49);
+ if(lab){
+  const ok=approvedStudies(),studyList=[...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a));
+  g.fillStyle='#e8f4ee';g.font='bold 23px system-ui';
+  g.fillText('ACIMA DE 60% / MIN 30: '+ok.length+' DE '+studyList.length,28,125);
+  studyList.slice(0,10).forEach((x,i)=>{
+   const y=164+i*24,pass=ok.includes(x);
+   g.fillStyle=i%2?'#0e2c3b':'#123041';g.fillRect(20,y-17,w-40,24);
+   g.fillStyle=pass?'#5ce9a6':'#b4c8cc';g.font='16px system-ui';
+   g.fillText((pass?'+ ':'- ')+x.name,28,y);
+   g.textAlign='right';g.fillText(formatRate(x)+' / '+x.samples+' FINALIZADAS',w-27,y);g.textAlign='left';
+  });
+  g.fillStyle='#e0c89a';g.font='bold 16px system-ui';
+  g.fillText(live?'RESULTADOS PRACTICE / FILTRO NAO CONTROLA O BOT':'DADOS FICTICIOS / NAO SAO BACKTESTS REAIS',28,h-18);
+ }else{
+  const management=live?(shot?.management||{}):{wins:demoLedger.wins,losses:demoLedger.losses,profit:demoLedger.balance};
+  const trades=live?[...(shot?.trades||[])].reverse():signalLog;
+  const profit=Number(management.profit||0),unit=live?String(shot?.currency||'USD'):'BRL';
+  g.fillStyle='#ebf5f0';g.font='bold 23px system-ui';
+  g.fillText('REGISTROS '+trades.length+' / WIN '+(management.wins||0)+' LOSS '+(management.losses||0),28,125);
+  g.fillStyle=profit>=0?'#83e6b5':'#ff8791';g.font='bold 19px system-ui';
+  g.fillText('RESULTADO: '+unit+' '+profit.toFixed(2),w-255,126);
+  trades.slice(0,8).forEach((x,i)=>{
+   const y=177+i*28;
+   g.fillStyle=i%2?'#0e2c3b':'#123041';g.fillRect(20,y-21,w-40,26);
+   g.fillStyle='#e6f7f5';g.font='17px system-ui';
+   g.fillText('#'+String(x.id??'-')+' '+String(x.asset||'')+' '+String(x.direction||'').toUpperCase()+' / '+String(x.strategy||''),29,y);
+   g.textAlign='right';g.fillStyle=x.status==='WIN'?'#5cedb6':x.status==='LOSS'?'#ff929d':'#efd18b';
+   g.fillText(String(x.status||'?'),w-29,y);g.textAlign='left';
+  });
+  g.fillStyle='#8adcc5';g.font='bold 17px system-ui';
+  g.fillText(live?(officeIntegratedMode?'BOT PRACTICE / CONTROLE NO ESCRITORIO':'BOT AUTONOMO PRACTICE / VISUALIZACAO SOMENTE LEITURA'):'OPERACOES FICTICIAS / NAO ENVIADAS A CORRETORA',28,h-19);
+ }
+ c.tex.needsUpdate=true;
+}
+function bigTV(pair,x,y,z,w,h,seed){
+ const cv=document.createElement('canvas');cv.width=768;cv.height=432;
+ const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
+ const roomView=pair==='LABORATÓRIO'?'lab':pair==='OPERAÇÕES DEMO'?'operations':null;
+ const ch={ctx,cv,tex,seed,big:true,pair,roomView,prices:Array.from({length:38},(_,i)=>76+Math.sin(i*.44+seed)*9+Math.sin(i*.16)*7+(i-18)*.23)};
+ charts.push(ch);drawBigChart(ch);box(w+.22,h+.2,.12,mat('#0b1a24'),x,y,z-.07);
+ const surface=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+ surface.position.set(x,y,z+.02);surface.userData.screen=roomView?{kind:roomView}:{kind:"tv",asset:pair};screenTargets.push(surface);scene.add(surface);return surface
+}
+setInterval(()=>{if(document.hidden)return;charts.filter(c=>c.big).forEach(c=>{const p=c.prices;p.shift();p.push(Math.max(35,Math.min(120,p[p.length-1]+(Math.random()-.48)*8)));drawBigChart(c)})},2200);
+// TVs on back wall of each office, never on the central glass partition.
+bigTV('LABORATÓRIO',-4,2.6,-5.72,3.2,1.9,6);bigTV('OPERAÇÕES DEMO',4,2.6,-5.72,3.2,1.9,16);
+// Separate waiting room beyond the office glass: carpet, sofa, coffee table and TV.
+const receptionGlass=new THREE.MeshPhysicalMaterial({color:'#b6e1ec',roughness:.07,transparent:true,opacity:.21,depthWrite:false,side:THREE.DoubleSide});
+// Reception glass has a real opening at z=7.75 for staff returning from the sofa.
+box(.07,3.0,2.4,receptionGlass,-1.65,1.55,5.95);box(.07,3.0,1.25,receptionGlass,-1.65,1.55,8.925);for(const z of [4.75,7.15,8.30,9.55])box(.09,3.1,.09,trim,-1.65,1.55,z);
+const sofa=mat('#316d75'),carpet=mat('#34495b');
+box(4.1,.035,3.25,carpet,-5.6,.025,7.65);box(2.8,.4,1.1,sofa,-5.75,.57,8.35);
+box(2.8,.85,.22,sofa,-5.75,1.11,8.88);
+for(const d of [-1,1])box(.22,.73,1.1,sofa,-5.75+d*1.36,.82,8.35);
+box(1.45,.12,.8,wood,-3.6,.43,6.85);
+for(const d of [-1,1])box(.08,.39,.08,steel,-3.6+d*.56,.21,6.85);
+box(3.0,2.65,.09,mat('#27404c'),-5.7,1.55,5.20);
+bigTV('USD/JPY',-5.7,2.0,5.34,2.15,1.18,28);
+// Compact employee restroom accessed from reception, with a hinged door.
+// The roof is intentionally open so the bathroom remains visible from the 3D camera.
+const restroomWall=mat('#e7ded0'),restroomTile=mat('#aaa49e'),restroomFixture=mat('#f4f2e9'),restroomMetal=mat('#b6aaa1',.32);
+box(2.9,.042,2.65,restroomTile,3.05,.073,8.73);
+box(.14,2.75,2.55,restroomWall,1.61,1.43,8.74);
+box(.14,2.75,2.55,restroomWall,4.48,1.43,8.74);
+box(2.86,2.75,.14,restroomWall,3.05,1.43,10.03);
+box(.48,2.75,.14,restroomWall,1.85,1.43,7.46);
+box(1.50,2.75,.14,restroomWall,3.72,1.43,7.46);
+box(.095,2.85,.16,brass,2.09,1.45,7.46);
+box(.095,2.85,.16,brass,2.97,1.45,7.46);
+const restroomDoor=new THREE.Group();restroomDoor.position.set(2.09,0,7.46);scene.add(restroomDoor);
+box(.84,2.42,.067,mat('#8a6550'),.44,1.25,0,restroomDoor);
+ball(.045,brass,.72,1.12,.09,restroomDoor);
+const restroomDoorLabel=document.createElement('canvas');restroomDoorLabel.width=280;restroomDoorLabel.height=110;
+const wcCtx=restroomDoorLabel.getContext('2d');wcCtx.fillStyle='#e7d6aa';wcCtx.fillRect(0,0,280,110);wcCtx.textAlign='center';wcCtx.font='bold 36px sans-serif';wcCtx.fillStyle='#293b3f';wcCtx.fillText('BANHEIRO',140,70);
+const wcSign=new THREE.Mesh(new THREE.PlaneGeometry(.65,.26),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(restroomDoorLabel),side:THREE.DoubleSide}));
+wcSign.position.set(3.7,2.41,7.365);scene.add(wcSign);
+box(.57,.36,.72,restroomFixture,3.61,.32,9.32);
+box(.42,.30,.36,restroomFixture,3.61,.72,9.56);
+box(.75,.12,.46,restroomFixture,2.21,.86,9.55);
+box(.27,.29,.27,restroomMetal,2.23,1.06,9.67);
+const mirror=box(.73,.78,.035,mat('#9fc6cb',.55),2.23,1.58,9.96);mirror.castShadow=false;
+let restroomDoorAmount=0;
+// Plant decor kept outside the restroom entrance.
+const leaf=mat('#3b956c'),pot=mat('#ccaf8c');function plant(x,z){box(.45,.55,.45,pot,x,.3,z);for(let n=0;n<5;n++){const q=new THREE.Mesh(new THREE.ConeGeometry(.23,.9,7),leaf);q.position.set(x+Math.cos(n*1.25)*.2,1.0,z+Math.sin(n*1.25)*.2);scene.add(q)}}plant(-7,6.15);plant(7,8.8);plant(-7,-4.7);
+box(2.2,.035,1.35,mat('#a5b9b2'),3,.03,7.15);box(.85,.2,.65,wood,3,.36,7.15);
+// Removed decorative wall pictures that were overlapping the trading screens.
+// Game-style character nameplates, badges, office accents and reaction signals.
+const labels=[],signals=[];
+function tagTexture(name,sub){const canvas=document.createElement('canvas');canvas.width=256;canvas.height=80;const g=canvas.getContext('2d');g.fillStyle='#092439e8';g.beginPath();g.roundRect(3,3,250,72,16);g.fill();g.strokeStyle='#55c59c';g.lineWidth=3;g.stroke();g.textAlign='center';g.fillStyle='#f5ffff';g.font='bold 24px sans-serif';g.fillText(name,128,32);g.font='15px sans-serif';g.fillStyle='#91f0c0';g.fillText(sub,128,60);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;return t}
+people.forEach((p,i)=>{const plate=new THREE.Sprite(new THREE.SpriteMaterial({map:tagTexture(names[i],strategies[i]),transparent:true,depthWrite:false}));plate.visible=false;labels.push(plate);const canvas=document.createElement('canvas');canvas.width=128;canvas.height=64;const g=canvas.getContext('2d');g.font='bold 37px sans-serif';g.fillStyle='#50ff9f';g.textAlign='center';g.fillText('WIN!',64,43);const tex=new THREE.CanvasTexture(canvas);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false}));sprite.scale.set(.95,.48,1);sprite.position.set(0,2.38,0);p.group.add(sprite);signals.push(sprite)});
+for(const x of [-6.9,-3.1,.7,4.5]){box(.5,.08,.5,mat('#d3b57d'),x,4.78,0);const light=new THREE.PointLight(0xffe4ad,.8,4);light.position.set(x,4.45,0);scene.add(light)}
+for(const x of [-6.6,-3.3,0,3.3,6.6]){box(.45,.09,.45,mat('#f0d6a2'),x,4.62,-3.1)}
+// Trader accessories: glasses, headphones and additional hair details.
+people.forEach((p,i)=>{if(i===0||i===3||i===6){for(const side of [-1,1]){const lens=new THREE.Mesh(new THREE.TorusGeometry(.065,.011,6,16),mat('#172330'));lens.position.set(side*.088,.018,.242);p.head.add(lens)}box(.065,.012,.012,mat('#172330'),0,.018,.242,p.head)}if(i===2||i===5){const band=new THREE.Mesh(new THREE.TorusGeometry(.25,.025,7,28,Math.PI),mat('#252a3a'));band.rotation.z=Math.PI;band.position.set(0,.015,-.018);p.head.add(band);for(const side of [-1,1])box(.07,.16,.13,mat('#232c40'),side*.249,-.015,0,p.head)}});
+const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null,selected=-1,activeScreen=null,focusPosition=null,focusTarget=null,returnCamera=null;
+function setFocusMode(on){controls.enablePan=on;controls.mouseButtons.LEFT=on?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;controls.mouseButtons.RIGHT=on?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN;controls.touches.ONE=on?THREE.TOUCH.PAN:THREE.TOUCH.ROTATE;}
+function focusOnScreen(mesh){
+ if(!returnCamera)returnCamera={pos:camera.position.clone(),target:controls.target.clone()};
+ const pos=mesh.getWorldPosition(new THREE.Vector3()),screen=mesh.userData.screen,big=screen.kind==='tv';
+ focusTarget=pos.clone();focusPosition=pos.clone().add(new THREE.Vector3(0,big?.18:.07,big?Math.max(2.2,mesh.geometry.parameters.width*.9):1.05));
+ camera.position.copy(focusPosition);controls.target.copy(focusTarget);controls.minDistance=big?1.3:.52;controls.maxDistance=big?13:8;setFocusMode(true);controls.update();
+ activeScreen=screen;$('inspector').classList.add('open');refreshInspector();
+}
+function releaseFocus(){
+ activeScreen=null;$('inspector').classList.remove('open');setFocusMode(false);
+ controls.minDistance=7;controls.maxDistance=34;
+ if(returnCamera){camera.position.copy(returnCamera.pos);controls.target.copy(returnCamera.target);returnCamera=null;}
+ controls.update();
+}
+$('closeInspector').onclick=releaseFocus;
+$('focusReset').onclick=()=>{if(focusTarget&&focusPosition){camera.position.copy(focusPosition);controls.target.copy(focusTarget);controls.update();}};
+function refreshInspector(){
+ if(!activeScreen)return;
+ const ss=activeScreen,desk=ss.kind==='desk',
+       lab=ss.kind==='lab'||desk&&[0,1,2,6,7,8].includes(ss.index),
+       linked=bridgeLinked,shot=officeSnapshot;
+ $('screenTitle').textContent=lab?'🧠 Laboratório de Estratégias':'📈 Central de Operações';
+ $('screenSource').textContent=linked?(officeIntegratedMode?'BULLEX PRACTICE · CONTROLE INTEGRADO NO ESCRITÓRIO':'BULLEX PRACTICE · SOMENTE LEITURA'):'SIMULAÇÃO SINTÉTICA · SEM DADOS REAIS';
+ const studies=[...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a));
+ const trades=linked?[...(shot?.trades||[])].reverse():demoLedger.recent;
+ const entries=lab?(desk?studies.slice(ss.index%Math.max(1,studies.length),ss.index%Math.max(1,studies.length)+1):studies):trades;
+ const m=shot?.management||{};
+ const boxes=lab?[
+  ['Aprovadas (>60%; mín. 30)',approvedStudies().length],
+  ['Estratégias observadas',studies.length],
+  ['Fonte',linked?'BOT PRACTICE':'SINTÉTICA'],
+  ['Automação pelo filtro','NÃO']
+ ]:linked?[
+  ['Ordens observadas',trades.length],
+  ['WIN / LOSS hoje',(m.wins||0)+' / '+(m.losses||0)],
+  ['Lucro/prejuízo PRACTICE',officeMoney(m.profit||0,shot?.currency||'USD')],
+  ['Status do bot',shot?.running?'EM EXECUÇÃO':shot?.connected?'PARADO':'DESCONECTADO']
+ ]:[
+  ['Operações fictícias',demoLedger.total],['WIN / LOSS',demoLedger.wins+' / '+demoLedger.losses],
+  ['Saldo fictício',money(demoLedger.balance)],['Sinais gerados',signalLog.length]
+ ];
+ $('screenSummary').replaceChildren(...boxes.map(([k,v])=>{const box=document.createElement('span'),title=document.createElement('div'),value=document.createElement('b');title.textContent=k;value.textContent=v;box.append(title,value);return box}));
+ $('inspectorListTitle').textContent=lab?'Estratégias e suas taxas':'Últimas operações';
+ const area=$('screenOps');area.replaceChildren();
+ if(!entries.length){const p=document.createElement('p');p.textContent='Ainda não há dados para esta tela.';area.append(p);}
+ for(const x of entries.slice(0,12)){
+  const e=document.createElement('div');e.className='miniOp';
+  e.textContent=lab?x.name+' · '+formatRate(x)+' · '+x.samples+(linked?' ordens finalizadas':' testes fictícios')+' · '+(approvedStudies().includes(x)?'APROVADA NO FILTRO':'EM ESTUDO'):
+  linked?String(x.time||'')+' · '+String(x.asset||'')+' · '+String(x.direction||'').toUpperCase()+' · '+String(x.status||'')+' · '+String(x.strategy||'')+' · '+(Number.isFinite(Number(x.profit))&&x.profit!==undefined?officeMoney(x.profit,shot?.currency||'USD'):'Pendente'):
+  x.time+' · '+x.name+' · '+x.asset+' · '+(x.win?'WIN':'LOSS')+' · '+money(x.v);
+  area.append(e);
+ }
+}
+canvas.addEventListener('pointerdown',e=>down=[e.clientX,e.clientY]);
+canvas.addEventListener('pointerup',e=>{
+ if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>10)return;down=null;
+ const rect=canvas.getBoundingClientRect();pointer.set(((e.clientX-rect.left)/rect.width)*2-1,-((e.clientY-rect.top)/rect.height)*2+1);
+ ray.setFromCamera(pointer,camera);
+ const monitors=ray.intersectObjects(screenTargets,false);
+ if(monitors.length){focusOnScreen(monitors[0].object);return;}
+ const hit=ray.intersectObjects(clickTargets)[0];
+ if(hit){selected=hit.object.userData.index;showDetail();}
+});
+function showDetail(){
+ const role=premiumActive&&team[selected]?team[selected].role:'desk';
+ const state=role==='sofa'?'descansando no sofá':role==='coffee'?'fazendo pausa para café':role==='supervisor'?'supervisionando os traders':role==='bathroom'?'no banheiro dos funcionários':'analisando o mercado na mesa';
+ $('detail').textContent='👤 '+names[selected]+' · Estratégia: '+strategies[selected]+' · '+state+' · Operações demonstrativas';
+}
+let total=0,wins=0,losses=0,balance=0,timer=null;const money=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+// This simulation does NOT make real orders, use actual quotes or access Bullex.
+function tick(){
+ const qualified=approvedStudies();
+ if(!qualified.length){
+  $('headline').textContent='🧠 Laboratório: nenhuma estratégia acima de 60% com 30+ testes sintéticos.';
+  refreshPipeline();return;
+ }
+ // Left lab provides the approved strategy; right room receives only approved signals.
+ const study=qualified[Math.floor(Math.random()*qualified.length)];
+ if(!(study.samples>=30&&studyRate(study)>60))return;
+ const asset=['EUR/USD','GBP/USD','USD/JPY','AUD/USD'][Math.floor(Math.random()*4)],
+ direction=Math.random()<.5?'call':'put',id=++nextSignalId;
+ const signal={id,asset,direction,strategy:study.name,studySamples:study.samples,winRate:studyRate(study),status:'AGUARDANDO',source:'ESTUDO SINTÉTICO',time:new Date().toLocaleTimeString('pt-BR'),epoch:flowEpoch};
+ signalQueue.unshift(signal);signalLog.unshift(signal);
+ signalQueue=signalQueue.slice(0,20);signalLog=signalLog.slice(0,100);
+ $('headline').textContent='🧠 '+study.name+' '+formatRate(study)+' → 📈 '+asset+' '+direction.toUpperCase()+' · sinal DEMO #'+id;
+ $('lastOperation').textContent='Sinal fictício #'+id+' transferido à Sala de Operações. Aguardando resultado DEMO.';
+ refreshPipeline();
+ const timerId=setTimeout(()=>{pendingSettlements.delete(timerId);settleDemoSignal(signal)},1700);
+ pendingSettlements.add(timerId);
+}
+function settleDemoSignal(signal){
+ if(signal.epoch!==flowEpoch||signal.status!=='AGUARDANDO')return;
+ // Synthetic win/loss outcomes are random; win rate is NOT a forecast.
+ const win=Math.random()>.5,v=win?8:-10,
+ operator=[3,4,5,9,10,11][Math.floor(Math.random()*6)];
+ signal.status=win?'WIN':'LOSS';signal.value=v;signal.operator=names[operator];
+ total++;wins+=win?1:0;losses+=win?0:1;balance+=v;
+ // Re-evaluate lab score after each completed DEMO operation; no real market claim.
+ const study=studyForName(signal.strategy);
+ if(study){study.samples++;if(win)study.wins++;}
+ const op={id:signal.id,name:names[operator],asset:signal.asset,strategy:signal.strategy,direction:signal.direction,win,v,time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),source:'SIMULADA'};
+ Object.assign(demoLedger,{total,wins,losses,balance,last:op});
+ demoLedger.lastByTrader[operator]=op;demoLedger.recent.unshift(op);
+ demoLedger.recent.length=Math.min(25,demoLedger.recent.length);
+ selected=operator;
+ $('total').textContent=total;$('wins').textContent=wins;$('losses').textContent=losses;
+ $('balance').textContent=money(balance);$('winRate').textContent=(total?100*wins/total:0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+ $('headline').textContent='📈 DEMO #'+signal.id+' · '+names[operator]+' · '+signal.strategy+' · '+(win?'WIN ✅':'LOSS ❌');
+ $('lastOperation').textContent='Operação SIMULADA #'+signal.id+' · '+op.time+' · '+op.name+' · '+op.asset+' · '+signal.direction.toUpperCase()+' · '+(win?'WIN':'LOSS')+' · '+money(v);
+ const tr=document.createElement('tr');tr.innerHTML='<td>'+op.name+'</td><td>'+op.asset+'</td><td>'+op.strategy+'</td><td class="'+(win?'win':'loss')+'">'+(win?'WIN DEMO':'LOSS DEMO')+'</td><td>'+money(v)+'</td>';
+ $('history').prepend(tr);if($('history').children.length>100)$('history').lastElementChild.remove();
+ charts.filter(c=>c.big).forEach(drawBigChart);updateCharts();
+ people[operator].phase+=3;people[operator].celebrate=clock.getElapsedTime()+2.5;people[operator].win=win;
+ signals[operator].material.color.set(win?0xffffff:0xff5b75);
+ if(win)celebrateWin(op);else if(team[operator])team[operator].lossUntil=clock.getElapsedTime()+1.6;
+ showDetail();refreshPipeline();saveDemoHistory();
+}
+$('start').onclick=()=>{
+ if(timer!==null)return;
+ tick();timer=setInterval(tick,4500);
+ $('start').textContent='▶ Fluxo DEMO ativo';
+};
+$('pause').onclick=()=>{clearInterval(timer);timer=null;$('start').textContent='▶ Continuar fluxo DEMO';};
+$('reset').onclick=()=>{
+ $('pause').click();flowEpoch++;
+ for(const id of pendingSettlements)clearTimeout(id);
+ pendingSettlements.clear();signalQueue=[];signalLog=[];labStudies=makeStudy();nextSignalId=0;
+ total=wins=losses=balance=0;
+ $('total').textContent=$('wins').textContent=$('losses').textContent='0';
+ $('balance').textContent=money(0);$('winRate').textContent='0,0%';
+ $('headline').textContent='🧠 Sala de Estratégias pronta · 📈 Sala de Operações em espera';
+ $('history').replaceChildren();
+ Object.assign(demoLedger,{total:0,wins:0,losses:0,balance:0,last:null,recent:[],lastByTrader:Array(12).fill(null)});
+ $('lastOperation').textContent='Simulação zerada. As operações são fictícias e a Bullex não está conectada.';
+ charts.filter(c=>c.big).forEach(drawBigChart);updateCharts();refreshPipeline();
+ $('winToast').classList.remove('active');
+ try{localStorage.removeItem('xtremeTigerOfficeDemo1')}catch(e){}
+ $('start').textContent='▶ Iniciar fluxo DEMO';
+};
+const OFFICE_API='https://xtreme-bullex-demo.onrender.com/api/office';
+let officePollingBusy=false,officeKnownSettled=new Set(),officeReceivedFirst=false;
+function stopLocalDemoForBridge(){
+ $('pause').click();flowEpoch++;
+ for(const id of pendingSettlements)clearTimeout(id);
+ pendingSettlements.clear();
+ $('start').disabled=true;$('start').textContent='🔒 Somente leitura · use o bot';
+}
+function officeMoney(amount,currency='USD'){
+ if(!Number.isFinite(Number(amount)))return '—';
+ try{return new Intl.NumberFormat('pt-BR',{style:'currency',currency}).format(Number(amount));}catch(e){return String(amount)}
+}
+function officeDisconnect(message='Vínculo encerrado.'){
+ officeBridgeToken='';officeSnapshot=null;bridgeLinked=false;officeReceivedFirst=false;officeKnownSettled.clear();
+ if(officePollTimer){clearInterval(officePollTimer);officePollTimer=null;}
+ $('officePairCode').hidden=false;$('bindOffice').hidden=false;$('unbindOffice').hidden=true;
+ $('realBridgePanel').hidden=true;$('localStats').hidden=false;$('simHistory').hidden=false;$('simHistoryTitle').hidden=false;
+ $('brokerState').textContent='NÃO VINCULADA';$('brokerState').className='loss';
+ $('brokerMessage').textContent=message;$('start').disabled=false;$('start').textContent='▶ Iniciar fluxo DEMO';
+ $('labRoomDesc').textContent='Testes sintéticos, não backtests reais. Limite visual: mais de 60%, pelo menos 30 testes fictícios.';
+ $('opsRoomDesc').textContent='Fluxo LOCAL simulado. Nenhuma ordem é enviada à Bullex a partir do escritório.';
+ refreshPipeline();updateCharts();
+}
+function officeRefreshUI(){
+ const s=officeSnapshot;if(!s)return;
+ $('brokerState').textContent=s.connected?(s.running?'PRACTICE · ROBÔ RODANDO':'PRACTICE · ROBÔ PARADO'):'VINCULADA · BOT DESCONECTADO';
+ $('brokerState').className=s.connected?'win':'loss';
+ $('brokerMessage').textContent=officeIntegratedMode?'Controles integrados da conta PRACTICE no escritório.':'Visualização autenticada, somente leitura. Atualização ~5s. Comandos do bot permanecem no painel Bullex DEMO.';
+ $('realBridgePanel').hidden=false;
+ $('localStats').hidden=true;$('simHistory').hidden=true;$('simHistoryTitle').hidden=true;
+ $('labRoomDesc').textContent='Resultados PRACTICE por estratégia (mínimo 30 operações finalizadas). O filtro visual acima de 60% não bloqueia ou envia ordens; a estratégia efetiva é escolhida nas Configurações.';
+ $('opsRoomDesc').textContent='Ordens e sinais da conta PRACTICE. Use os botões Iniciar, Parar e Configurações da Central de Controle acima.';
+ const m=s.management||{},trades=[...(s.trades||[])].reverse();
+ const metrics=[['Saldo PRACTICE',officeMoney(s.balance,s.currency||'USD')],['WIN / LOSS hoje',(m.wins||0)+' / '+(m.losses||0)],['Resultado hoje',officeMoney(m.profit||0,s.currency||'USD')],['Ordens registradas',trades.length],['Ativos analisados',Number(s.analyzed_count||0)],['Status',s.uncertain?'⚠️ INCERTO':s.running?'RODANDO':s.connected?'PARADO':'DESCONECTADO']];
+ const host=$('realBridgeMetrics');host.replaceChildren();
+ for(const [label,value] of metrics){const el=document.createElement('span'),v=document.createElement('b');el.append(document.createTextNode(label));v.textContent=value;el.append(v);host.append(el);}
+ $('realBridgeStatus').textContent='Servidor: '+String(s.message||'Sem mensagem')+' · Streaming M1: '+(s.stream_ready||0)+'/'+(s.stream_total||0)+' · Conta PRACTICE · SEM PERMISSÃO PARA ORDENS';
+ const feed=$('realTradeFeed');feed.replaceChildren();
+ if(!trades.length){const div=document.createElement('p');div.textContent='Nenhuma operação registrada nesta sessão do bot.';feed.append(div);}
+ for(const op of trades.slice(0,8)){
+  const row=document.createElement('div');row.className='brokerTrade';
+  const label=document.createElement('span'),result=document.createElement('span');
+  label.textContent=String(op.asset||'?')+' '+String(op.direction||'').toUpperCase()+' · '+String(op.strategy||'')+' · '+String(op.time||'');
+  result.textContent=String(op.status||'')+(Number.isFinite(Number(op.profit))&&op.profit!==undefined?' · '+officeMoney(op.profit,s.currency||'USD'):'');
+  result.className=op.status==='WIN'?'win':op.status==='LOSS'?'loss':'';
+  row.append(label,result);feed.append(row);
+ }
+ $('headline').textContent='📡 PRACTICE · '+(s.running?'Robô ativo':'Robô parado')+' · '+(m.wins||0)+' WIN / '+(m.losses||0)+' LOSS';
+ refreshPipeline();updateCharts();
+}
+async function officeLoad(){
+ if(!officeBridgeToken||officePollingBusy)return;
+ officePollingBusy=true;
+ try{
+  const response=await fetch(OFFICE_API+'/state',{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',headers:{Authorization:'Bearer '+officeBridgeToken}});
+  let body=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error((body.error||'Falha na consulta')+' ('+response.status+')');
+  if(body.source!=='XTREME_BULLEX_DEMO_BACKEND'||body.mode!=='PRACTICE'||body.read_only!==true)throw Error('Resposta incompatível com conta PRACTICE; leitura bloqueada.');
+  const wins=(body.trades||[]).filter(t=>t&&t.status==='WIN'&&t.id!==undefined);
+  if(!officeReceivedFirst){wins.forEach(t=>officeKnownSettled.add(String(t.id)));officeReceivedFirst=true;}
+  else for(const t of wins){
+   const id=String(t.id);if(officeKnownSettled.has(id))continue;
+   officeKnownSettled.add(id);
+   if(officeKnownSettled.size>1000)officeKnownSettled=new Set([id]);
+   celebrateWin({name:'Equipe Xtreme Tiger',v:Number(t.profit||0),currency:body.currency||'USD',source:'BULLEX_PRACTICE'});
+  }
+  officeSnapshot=body;bridgeLinked=true;officeRefreshUI();
+ }catch(e){
+  if(/401|expirado|autorizad/i.test(e.message)){officeDisconnect('O código de leitura expirou. Gere outro no bot.');}
+  else{
+   officeSnapshot=null;$('brokerState').textContent='SEM ATUALIZAÇÃO';$('brokerState').className='loss';
+   $('brokerMessage').textContent='Não foi possível atualizar o bot: '+e.message+'. Dados anteriores ocultados para não parecerem atuais.';
+   refreshPipeline();
+  }
+ }finally{officePollingBusy=false;}
+}
+$('bindOffice').onclick=async()=>{
+ const code=$('officePairCode').value.trim();
+ if(code.length<25){$('brokerMessage').textContent='Gere o código temporário no bot e cole-o aqui.';return;}
+ $('bindOffice').disabled=true;$('brokerMessage').textContent='Vinculando ao servidor DEMO...';
+ try{
+  const r=await fetch(OFFICE_API+'/exchange',{method:'POST',mode:'cors',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  const result=await r.json().catch(()=>({}));
+  if(!r.ok||!result.token||result.mode!=='PRACTICE'||result.bridge!=='read_only')throw Error(result.error||'Vínculo recusado pelo servidor.');
+  officeBridgeToken=result.token;bridgeLinked=true;officeSnapshot=null;
+  $('officePairCode').value='';$('officePairCode').hidden=true;
+  $('bindOffice').hidden=true;$('unbindOffice').hidden=false;
+  stopLocalDemoForBridge();await officeLoad();
+  if(!officePollTimer)officePollTimer=setInterval(officeLoad,5000);
+ }catch(e){$('brokerMessage').textContent='Erro ao vincular: '+e.message;}
+ finally{$('bindOffice').disabled=false;}
+};
+$('unbindOffice').onclick=()=>officeDisconnect('Visualização desvinculada deste navegador. Para revogar também no servidor, saia do painel Bullex DEMO.');
+$('brokerInfo').onclick=()=>{const el=$('brokerDetails');el.hidden=!el.hidden;$('brokerInfo').setAttribute('aria-expanded',String(!el.hidden));};
+const cameraViews={
+ camera:[[0,12.6,22],[0,1.1,1.4]],
+ camLeft:[[-7.6,5.8,8.8],[-4.8,1.4,-1.0]],
+ camRight:[[7.6,5.8,8.8],[4.8,1.4,-1.0]],
+ camHall:[[0,3.7,9.2],[0,1.4,-3.2]],
+ camLounge:[[-3.8,4.2,12.5],[-3.6,1.0,7.1]]
+};
+for(const [id,[position,target]] of Object.entries(cameraViews)){
+ $(id).onclick=()=>{camera.position.set(...position);controls.target.set(...target);controls.update()};
+}
+
+// Optional sound is activated ONLY by user gesture. Mobile browsers reject unsolicited audio.
+let officeSoundEnabled=false,officeAudio=null,phoneInterval=null,phoneSequenceIndex=0,toastTimer=null;
+const phoneGapsMs=[30000,120000,300000,600000]; // 30 s -> 2 min -> 5 min -> 10 min -> repetir
+function scheduleReceptionPhone(){
+ clearTimeout(phoneInterval);
+ if(!officeSoundEnabled)return;
+ const gap=phoneGapsMs[phoneSequenceIndex];phoneSequenceIndex=(phoneSequenceIndex+1)%phoneGapsMs.length;
+ phoneInterval=setTimeout(()=>{if(officeSoundEnabled)phoneRing();scheduleReceptionPhone()},gap);
+ $('soundToggle').title='Próxima chamada em '+(gap<60000?gap/1000+' segundos':gap/60000+' minutos');
+}
+
+function activateOfficeAudio(){
+ const AudioCtx=window.AudioContext||window.webkitAudioContext;
+ if(!AudioCtx)return false;
+ try{if(!officeAudio)officeAudio=new AudioCtx();officeAudio.resume().catch(()=>{});return true}catch(e){console.warn('Áudio indisponível',e);return false}
+}
+function beep(start,duration,freq,endFreq,volume=0.09,type='sine',pan=0){
+ if(!officeAudio||!officeSoundEnabled||document.hidden)return;
+ const osc=officeAudio.createOscillator(),env=officeAudio.createGain(),st=officeAudio.createStereoPanner?officeAudio.createStereoPanner():null;
+ osc.type=type;osc.frequency.setValueAtTime(freq,start);if(endFreq!==undefined)osc.frequency.linearRampToValueAtTime(endFreq,start+duration);
+ env.gain.setValueAtTime(.0001,start);env.gain.exponentialRampToValueAtTime(volume,start+.018);
+ env.gain.exponentialRampToValueAtTime(.0001,start+duration);
+ osc.connect(env);if(st){st.pan.value=pan;env.connect(st);st.connect(officeAudio.destination)}else env.connect(officeAudio.destination);
+ osc.start(start);osc.stop(start+duration+.04);
+}
+function winSound(){
+ if(!officeSoundEnabled||!officeAudio)return;
+ const now=officeAudio.currentTime+.04;
+ // Brief office celebration horn, not a continuous siren.
+ for(let k=0;k<3;k++){beep(now+k*.18,.14,440+k*110,480+k*120,.07,'triangle');beep(now+k*.18,.14,660+k*110,700+k*130,.025,'sawtooth');}
+}
+function phoneRing(){
+ if(!officeSoundEnabled||!officeAudio||document.hidden)return;
+ const now=officeAudio.currentTime+.04;
+ // Classic two-tone reception telephone: double ring, then silence.
+ for(let ring=0;ring<2;ring++)for(let n=0;n<5;n++){
+  const t=now+ring*1.55+n*.15;
+  beep(t,.145,440,455,.135,'sine',-.45);beep(t,.145,480,500,.115,'triangle',-.45);
+ }
+ $('headline').textContent='☎️ Telefone tocando na recepção · Xtreme Tiger';
+}
+$('soundToggle').onclick=()=>{
+ if(!officeSoundEnabled){
+  if(!activateOfficeAudio()){$('soundToggle').textContent='Áudio indisponível';return;}
+  officeSoundEnabled=true;phoneSequenceIndex=0;scheduleReceptionPhone();phoneRing();
+  $('soundToggle').textContent='🔊 Som ligado';$('soundToggle').setAttribute('aria-pressed','true');
+ }else{
+  officeSoundEnabled=false;clearTimeout(phoneInterval);phoneInterval=null;
+  $('soundToggle').textContent='🔇 Ativar sons';$('soundToggle').setAttribute('aria-pressed','false');
+ }
+};
+$('phoneTest').onclick=()=>{
+ if(!officeSoundEnabled){
+  if(!activateOfficeAudio()){$('soundToggle').textContent='Áudio indisponível';return;}
+  officeSoundEnabled=true;phoneSequenceIndex=0;scheduleReceptionPhone();$('soundToggle').textContent='🔊 Som ligado';$('soundToggle').setAttribute('aria-pressed','true');
+ }else activateOfficeAudio();
+ phoneRing();
+};
+function celebrateWin(op){
+ const now=clock.getElapsedTime();
+ // Whole trading floor celebrates a WIN, not only the trader who operated.
+ for(const p of team){
+  if(p.role==='desk'&&!p.walking){
+   p.celebrateStart=now;
+   p.celebrateUntil=now+3.8;
+  }
+ }
+ const toast=$('winToast');toast.textContent='🎉 WIN '+(op.source==='BULLEX_PRACTICE'?'PRACTICE':'SIMULADO')+' · '+op.name+' · '+(op.source==='BULLEX_PRACTICE'?officeMoney(op.v,op.currency||'USD'):money(op.v));toast.classList.remove('active');void toast.offsetWidth;toast.classList.add('active');
+ clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('active'),3200);
+ const stage=canvas.parentElement,colors=['#43eaa7','#f4bb53','#ffffff','#61d7fa','#f891a1'];
+ for(let k=0;k<38;k++){
+  const bit=document.createElement('i');bit.className='confettiPiece';bit.style.left=(8+Math.random()*84)+'%';
+  bit.style.background=colors[k%colors.length];bit.style.setProperty('--dur',(1.8+Math.random()*1.3)+'s');
+  bit.style.setProperty('--dx',(-100+Math.random()*200)+'px');bit.style.setProperty('--turn',(420+Math.random()*680)+'deg');
+  stage.append(bit);bit.addEventListener('animationend',()=>bit.remove(),{once:true});setTimeout(()=>bit.remove(),3500);
+ }
+ winSound();
+}
+const demoStorageKey='xtremeTigerOfficeDemo1';
+function saveDemoHistory(){
+ try{localStorage.setItem(demoStorageKey,JSON.stringify({version:2,total,wins,losses,balance,recent:demoLedger.recent,labStudies:labStudies.map(x=>({wins:x.wins,samples:x.samples})),signalLog:signalLog.slice(0,50),nextSignalId}))}catch(e){console.warn('Histórico demo não pôde ser salvo',e)}
+}
+function restoreDemoHistory(){
+ try{
+  const data=JSON.parse(localStorage.getItem(demoStorageKey)||'null');
+  if(!data||(data.version!==1&&data.version!==2)||!Array.isArray(data.recent)||!Number.isInteger(data.total)||data.total<0||data.total>1000000)return;
+  if(!Number.isInteger(data.wins)||!Number.isInteger(data.losses)||data.wins+data.losses!==data.total||!Number.isFinite(data.balance))return;
+  total=data.total;wins=data.wins;losses=data.losses;balance=data.balance;
+  if(data.version===2){
+   if(Array.isArray(data.labStudies)&&data.labStudies.length===strategies.length){
+    labStudies.forEach((st,i)=>{const x=data.labStudies[i];if(x&&Number.isInteger(x.samples)&&x.samples>=30&&x.samples<200000&&Number.isInteger(x.wins)&&x.wins>=0&&x.wins<=x.samples){st.samples=x.samples;st.wins=x.wins;}});
+   }
+   if(Array.isArray(data.signalLog)){
+    signalLog=data.signalLog.filter(x=>x&&Number.isInteger(x.id)&&x.id>0&&['EUR/USD','GBP/USD','USD/JPY','AUD/USD'].includes(x.asset)&&['call','put'].includes(x.direction)&&strategies.includes(x.strategy)&&['WIN','LOSS'].includes(x.status)).slice(0,50);
+    nextSignalId=Math.max(0,...signalLog.map(x=>x.id));
+   }
+  }
+  const safeTrades=data.recent.slice(0,25).filter(op=>op&&names.includes(op.name)&&strategies.includes(op.strategy)&&['EUR/USD','GBP/USD','USD/JPY','AUD/USD'].includes(op.asset)&&typeof op.win==='boolean'&&Number.isFinite(op.v)&&Math.abs(op.v)<1000000);
+  Object.assign(demoLedger,{total,wins,losses,balance,recent:safeTrades,last:safeTrades[0]||null,lastByTrader:Array(12).fill(null)});
+  for(const op of demoLedger.recent){
+   if(!op||!names.includes(op.name)||!['EUR/USD','GBP/USD','USD/JPY','AUD/USD'].includes(op.asset)||typeof op.win!=='boolean'||!Number.isFinite(op.v))continue;
+   demoLedger.lastByTrader[names.indexOf(op.name)]??=op;
+  }
+  $('total').textContent=total;$('wins').textContent=wins;$('losses').textContent=losses;
+  $('balance').textContent=money(balance);$('winRate').textContent=(total?100*wins/total:0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+  for(const op of [...demoLedger.recent].reverse()){
+   if(!op||!names.includes(op.name)||!Number.isFinite(op.v))continue;
+   const row=document.createElement('tr');row.innerHTML='<td>'+op.name+'</td><td>'+op.asset+'</td><td>'+op.strategy+'</td><td class="'+(op.win?'win':'loss')+'">'+(op.win?'WIN DEMO':'LOSS DEMO')+'</td><td>'+money(op.v)+'</td>';$('history').prepend(row);
+  }
+  if(demoLedger.last){
+   const op=demoLedger.last;
+   $('headline').textContent='Demonstração recuperada · '+total+' operações simuladas';
+   $('lastOperation').textContent='Histórico local da demonstração · Última: '+op.name+' · '+op.asset+' · '+(op.win?'WIN':'LOSS')+' · '+money(op.v)+' · Saldo demo '+money(balance);
+  }
+  charts.filter(c=>c.big).forEach(drawBigChart);updateCharts();refreshInspector();
+ }catch(e){console.warn('Histórico demo não pôde ser recuperado',e)}
+}
+restoreDemoHistory();
+refreshPipeline();
+const isMobile=matchMedia('(max-width: 750px)').matches;
+const qualityModes=['Auto','Econômica','Alta'];let qualityIndex=0,qualityFps=0;let fpsFrames=0,fpsLast=0;
+$('quality').onclick=()=>{
+ qualityIndex=(qualityIndex+1)%qualityModes.length;
+ const ratio=qualityIndex===1?1:qualityIndex===2?Math.min(devicePixelRatio,1.7):Math.min(devicePixelRatio,isMobile?1.25:1.5);
+ renderer.setPixelRatio(ratio);
+ renderer.shadowMap.enabled=qualityIndex!==1;
+ $('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex];fpsLast=0;fpsFrames=0;
+ resize();
+};
+function resize(){const r=canvas.getBoundingClientRect();if(r.width&&r.height){camera.aspect=r.width/r.height;camera.updateProjectionMatrix();renderer.setSize(r.width,r.height,false)}}new ResizeObserver(resize).observe(canvas);resize();
+// Xtreme Tiger team: twelve distinct original stylized executives (six women, six men).
+// Procedural 3D only, no unverified external character files or dependencies.
+const femaleStaff=new Set([1,3,4,6,8,10]);
+const team=[],teamRoles={sofa:-1,coffee:-1,supervisor:-1,bathroom:-1};let shiftPlan=null;
+let premiumActive=true,lastShift=-1;
+const skinColors=['#d5a17d','#a66f52','#e8bb9c','#bf8a6c','#dfb18d','#8c5c46','#c79072','#e0aa80','#9e6c51','#e6bf9e','#bd896c','#ac7759'];
+const hairColors=['#292024','#3c2927','#3a2421','#ae7d48','#29272e','#463129','#221d24','#b28b54','#3c292e','#24232b','#5e342b','#292c31'];
+const suits=['#21384c','#513d56','#314b5d','#243c56','#4c3552','#31483e','#293e55','#453a48','#33525a','#27364b','#59414c','#3b4452'];
+const hairstyles=['quiff','long','side','bob','bun','short','ponytail','curly','braids','swept','waves','fade'];
+function tigerLogo(){
+ const cv=document.createElement('canvas');cv.width=cv.height=128;const g=cv.getContext('2d');
+ g.fillStyle='#102b3b';g.beginPath();g.arc(64,64,62,0,Math.PI*2);g.fill();
+ g.strokeStyle='#f6c676';g.lineWidth=6;g.stroke();
+ g.fillStyle='#f4a940';g.beginPath();g.moveTo(26,44);g.lineTo(19,16);g.lineTo(49,29);g.lineTo(79,29);g.lineTo(109,16);g.lineTo(101,44);g.quadraticCurveTo(119,82,64,111);g.quadraticCurveTo(9,82,26,44);g.fill();
+ g.fillStyle='#fff2d9';g.beginPath();g.ellipse(64,83,27,19,0,0,Math.PI*2);g.fill();
+ g.fillStyle='#182733';g.beginPath();g.moveTo(64,83);g.lineTo(53,74);g.lineTo(75,74);g.fill();
+ g.strokeStyle='#1c2a33';g.lineWidth=7;g.lineCap='round';
+ for(const side of [-1,1]){g.beginPath();g.moveTo(64+side*21,40);g.lineTo(64+side*35,57);g.stroke();g.beginPath();g.moveTo(64+side*22,63);g.lineTo(64+side*38,74);g.stroke();}
+ g.beginPath();g.moveTo(64,34);g.lineTo(64,51);g.stroke();
+ g.fillStyle='#17242a';for(const x of [44,84]){g.beginPath();g.arc(x,65,5,0,Math.PI*2);g.fill();}
+ const t=new THREE.CanvasTexture(cv);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+const logoMaterial=new THREE.MeshBasicMaterial({map:tigerLogo(),transparent:true,side:THREE.DoubleSide,depthWrite:false});
+// Xtreme Tiger original artwork printed into the reception carpet, not a floating label.
+const carpetLogoCanvas=document.createElement('canvas');carpetLogoCanvas.width=640;carpetLogoCanvas.height=320;
+const carpetCtx=carpetLogoCanvas.getContext('2d');carpetCtx.fillStyle='#34495b';carpetCtx.fillRect(0,0,640,320);
+carpetCtx.drawImage(logoMaterial.map.image,254,14,132,132);
+carpetCtx.font='bold 67px system-ui';carpetCtx.textAlign='center';carpetCtx.fillStyle='#edbb6a';carpetCtx.fillText('XTREME TIGER',320,212);
+carpetCtx.font='bold 23px system-ui';carpetCtx.fillStyle='#a0efc8';carpetCtx.fillText('TRADER OFFICE',320,262);
+const carpetLogoTex=new THREE.CanvasTexture(carpetLogoCanvas);carpetLogoTex.colorSpace=THREE.SRGBColorSpace;
+const carpetLogo=new THREE.Mesh(new THREE.PlaneGeometry(2.9,1.45),new THREE.MeshBasicMaterial({map:carpetLogoTex,side:THREE.DoubleSide,depthWrite:false}));
+carpetLogo.rotation.x=-Math.PI/2;carpetLogo.position.set(-5.3,.058,7.18);scene.add(carpetLogo);
+// Matching printed Tiger branding on the brown walnut central corridor runner.
+const corridorLogo=new THREE.Mesh(new THREE.PlaneGeometry(2.02,1.55),new THREE.MeshBasicMaterial({map:carpetLogoTex,side:THREE.DoubleSide,depthWrite:false}));
+corridorLogo.rotation.x=-Math.PI/2;corridorLogo.position.set(0,.102,0.45);scene.add(corridorLogo);
+function buildStaffAvatar(i){
+ const woman=femaleStaff.has(i),pivot=new THREE.Group(),upper=new THREE.Group(),sittingLegs=new THREE.Group(),standingLegs=new THREE.Group(),deskArms=new THREE.Group(),sofaArms=new THREE.Group(),standingArms=new THREE.Group();
+ pivot.add(sittingLegs,standingLegs,upper);upper.add(deskArms,sofaArms,standingArms);
+ const skin=mat(skinColors[i]),skinShade=mat('#b77c63'),hair=mat(hairColors[i]),suit=mat(suits[i]),lapel=mat('#62718a'),pants=mat(suits[i]),white=mat('#f4f2ed'),shoe=mat('#1d222b'),eye=mat('#fdf7ed'),iris=mat(['#4b604b','#60412e','#3d6172'][i%3]),dark=mat('#1d2630'),lip=mat(woman?'#a85e68':'#a5756b'),accent=mat(woman?'#f1c8ac':'#d99a51');
+ const sph=(par,x,y,z,sx,sy,sz,m)=>{const q=ball(1,m,x,y,z,par);q.scale.set(sx,sy,sz);return q};
+ const seg=(par,ax,ay,az,bx,by,bz,r1,r2,m)=>{
+  const v=new THREE.Vector3(ax,ay,az),w=new THREE.Vector3(bx,by,bz),d=w.clone().sub(v);
+  const mesh=new THREE.Mesh(new THREE.CylinderGeometry(r2,r1,d.length(),9),m);
+  mesh.position.copy(v).add(w).multiplyScalar(.5);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());mesh.castShadow=true;par.add(mesh);return mesh;
+ };
+ // Bent legs at desks and on the sofa.
+ const strideLegs=[];
+ sph(sittingLegs,0,.75,-.06,.29,.17,.24,pants);
+ for(const side of [-1,1]){
+  sph(sittingLegs,side*.15,.61,.24,.145,.16,.34,pants);
+  seg(sittingLegs,side*.17,.59,.17,side*.19,.48,.48,.13,.12,pants);
+  seg(sittingLegs,side*.19,.48,.48,side*.19,.16,.50,.103,.082,pants);
+  sph(sittingLegs,side*.19,.13,.62,.125,.085,.22,shoe);
+  const legRig=new THREE.Group();legRig.position.set(side*.15,1.13,-.02);standingLegs.add(legRig);strideLegs.push({rig:legRig,side});
+  seg(legRig,0,0,0,side*.02,-.58,.035,.15,.11,pants);
+  seg(legRig,side*.02,-.58,.035,side*.03,-.99,.055,.11,.08,pants);
+  sph(legRig,side*.03,-1.03,.19,.13,.095,.23,shoe);
+ }
+ sph(upper,0,1.04,-.055,woman?.31:.34,.38,.23,suit);
+ sph(upper,0,1.17,.137,.145,.25,.062,white);
+ if(woman){sph(upper,0,1.095,.204,.11,.13,.027,accent);}
+ else{sph(upper,0,1.04,.21,.046,.16,.03,accent);sph(upper,0,1.22,.22,.073,.052,.033,accent);}
+ for(const side of [-1,1]){
+  seg(upper,side*.105,1.30,.166,side*.235,1.065,.196,.058,.095,lapel);
+  sph(upper,side*.245,1.265,.015,.15,.13,.16,suit);
+ }
+ sph(upper,0,1.37,0,.095,.12,.10,skin);
+ sph(upper,0,1.61,.015,woman?.221:.235,.281,.217,skin);
+ sph(upper,0,1.48,.19,.142,.08,.042,skinShade);
+ sph(upper,0,1.594,.231,.047,.073,.058,skin);
+ sph(upper,0,1.514,.241,.067,.014,.015,lip);
+ for(const side of [-1,1]){
+  sph(upper,side*.222,1.59,.012,.044,.071,.05,skin);
+  sph(upper,side*.09,1.646,.210,.068,.043,.021,eye);
+  sph(upper,side*.09,1.646,.232,.029,.031,.013,iris);
+  sph(upper,side*.09,1.646,.241,.012,.017,.009,dark);
+  sph(upper,side*.09,1.72,.213,.073,.015,.018,hair);
+ }
+ // Twelve different haircuts, lengths and hair colors.
+ const style=hairstyles[i];
+ sph(upper,0,1.81,-.05,.242,.117,.22,hair);
+ if(style==='long'||style==='waves'||style==='braids'){
+  for(const side of [-1,1]){
+   sph(upper,side*.222,1.48,-.045,.083,style==='waves'?.36:.31,.16,hair);
+   if(style==='braids')for(let k=0;k<4;k++)sph(upper,side*.23,1.65-k*.11,-.06,.072,.074,.078,hair);
+  }
+ }else if(style==='bob'){
+  for(const side of [-1,1])sph(upper,side*.225,1.65,-.04,.105,.21,.17,hair);
+ }else if(style==='bun'){
+  sph(upper,0,1.99,-.16,.16,.15,.15,hair);
+ }else if(style==='ponytail'){
+  sph(upper,0,1.54,-.245,.12,.31,.115,hair);
+ }else if(style==='curly'){
+  for(let k=0;k<10;k++){const ang=k*Math.PI*2/10;sph(upper,Math.cos(ang)*.20,1.84+Math.sin(k*3)*.065,Math.sin(ang)*.16,.105,.105,.10,hair)}
+ }else if(style==='quiff'||style==='swept'){
+  sph(upper,-.10,1.91,.07,.18,.105,.15,hair);
+ }else if(style==='side'||style==='fade'){
+  sph(upper,.14,1.79,.055,.13,.075,.17,hair);
+ }else if(style==='short'){
+  sph(upper,0,1.87,.03,.215,.09,.16,hair);
+ }
+ // Tiny custom tiger emblem sewn on the suit lapel.
+ const patch=new THREE.Mesh(new THREE.PlaneGeometry(.15,.15),logoMaterial);
+ patch.position.set(-.215,1.16,.245);upper.add(patch);
+ const hands=[],clapHands=[],cheerArms=new THREE.Group();upper.add(cheerArms);cheerArms.visible=false;
+ for(const side of [-1,1]){
+  // Articulated WIN celebration: arms lift overhead and hands meet repeatedly for claps.
+  const clapJoint=new THREE.Group();clapJoint.position.set(side*.30,1.25,.065);cheerArms.add(clapJoint);
+  seg(clapJoint,0,0,0,side*.12,.31,.12,.105,.088,suit);
+  sph(clapJoint,side*.12,.31,.12,.086,.084,.081,suit);
+  seg(clapJoint,side*.12,.31,.12,-side*.12,.54,.22,.082,.066,suit);
+  sph(clapJoint,-side*.12,.57,.22,.09,.085,.075,skin);
+  clapHands.push({joint:clapJoint,side});
+  // Resting pose for the sofa: hands down on the thighs, no keyboard motion.
+  seg(sofaArms,side*.30,1.25,.035,side*.34,.98,.10,.104,.090,suit);
+  seg(sofaArms,side*.34,.98,.10,side*.26,.73,.31,.084,.065,suit);
+  sph(sofaArms,side*.26,.71,.34,.082,.063,.093,skin);
+  seg(deskArms,side*.30,1.25,.035,side*.34,1.065,.38,.105,.092,suit);
+  sph(deskArms,side*.34,1.065,.38,.098,.105,.10,suit);
+  seg(deskArms,side*.34,1.065,.38,side*.22,1.115,.73,.09,.075,suit);
+  const hand=new THREE.Group();hand.position.set(side*.22,1.115,.76);deskArms.add(hand);
+  sph(hand,0,0,0,.08,.045,.11,skin);
+  for(let k=0;k<4;k++)sph(hand,(k-1.5)*.03,-.015,.09,.016,.017,.07,skin);
+  hands.push({group:hand,side});
+  seg(standingArms,side*.32,1.25,.035,side*.36,.87,.13,.103,.08,suit);
+  if(side===1){seg(standingArms,side*.36,.87,.13,side*.22,.83,.38,.078,.065,suit);sph(standingArms,side*.22,.83,.40,.076,.06,.085,skin);}
+  else{seg(standingArms,side*.36,.87,.13,side*.37,.53,.16,.08,.065,suit);sph(standingArms,side*.37,.50,.16,.074,.09,.07,skin);}
+ }
+ // Cup only when the staff member is at the coffee station.
+ const cup=new THREE.Group();standingArms.add(cup);cup.position.set(.22,.89,.43);
+ const ceramic=mat('#f1f1e6'),coffee=mat('#3b2117');
+ const cupMesh=new THREE.Mesh(new THREE.CylinderGeometry(.09,.078,.16,12),ceramic);cupMesh.position.y=.055;cup.add(cupMesh);
+ const coffeeTop=new THREE.Mesh(new THREE.CircleGeometry(.079,12),coffee);coffeeTop.rotation.x=-Math.PI/2;coffeeTop.position.y=.137;cup.add(coffeeTop);
+ const handle=new THREE.Mesh(new THREE.TorusGeometry(.057,.016,6,12),ceramic);handle.position.set(.10,.055,0);handle.rotation.y=Math.PI/2;cup.add(handle);
+ // Supervisor carries a tablet.
+ const tablet=new THREE.Group();standingArms.add(tablet);
+ box(.29,.035,.20,mat('#172c3c'),.19,.83,.40,tablet);
+ const screenTab=box(.245,.009,.16,mat('#183e4c'),.19,.856,.40,tablet);
+ // Original Tiger logo in the supervisor's tablet, facing upward.
+ const tabletLogo=new THREE.Mesh(new THREE.PlaneGeometry(.175,.137),logoMaterial);
+ tabletLogo.rotation.x=-Math.PI/2;tabletLogo.position.set(.19,.865,.40);
+ tabletLogo.renderOrder=4;tablet.add(tabletLogo);
+ const item={group:pivot,upper,sittingLegs,standingLegs,deskArms,sofaArms,standingArms,hands,strideLegs,cup,tablet,cheerArms,clapHands,celebrateUntil:0,celebrateStart:0,lossUntil:0,bathroomEnd:0,role:'',state:'WORKING',index:i,head:upper,route:[],walkSpeed:1.75,inspectAt:0,inspectIndex:i%6,walking:false};
+ pivot.traverse(obj=>{if(obj.isMesh){obj.userData.index=i;clickTargets.push(obj)}});
+ scene.add(pivot);return item;
+}
+for(let i=0;i<12;i++){team.push(buildStaffAvatar(i));people[i].group.visible=false;}
+// Corridor-aware motion: everyone returns to their own desk after a break.
+// Staff walk via the two glass-room entrances instead of teleporting.
+const officeDoorZ=2.7;
+function deskPoint(i){return new THREE.Vector3(positions[i][0],0,positions[i][1]+1)}
+function point(x,z){return new THREE.Vector3(x,0,z)}
+// Route planner uses walkable aisles and the actual openings in the glass partitions.
+// Desk rows are separated by a central aisle (z=-1.35); access to the
+// corridor is through the open side door at z=2.35 (not through glass).
+function deskSide(i){return i===0||i===1||i===2||i===6||i===7||i===8?-1:1}
+function nearestGap(x,side){const gaps=side<0?[-5.52,-3.52]:[3.52,5.52];return gaps.reduce((a,b)=>Math.abs(x-a)<Math.abs(x-b)?a:b)}
+function pathBetween(from,to,fromRole,toRole,i){
+ const path=[],side=deskSide(i),gap=nearestGap(from.x,side);
+ const push=(x,z)=>path.push(point(x,z));
+ if(fromRole==='desk'){
+  // Stand up and step sideways out of the chair BEFORE moving toward the aisle.
+  // Going directly forward from the chair would pass through the chair back.
+  push(gap,from.z);
+  if(positions[i][1]<0)push(gap,-1.35);
+  push(gap,2.35);push(0,2.35);
+ }else if(fromRole==='supervisor'){
+  if(from.z<2.1){push(gap,from.z);push(gap,2.35)}
+  push(0,2.35);
+ }else if(fromRole==='sofa'){
+  push(-5.75,7.75);push(0,7.75);push(0,2.35);
+ }else if(fromRole==='coffee'){
+  push(0,7.95);push(0,2.35);
+ }else if(fromRole==='bathroom'){
+  // Leave the restroom through its actual doorway, then walk the central corridor.
+  push(2.54,7.73);push(2.54,7.05);push(0,7.05);push(0,2.35);
+ }else push(0,2.35);
+ if(toRole==='desk'){
+  const gx=nearestGap(to.x,side);
+  push(gx,2.35);
+  if(positions[i][1]<0)push(gx,-1.35);
+  // Approach beside the chair before sitting down, not through its backrest.
+  push(gx,to.z);
+ }else if(toRole==='supervisor'){
+  const gx=side*3.52;push(gx,2.35);push(gx,-1.35);
+ }else if(toRole==='sofa'){
+  push(0,7.75);push(-5.75,7.75);
+ }else if(toRole==='coffee'){
+  push(0,7.95);
+ }else if(toRole==='bathroom'){
+  push(0,7.05);push(2.54,7.05);push(2.54,7.73);
+ }
+ path.push(to.clone());
+ return path.filter((q,j)=>j===path.length-1||q.distanceTo(from)>.12)
+}
+function targetForRole(p,role){
+ const i=p.index;
+ if(role==='sofa')return point(-5.75,8.35);
+ if(role==='coffee')return point(6.85,7.95);
+ if(role==='bathroom')return point(2.58,8.75);
+ if(role==='supervisor')return point(deskSide(i)*3.52,-1.35);
+ return deskPoint(i);
+}
+function poseForRole(p,role,walking=false){
+ const seated=!walking&&(role==='desk'||role==='sofa');
+ p.upper.position.y=seated?0:.42;
+ p.sittingLegs.visible=seated;
+ p.standingLegs.visible=!seated;
+ p.deskArms.visible=!walking&&role==='desk';p.cheerArms.visible=false;
+ p.sofaArms.visible=!walking&&role==='sofa';
+ p.standingArms.visible=walking||role==='coffee'||role==='supervisor'||role==='bathroom';
+ p.cup.visible=!walking&&role==='coffee';
+ p.tablet.visible=!walking&&role==='supervisor';
+}
+const stateForRole=role=>({desk:'WORKING',sofa:'RESTING',coffee:'COFFEE',supervisor:'SUPERVISING',bathroom:'RESTROOM'}[role]||'WORKING');
+function teamPosition(p,role,initial=false){
+ const from=p.group.position.clone(),oldRole=p.role||'desk',to=targetForRole(p,role);
+ p.role=role;
+ if(initial){p.group.position.copy(to);p.group.rotation.y=role==='sofa'?Math.PI:role==='coffee'?Math.PI*.86:Math.PI;p.route=[];p.walking=false;p.state=stateForRole(role);p.bathroomEnd=role==='bathroom'?19:0;poseForRole(p,role);return}
+ // The previous activity finishes; walk back to the assigned desk or next break.
+ p.route=pathBetween(from,to,oldRole,role,p.index);
+ p.walking=true;p.state=role==='desk'?'RETURNING':'WALKING';poseForRole(p,role,true);
+ p.inspectAt=0;
+}
+function walkStaff(p,dt,t){
+ if(!p.route.length){
+  if(p.walking){p.walking=false;p.state=stateForRole(p.role);poseForRole(p,p.role);p.group.position.copy(targetForRole(p,p.role));p.group.rotation.y=p.role==='coffee'?Math.PI*.86:Math.PI;if(p.role==='bathroom')p.bathroomEnd=t+18;}else if(p.role==='supervisor')p.state='SUPERVISING';
+  return;
+ }
+ const target=p.route[0],dx=target.x-p.group.position.x,dz=target.z-p.group.position.z,dist=Math.hypot(dx,dz),step=p.walkSpeed*dt;
+ // Give colleagues room to pass; keep the sofa limited to its assigned occupant.
+ const nextX=p.group.position.x+(dist>step?dx/Math.max(dist,.001)*step:dx),nextZ=p.group.position.z+(dist>step?dz/Math.max(dist,.001)*step:dz);
+ const crowded=team.some(q=>q!==p&&q.group.visible&&Math.hypot(nextX-q.group.position.x,nextZ-q.group.position.z)<.47&&q.index<p.index);
+ if(crowded)return;
+ if(dist<=step+.03){p.group.position.x=target.x;p.group.position.z=target.z;p.route.shift();}
+ else{p.group.position.x+=dx/dist*step;p.group.position.z+=dz/dist*step;}
+ if(dist>.03){const facing=Math.atan2(dx,dz),turn=Math.atan2(Math.sin(facing-p.group.rotation.y),Math.cos(facing-p.group.rotation.y));p.group.rotation.y+=turn*Math.min(1,dt*7);}
+ p.upper.position.y=.42+Math.abs(Math.sin(t*9+p.index))*Math.min(.032,dist*.025);
+ p.standingArms.rotation.x=Math.sin(t*8+p.index)*.075;
+ for(const leg of p.strideLegs)leg.rig.rotation.x=Math.sin(t*8+p.index+(leg.side>0?Math.PI:0))*.32;
+}
+function patrolSupervisor(p,t){
+ if(p.role!=='supervisor'||p.walking||p.route.length||t<p.inspectAt)return;
+ // The supervisor inspects desks from the clear aisle, never through tables.
+ const side=deskSide(p.index);
+ const staff=side<0?[0,1,2,6,7,8]:[3,4,5,9,10,11];
+ const targetDesk=staff[p.inspectIndex%staff.length];
+ p.inspectIndex++;
+ const x=positions[targetDesk][0],front=positions[targetDesk][1]>=0;
+ const z=front?2.35:-1.35,from=p.group.position.clone(),gap=nearestGap(from.x,side);
+ if(Math.abs(from.z-z)>1){
+  p.route=[point(gap,from.z),point(gap,z),point(x,z)];
+ }else p.route=[point(x,z)];
+ p.route=p.route.filter(q=>q.distanceTo(from)>.14);
+ p.state=p.route.length?'PATROLLING':'SUPERVISING';
+ p.inspectAt=t+9;
+}
+
+function updateShift(t){
+ const shift=Math.floor(t/80);
+ if(shift!==lastShift){
+  const initial=lastShift<0;
+  lastShift=shift;
+  const picks={sofa:shift%12,coffee:(shift+4)%12,supervisor:(shift+8)%12,bathroom:(shift+10)%12};
+  if(initial){
+   for(const p of team){
+    const role=p.index===picks.sofa?'sofa':p.index===picks.coffee?'coffee':p.index===picks.supervisor?'supervisor':p.index===picks.bathroom?'bathroom':'desk';
+    teamPosition(p,role,true);
+   }
+   Object.assign(teamRoles,picks);
+  }else{
+   // End the previous coffee/sofa/supervision activities first.
+   // New visitors only enter the reserved break areas after they are vacant.
+   for(const p of team)if(p.role!=='desk')teamPosition(p,'desk');
+   shiftPlan={...picks};
+  }
+ }
+ if(!shiftPlan)return;
+ for(const role of ['sofa','coffee','supervisor','bathroom']){
+  const id=shiftPlan[role];
+  if(id===null||id===undefined)continue;
+  const next=team[id];
+  if(next.walking||next.route.length||next.role!=='desk')continue;
+  const dest=targetForRole(next,role);
+  // Capacity: only one person on the sofa and one at the coffee counter.
+  // The previous user has to vacate before the next approaches.
+  const radius=role==='supervisor'?0.65:role==='bathroom'?1.1:1.45;
+  const occupied=team.some(p=>p!==next&&Math.hypot(p.group.position.x-dest.x,p.group.position.z-dest.z)<radius);
+  if(occupied)continue;
+  teamPosition(next,role);
+  teamRoles[role]=id;
+  shiftPlan[role]=null;
+ }
+ if(Object.values(shiftPlan).every(v=>v===null))shiftPlan=null;
+ if(premiumActive){
+  const label=role=>teamRoles[role]>=0?names[teamRoles[role]]:'aguardando';
+  $('avatarStatus').textContent='🚶 Supervisor '+label('supervisor')+' · ☕ '+label('coffee')+' · 🛋️ '+label('sofa')+' · 🚻 '+label('bathroom')+' · rodízio gradual (80 s)';
+ }
+}
+let lastTeamFrame=0;
+function updateTeam(t){
+ updateShift(t);
+ if(!premiumActive){lastTeamFrame=t;return}
+ const dt=Math.min(.05,Math.max(0,t-lastTeamFrame));lastTeamFrame=t;
+ for(const p of team){
+  const i=p.index;
+  if(p.walking||p.route.length){walkStaff(p,dt,t);continue;}
+  const cheering=p.role==='desk'&&p.celebrateUntil>t;
+  const rise=cheering?Math.min(1,(t-p.celebrateStart)/.35):0;
+  p.upper.position.y=p.role==='sofa'?0:p.role==='desk'?Math.max(0,rise)*.42:.42;
+  p.sittingLegs.visible=p.role==='sofa'||(p.role==='desk'&&!cheering);
+  p.standingLegs.visible=p.role==='coffee'||p.role==='supervisor'||p.role==='bathroom'||cheering;
+  p.group.position.y=p.role==='sofa'?.10:cheering?Math.abs(Math.sin(t*8+i))*.032:0;
+  p.upper.rotation.y=Math.sin(t*.6+i)*.018;
+  p.upper.rotation.z=0;p.upper.rotation.x=0;
+  p.standingArms.rotation.x=0;
+  p.cheerArms.visible=cheering;
+  if(p.role==='desk')p.deskArms.visible=!cheering;
+  if(cheering){
+   // Hands move to the center above the head and visibly touch ~3x/sec.
+   const clap=.16+.19*(.5+.5*Math.sin((t-p.celebrateStart)*16));
+   for(const c of p.clapHands)c.joint.rotation.z=c.side*clap;
+   p.upper.rotation.z=Math.sin(t*7+i)*.075;
+  }else if(p.role==='desk'&&p.lossUntil>t){p.upper.rotation.x=.12;}
+  for(const leg of p.strideLegs)leg.rig.rotation.x=0;
+  if(p.role==='desk'&&!cheering){
+   for(const h of p.hands){h.group.position.y=1.115+Math.sin(t*11+i+h.side)*.019;h.group.rotation.x=Math.sin(t*12+i+h.side)*.07;}
+  }else if(p.role==='sofa'){
+   // Relaxed on the sofa: both arms down, no typing, only gentle breathing.
+   p.upper.rotation.z=Math.sin(t*.7+i)*.008;
+  }else if(p.role==='coffee'){
+   p.cup.rotation.z=Math.sin(t*1.7+i)*.10;p.upper.rotation.z=Math.sin(t*.9+i)*.015;
+  }else if(p.role==='supervisor'){
+   p.tablet.rotation.y=Math.sin(t*.7)*.12;p.upper.rotation.z=Math.sin(t*.6+i)*.025;
+   patrolSupervisor(p,t);
+  }else if(p.role==='bathroom'){
+   p.upper.rotation.z=Math.sin(t*.6+i)*.008;
+   if(p.bathroomEnd&&t>=p.bathroomEnd){p.bathroomEnd=0;teamPosition(p,'desk');teamRoles.bathroom=-1;}
+  }
+ }
+}
+$('avatarTest').onclick=()=>{
+ premiumActive=!premiumActive;
+ for(const p of team)p.group.visible=premiumActive;
+ for(const p of people)p.group.visible=!premiumActive;
+ $('avatarTest').textContent=premiumActive?'↩ Ver equipe original':'🐯 Mostrar equipe Tiger';
+ if(premiumActive){lastTeamFrame=clock.getElapsedTime();updateShift(lastTeamFrame)}
+ else $('avatarStatus').textContent='Equipe original de 12 traders · versão anterior';
+};
+updateShift(0);
+const clock=new THREE.Clock();function frame(){requestAnimationFrame(frame);const t=clock.getElapsedTime();if(document.hidden){fpsLast=0;fpsFrames=0;return}updateTeam(t);
+for(const car of exteriorTraffic){let z=car.initial+t*car.speed;z=((z+11)%25+25)%25-11;car.group.position.z=z;}
+const bathroomNear=team.some(p=>p.role==='bathroom'||Math.abs(p.group.position.x-2.45)<1.35&&Math.abs(p.group.position.z-7.60)<1.3);
+restroomDoorAmount+=(Number(bathroomNear)-restroomDoorAmount)*.085;restroomDoor.rotation.y=-restroomDoorAmount*1.55;people.forEach((p,i)=>{const cycle=(t*.22+i*1.41)%(Math.PI*2);const going=false;p.walk=false;p.group.position.set(p.x,0,p.z+1);p.group.rotation.y=Math.PI;p.head.rotation.z=Math.sin(t*2+i)*.06;p.head.rotation.x=.12+Math.sin(t*.9+i)*.025;p.head.scale.y=(Math.sin(t*1.6+i*1.8)>.995?.94:1);p.smile.scale.x=t<p.celebrate?(p.win?1.4:.55):1;signals[i].material.opacity=Math.max(0,Math.min(1,(p.celebrate-t)*1.5));signals[i].position.y=2.38+(signals[i].material.opacity?Math.sin(t*5)*.055:0);p.arms.forEach((arm,k)=>{arm.rotation.z=(k===0?-.09:.09)+(t<p.celebrate?Math.sin(t*4+i)*.08:Math.sin(t*8+i+k*Math.PI)*.045);arm.rotation.x=-1.2+Math.sin(t*9+i+k*Math.PI)*.065});p.legs.forEach((leg,k)=>{leg.rotation.x=going?Math.sin(t*8+i+k*Math.PI)*.3:0})});controls.update();renderer.render(scene,camera);
+ // Adaptive pixel ratio in Auto mode, measured in the browser on the actual device.
+ if(qualityIndex===0){
+  const now=performance.now();if(!fpsLast)fpsLast=now;fpsFrames++;
+  if(now-fpsLast>=4000){
+   const fps=Math.round(fpsFrames*1000/(now-fpsLast));
+   qualityFps=fps;const cap=Math.min(devicePixelRatio,isMobile?1.25:1.5),ratio=renderer.getPixelRatio();
+   if(fps<24&&ratio>.82)renderer.setPixelRatio(Math.max(.82,ratio-.13));
+   else if(fps>47&&ratio<cap-.04)renderer.setPixelRatio(Math.min(cap,ratio+.06));
+   $('quality').textContent='⚙️ Qualidade: Auto · '+fps+' fps';
+   fpsLast=now;fpsFrames=0;
+  }
+ }
+}
+
+// Same-origin control panel: CSRF session cookie is HttpOnly and first-party.
+// Never allow the 3D client to send REAL orders or store passwords/tokens.
+let hubCsrf='',hubState=null,hubPolling=null,hubBusy=false,hubLoadedConfig=false,hubRefreshing=false,hubHaveBaseline=false,hubLastWins=new Set();
+const hubIds={strategy:'hubStrategy',asset:'hubAsset',sniper_source:'hubSniperSource',stake:'hubStake',payout:'hubPayout',limit:'hubLimit',stop_win:'hubStopWin',stop_loss:'hubStopLoss'};
+async function hubApi(endpoint,body){
+ const response=await fetch('/api/'+endpoint,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
+  headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':hubCsrf},
+  body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)throw Object.assign(Error(data.error||'Falha ao acessar o servidor'),{code:response.status});
+ return data;
+}
+function hubNote(text,warning=false){const e=$('hubFeedback');e.textContent=text;e.className=warning?'formHint warning':'formHint';}
+function hubLockButtons(){
+ $('hubStartBtn').disabled=hubBusy||!hubState||hubState.running!==false||!hubState.connected||hubState.uncertain||hubState.management?.can_trade!==true;
+ $('hubStopBtn').disabled=hubBusy||!hubState||hubState.running!==true;
+ $('hubConnectBtn').disabled=hubBusy||hubState?.running===true;
+ $('hubSaveBtn').disabled=hubBusy||hubState?.running===true;
+ $('hubLogoutBtn').disabled=hubBusy||hubState?.running===true||hubState?.uncertain===true;
+ $('hubRefreshBtn').disabled=hubBusy;
+ $('hubLoginBtn').disabled=hubBusy;
+}
+function hubLockData(){
+ $('hubControlArea').hidden=true;$('hubLoginForm').hidden=false;
+ hubCsrf='';hubState=null;hubLoadedConfig=false;
+ officeSnapshot=null;bridgeLinked=false;hubHaveBaseline=false;hubLastWins.clear();
+ $('realBridgePanel').hidden=true;
+ $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
+ hubNote('Entre com a chave do painel para acessar os controles de sua conta.',false);
+ $('hubStartBtn').disabled=true;$('hubStopBtn').disabled=true;
+ refreshPipeline();
+}
+function hubApplyConfig(c){
+ if(!c)return;
+ for(const [name,id] of Object.entries(hubIds))if(c[name]!==undefined&&c[name]!==null)$(id).value=String(c[name]);
+ $('hubStopWinEnabled').checked=c.stop_win_enabled!==false;
+ $('hubStopLossEnabled').checked=c.stop_loss_enabled!==false;
+}
+function hubLoadLive(p){
+ if(!p)return;
+ const newWins=(p.trades||[]).filter(t=>t&&t.status==='WIN'&&t.id!==undefined).map(t=>String(t.id));
+ if(!hubHaveBaseline){hubLastWins=new Set(newWins);hubHaveBaseline=true;}
+ else for(const trade of (p.trades||[])){
+  if(trade.status!=='WIN'||trade.id===undefined||hubLastWins.has(String(trade.id)))continue;
+  hubLastWins.add(String(trade.id));
+  if(hubLastWins.size>200)hubLastWins=new Set(newWins);
+  celebrateWin({name:'Equipe Xtreme Tiger',v:Number(trade.profit||0),currency:p.currency||'USD',source:'BULLEX_PRACTICE'});
+ }
+ hubState=p;hubCsrf=p.csrf||hubCsrf;
+ // Live stats have a distinct data source. The local synthetic engine is paused.
+ officeSnapshot=p;bridgeLinked=true;
+ $('hubLoginForm').hidden=true;$('hubControlArea').hidden=false;
+ $('brokerState').textContent=p.connected?'PRACTICE · CONECTADA':'PRACTICE · DESCONECTADA';
+ $('hubConnectForm').hidden=p.connected===true;
+ const m=p.management||{},stats=[
+  ['Conta','PRACTICE'],['Conexão',p.connected?'✅ Conectada':'Desconectada'],
+  ['Saldo DEMO',officeMoney(p.balance,p.currency||'USD')],
+  ['Resultado diário',officeMoney(m.profit||0,p.currency||'USD')],
+  ['WIN/LOSS',String(m.wins||0)+' / '+String(m.losses||0)],
+  ['Motor',p.running?'RODANDO':p.uncertain?'⚠️ INCERTO':'PARADO']];
+ const host=$('hubStats');host.replaceChildren();
+ for(const [name,value] of stats){
+  const el=document.createElement('div'),label=document.createTextNode(name),b=document.createElement('b');
+  b.textContent=value;el.append(label,b);host.append(el);
+ }
+ $('hubControlState').textContent=(p.running?'🟢 Robô operando na conta DEMO. ':p.connected?'🟡 Conectado, robô parado. ':'🔴 Entre na conta PRACTICE para conectar. ')+(p.uncertain?'ATENÇÃO: possível ordem pendente. Confira na corretora. ':'')+String(p.message||'');
+ $('hubAssets').replaceChildren(...(p.assets||[]).slice(0,200).map(a=>{const op=document.createElement('option');op.value=a;return op}));
+ if(!hubLoadedConfig&&!p.running){hubApplyConfig(p.config);hubLoadedConfig=true;}
+ officeRefreshUI();hubLockButtons();
+}
+async function hubRefresh(){
+ if(hubRefreshing)return;hubRefreshing=true;
+ try{
+  const p=await hubApi('state');
+  hubLoadLive(p);
+ }catch(e){
+  if(e.code===401){hubLockData();}
+  else{
+   $('hubControlState').textContent='Não foi possível confirmar o estado atual. Controles bloqueados: '+e.message;
+   hubState=null;hubLockButtons();officeSnapshot=null;refreshPipeline();
+   hubNote('Servidor sem confirmação. Não repita uma ordem: verifique o histórico na corretora.',true);
+  }
+ }finally{hubRefreshing=false;}
+}
+async function hubExecute(name,payload,success){
+ if(hubBusy)return;
+ hubBusy=true;hubLockButtons();hubNote('Solicitando ao servidor: '+name+'…');
+ try{
+  const result=await hubApi(name,payload);
+  if(result?.error)throw Error(result.error);
+  hubNote(success||'Solicitação enviada. Confirmando estado no servidor…');
+ }catch(e){hubNote('Falha: '+e.message,true);}
+ finally{hubBusy=false;hubState=null;hubLockButtons();await hubRefresh();}
+}
+$('hubLoginForm').onsubmit=async e=>{
+ e.preventDefault();if(hubBusy)return;hubBusy=true;hubLockButtons();
+ const secret=$('hubAccessKey').value;$('hubAccessKey').value='';
+ try{
+  const p=await hubApi('access',{key:secret});
+  hubCsrf=p.csrf;hubNote('Sessão autenticada. Lendo a conta DEMO…');
+  await hubRefresh();
+ }catch(err){hubNote('Não foi possível entrar: '+err.message,true);}
+ finally{hubBusy=false;hubLockButtons();}
+};
+$('hubConnectForm').onsubmit=async e=>{
+ e.preventDefault();if(hubBusy)return;
+ const email=$('hubEmail').value.trim(),password=$('hubPassword').value;
+ $('hubPassword').value='';
+ await hubExecute('connect',{email,password,reviewed:$('hubReviewed').checked},'Conexão solicitada. Verificando PRACTICE e velas…');
+};
+$('hubConfigForm').onsubmit=async e=>{
+ e.preventDefault();if(hubBusy)return;
+ const c={};
+ for(const [name,id] of Object.entries(hubIds))c[name]=['stake','payout','stop_win','stop_loss','limit'].includes(name)?Number($(id).value):$(id).value.trim();
+ c.asset=c.asset.toUpperCase();c.stop_win_enabled=$('hubStopWinEnabled').checked;c.stop_loss_enabled=$('hubStopLossEnabled').checked;
+ await hubExecute('config',c,'Configurações aceitas pelo servidor.');
+ if(hubState)hubApplyConfig(hubState.config);
+};
+$('hubStartBtn').onclick=async()=>{
+ if(!hubState||hubBusy||!hubState.connected||hubState.running||hubState.uncertain||!hubState.management?.can_trade)return;
+ const c=hubState.config||{};
+ if(!confirm('Iniciar operações automáticas SOMENTE na conta PRACTICE?\nEstratégia: '+String(c.strategy)+'\nValor por ordem: '+String(c.stake)+' '+String(hubState.currency||'USD')+'\nLimite por dia: '+String(c.limit)+'\n\nConfira antes de continuar.'))return;
+ await hubExecute('start',{},'Início solicitado. Aguarde o status confirmado do servidor.');
+};
+$('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada solicitada. Uma ordem já enviada continuará sendo acompanhada até o resultado.');};
+$('hubRefreshBtn').onclick=hubRefresh;
+$('hubLogoutBtn').onclick=async()=>{
+ if(hubBusy||hubState?.running||hubState?.uncertain)return;
+ await hubExecute('logout',{},'Saindo do painel…');hubLockData();
+};
+hubRefresh();
+hubPolling=setInterval(()=>{if(!document.hidden&&!hubBusy)hubRefresh();},3500);
+
+frame();
+</script></body></html>
