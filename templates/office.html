@@ -1,5 +1,10 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101c2a"><title>Xtreme Tiger | Escritório de Controle Bullex DEMO</title>
-<style>*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#e5f4f5;font:14px system-ui,sans-serif}header{padding:12px 16px;background:#152536;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}h1{font-size:18px;margin:0}small,.hint{color:#a6bfc6}button{border:1px solid #476270;background:#233d4b;color:#eefbfb;padding:10px 13px;border-radius:9px;cursor:pointer}button.primary{background:#19795f;border-color:#2ebc90}button:disabled{opacity:.5}main{max-width:1300px;margin:auto;padding:12px}.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.room{background:#132b39;border:1px solid #46657a;border-radius:13px;padding:14px;min-width:0}.room h3{margin:0 0 8px}.room .roomdesc{font-size:12px;color:#a6bfc6;margin-bottom:10px}.room small{display:block;padding:5px 0;border-bottom:1px solid #294453}.lab40Controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:10px 0}.lab40Controls label{font-size:12px;flex:1;min-width:120px;color:#b5dce0}.lab40Controls input{width:100%;display:block;background:#0e2634;border:1px solid #587080;border-radius:8px;color:#fff;padding:9px;margin-top:4px}.lab40Controls button{white-space:normal}.lab40List{max-height:390px;overflow:auto;border:1px solid #305165;border-radius:9px;padding:5px}.lab40List .pipelineItem{align-items:center}.lab40List .pipelineItem span:first-child{flex:1;min-width:0}.lab40List .pipelineItem span:last-child{text-align:right;min-width:90px}.lab40Help{font-size:12px;color:#a8c6cd;padding:8px 0}@media(max-width:700px){.lab40List{max-height:330px}}.pipelineItem{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #304a5d;padding:5px 0;font-size:12px}.pipelineItem .approved{color:#54e6ad}.pipelineItem .rejected{color:#edb5ac}.roomStats{display:flex;gap:12px;flex-wrap:wrap;color:#b8e6ef;font-size:13px;margin:9px 0}.roomStats b{color:#81edb7}.pairRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}.pairRow input{flex:1;min-width:190px;background:#0c1d2a;color:#effff6;border:1px solid #4c7584;border-radius:9px;padding:10px}.bridgeMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}.bridgeMetrics span{padding:10px;border:1px solid #335368;background:#132c38;border-radius:8px}.bridgeMetrics b{display:block;font-size:19px;color:#89edc5}.brokerTrade{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #365061;padding:7px 0;font-size:12px}.bridgePanel{margin:12px 0;background:#102c3b;border:1px solid #3b8378;border-radius:11px;padding:13px}.bridgePanel[hidden]{display:none}#localStats[hidden]{display:none}#simHistory[hidden],#simHistoryTitle[hidden]{display:none}@media(max-width:620px){.bridgeMetrics{grid-template-columns:1fr 1fr}}
+<style>*{box-sizing:border-box}body{margin:0;background:#0b1420;color:#e5f4f5;font:14px system-ui,sans-serif}header{padding:12px 16px;background:#152536;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}h1{font-size:18px;margin:0}small,.hint{color:#a6bfc6}button{border:1px solid #476270;background:#233d4b;color:#eefbfb;padding:10px 13px;border-radius:9px;cursor:pointer}button.primary{background:#19795f;border-color:#2ebc90}button:disabled{opacity:.5}main{max-width:1300px;margin:auto;padding:12px}.fullscreenMode:fullscreen{background:#0b1420;overflow:auto;height:100vh}
+html:fullscreen body{min-height:100vh}
+html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none}
+#fullScreenToggle{background:#284b52;border-color:#6aadb6}
+#liveChartRefresh:disabled{opacity:.4}
+.controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rooms{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.room{background:#132b39;border:1px solid #46657a;border-radius:13px;padding:14px;min-width:0}.room h3{margin:0 0 8px}.room .roomdesc{font-size:12px;color:#a6bfc6;margin-bottom:10px}.room small{display:block;padding:5px 0;border-bottom:1px solid #294453}.lab40Controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:10px 0}.lab40Controls label{font-size:12px;flex:1;min-width:120px;color:#b5dce0}.lab40Controls input{width:100%;display:block;background:#0e2634;border:1px solid #587080;border-radius:8px;color:#fff;padding:9px;margin-top:4px}.lab40Controls button{white-space:normal}.lab40List{max-height:390px;overflow:auto;border:1px solid #305165;border-radius:9px;padding:5px}.lab40List .pipelineItem{align-items:center}.lab40List .pipelineItem span:first-child{flex:1;min-width:0}.lab40List .pipelineItem span:last-child{text-align:right;min-width:90px}.lab40Help{font-size:12px;color:#a8c6cd;padding:8px 0}@media(max-width:700px){.lab40List{max-height:330px}}.pipelineItem{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid #304a5d;padding:5px 0;font-size:12px}.pipelineItem .approved{color:#54e6ad}.pipelineItem .rejected{color:#edb5ac}.roomStats{display:flex;gap:12px;flex-wrap:wrap;color:#b8e6ef;font-size:13px;margin:9px 0}.roomStats b{color:#81edb7}.pairRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px}.pairRow input{flex:1;min-width:190px;background:#0c1d2a;color:#effff6;border:1px solid #4c7584;border-radius:9px;padding:10px}.bridgeMetrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}.bridgeMetrics span{padding:10px;border:1px solid #335368;background:#132c38;border-radius:8px}.bridgeMetrics b{display:block;font-size:19px;color:#89edc5}.brokerTrade{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #365061;padding:7px 0;font-size:12px}.bridgePanel{margin:12px 0;background:#102c3b;border:1px solid #3b8378;border-radius:11px;padding:13px}.bridgePanel[hidden]{display:none}#localStats[hidden]{display:none}#simHistory[hidden],#simHistoryTitle[hidden]{display:none}@media(max-width:620px){.bridgeMetrics{grid-template-columns:1fr 1fr}}
 #brokerLinkControl{display:none}
 #localStats,#simHistory,#simHistoryTitle{display:none}
 .controls>#start,.controls>#pause,.controls>#reset{display:none}
@@ -26,7 +31,8 @@
 .statusNote{background:#152938;border:1px solid #43616f;border-radius:9px;padding:12px;margin:10px 0;font-size:13px}#brokerDetails{margin-top:9px;line-height:1.6}#brokerDetails[hidden]{display:none}@media(max-width:700px){.rooms{grid-template-columns:1fr}}.cameraTools{width:100%;background:#152837;border:1px solid #344f60;border-radius:9px;padding:8px 11px}.cameraTools summary{cursor:pointer;font-weight:600;color:#b6dde3}.cameraTools .controls{padding-top:10px;margin:0}.stage{height:min(66vh,720px);min-height:390px;border:1px solid #405e70;position:relative;overflow:hidden;border-radius:15px;background:linear-gradient(#1b3344,#475f70)}#scene{width:100%;height:100%;display:block;touch-action:none}.board{position:absolute;top:10px;left:10px;background:#071b27e8;border:1px solid #60d4a6;border-radius:10px;padding:10px 12px;max-width:min(330px,75%);pointer-events:none}.screenInspector{display:none;position:absolute;z-index:15;top:56px;right:10px;width:min(390px,calc(100% - 20px));max-height:calc(100% - 68px);overflow:auto;background:#071c29f2;border:1px solid #70cdb0;border-radius:14px;box-shadow:0 12px 42px #000a;padding:13px 14px;backdrop-filter:blur(9px);pointer-events:auto}.screenInspector.open{display:block}.screenInspector h3{margin:0 0 7px;font-size:17px;color:#bdf6dc}.screenInspector .inspectorHeader{display:flex;gap:8px;align-items:center;justify-content:space-between}.screenInspector .inspectorHeadButtons{display:flex;gap:5px}.screenInspector button{padding:7px 9px}.screenInspector .summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:9px 0}.screenInspector .summary span{background:#18394a;padding:8px;border-radius:7px;font-size:12px}.screenInspector .summary b{font-size:15px;color:#a9f3c6}.screenInspector .miniOp{padding:6px;border-bottom:1px solid #2c5263;font-size:12px}.screenInspector .miniOp strong{font-weight:700}.confettiPiece{position:absolute;z-index:14;pointer-events:none;top:-20px;width:9px;height:14px;animation:fallConfetti var(--dur,2.5s) linear forwards;transform:rotate(0)}@keyframes fallConfetti{to{top:110%;transform:translateX(var(--dx,0px)) rotate(var(--turn,620deg));opacity:0}}.winToast{display:none;position:absolute;z-index:16;top:20%;left:50%;transform:translateX(-50%);width:max-content;max-width:90%;padding:13px 18px;border-radius:16px;background:#103828ee;border:2px solid #73f4a9;color:#dcffe9;font-weight:900;font-size:24px;pointer-events:none;text-align:center;box-shadow:0 8px 25px #000a}.winToast.active{display:block;animation:winPulse .25s ease-out}@keyframes winPulse{from{transform:translateX(-50%) scale(.75)}to{transform:translateX(-50%) scale(1)}}.board strong{display:block;color:#75f1b9;font-size:12px}.board span{display:block;font-size:13px}.info{position:absolute;right:10px;bottom:10px;background:#071b27db;border-radius:8px;padding:8px 10px;pointer-events:none;font-size:12px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.stat,.panel{background:#182d3d;border:1px solid #345364;padding:13px;border-radius:11px}.stat b{display:block;font-size:23px}.stat span{font-size:12px;color:#a6bfc6}.win{color:#5bdfaa}.loss{color:#ff8f93}.panel{margin:12px 0}section{overflow:auto}table{width:100%;border-collapse:collapse;min-width:520px}td,th{text-align:left;border-bottom:1px solid #304859;padding:9px}th{color:#b3cbd4}.hint{font-size:12px}#fallback{display:none;position:absolute;inset:30% 8%;text-align:center} @media(max-width:620px){.stage{height:62vh;min-height:440px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.board{padding:8px}.board span{font-size:12px}}</style>
 <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/"}}</script></head>
 <body><header><h1>🐯 XTREME TIGER <small>· Escritório 3D</small></h1><b class="win">● BULLEX PRACTICE</b></header><main>
-<div class="controls"><button id="start" class="primary">▶ Iniciar fluxo DEMO</button><button id="pause">⏸ Pausar</button><button id="reset">↺ Zerar</button><button id="camera">🎥 Vista geral</button><details class="cameraTools"><summary>🎥 Mais câmeras e desempenho</summary><div class="controls"><button id="camLeft">🏢 Sala esquerda</button><button id="camRight">📈 Sala direita</button><button id="camHall">🚶 Corredor</button><button id="camLounge">☕ Recepção</button><button id="quality">⚙️ Qualidade: Auto</button></div></details><button id="soundToggle" aria-pressed="false">🔇 Ativar sons</button><button id="phoneTest" title="Ouvir agora o telefone da recepção">☎️ Testar telefone</button><button id="avatarTest" class="primary">↩ Ver equipe original</button><small id="avatarStatus" aria-live="polite">🐯 Equipe Tiger · 6 homens e 6 mulheres · rodízio automático</small><small>Arraste para girar · toque numa TV/monitor para ampliar · no foco, arraste para centralizar</small></div>
+<div class="controls"><button id="start" class="primary">▶ Iniciar fluxo DEMO</button><button id="pause">⏸ Pausar</button><button id="reset">↺ Zerar</button><button id="camera">🎥 Vista geral</button><button id="fullScreenToggle" title="Expandir o escritório para ocupar a tela">⛶ Tela cheia</button>
+<button id="liveChartRefresh" title="Atualizar velas PRACTICE com robô parado" disabled>📡 Atualizar gráfico</button><details class="cameraTools"><summary>🎥 Mais câmeras e desempenho</summary><div class="controls"><button id="camLeft">🏢 Sala esquerda</button><button id="camRight">📈 Sala direita</button><button id="camHall">🚶 Corredor</button><button id="camLounge">☕ Recepção</button><button id="quality">⚙️ Qualidade: Auto</button></div></details><button id="soundToggle" aria-pressed="false">🔇 Ativar sons</button><button id="phoneTest" title="Ouvir agora o telefone da recepção">☎️ Testar telefone</button><button id="avatarTest" class="primary">↩ Ver equipe original</button><small id="avatarStatus" aria-live="polite">🐯 Equipe Tiger · 6 homens e 6 mulheres · rodízio automático</small><small>Arraste para girar · toque numa TV/monitor para ampliar · no foco, arraste para centralizar</small></div>
 <div class="stage"><canvas id="scene"></canvas><div id="fallback">Não foi possível carregar o motor 3D. Verifique a conexão com a internet.</div><div class="board"><strong>🐯 XTREME TIGER · LOUSA DIGITAL</strong><span id="headline">Equipe analisando o mercado fictício…</span></div><div class="info">🏙️ 2 salas de luxo · Toque numa tela para visualizar</div><div id="inspector" class="screenInspector" role="region" aria-label="Resultados na tela"><div class="inspectorHeader"><h3 id="screenTitle">📊 Tela</h3><div class="inspectorHeadButtons"><button id="focusReset">🎯</button><button id="closeInspector" aria-label="Fechar inspeção">✕</button></div></div><small id="screenSource">SIMULAÇÃO · Sem corretora</small><div class="summary" id="screenSummary"></div><strong id="inspectorListTitle">Últimas operações nesta tela</strong><div id="screenOps"></div><small>Arraste sobre o cenário para deslocar o foco. Pinça para zoom. Volte ao escritório para girar 360°.</small></div><div id="winToast" class="winToast" aria-live="polite"></div></div>
 <div class="statusNote" id="brokerLinkControl"><strong>🔌 Bullex DEMO: <span id="brokerState" class="loss">NÃO VINCULADA</span></strong> · Visualização em tempo real do bot, sem enviar ordens pelo escritório.
 <div class="pairRow"><input id="officePairCode" type="text" placeholder="Cole o código gerado no bot Bullex" maxlength="256" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="bindOffice" class="primary">🔗 Vincular DEMO</button><button id="unbindOffice" hidden>Desvincular</button></div><small id="brokerMessage" aria-live="polite">Abra seu bot Bullex DEMO, entre com a chave do painel, toque em “Gerar código para o escritório” e cole aqui. O código é de uso único.</small><div style="margin-top:8px"><a href="https://xtreme-bullex-demo.onrender.com" target="_blank" rel="noopener noreferrer" style="color:#a1eed1">Abrir bot Bullex DEMO para gerar código</a></div>
@@ -898,16 +904,33 @@ function restoreDemoHistory(){
 restoreDemoHistory();
 refreshPipeline();
 const isMobile=matchMedia('(max-width: 750px)').matches;
-const qualityModes=['Auto','Econômica','Alta'];let qualityIndex=isMobile?1:0,qualityFps=0;let fpsFrames=0,fpsLast=0;
-renderer.setPixelRatio(Math.min(devicePixelRatio,isMobile?.72:1.15));
-renderer.shadowMap.enabled=!isMobile;
-sun.castShadow=!isMobile;
-$('quality').textContent='⚙️ Qualidade: '+(isMobile?'Econômica · 20 fps':'Auto');
+const weakDesktop=!isMobile&&((navigator.hardwareConcurrency||8)<=4||(navigator.deviceMemory||8)<=4);
+const qualityModes=['Auto','Econômica','Alta','Ultraleve'];
+let qualityIndex=isMobile?1:weakDesktop?3:0,qualityFps=0;let fpsFrames=0,fpsLast=0;
+renderer.setPixelRatio(Math.min(devicePixelRatio,qualityIndex===3?.55:isMobile?.72:1.15));
+renderer.shadowMap.enabled=!isMobile&&!weakDesktop;
+sun.castShadow=renderer.shadowMap.enabled;
+$('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex]+(qualityIndex===3?' · 12 fps':'');
+$('fullScreenToggle').onclick=async()=>{
+ try{
+  if(document.fullscreenElement){
+   await document.exitFullscreen();
+  }else if(document.documentElement.requestFullscreen){
+   await document.documentElement.requestFullscreen();
+  }else{
+   $('hubFeedback').textContent='Tela cheia não disponível neste navegador. Use F11 no computador.';
+  }
+ }catch(e){$('hubFeedback').textContent='Não foi possível expandir. Tente F11 no computador.';}
+};
+document.addEventListener('fullscreenchange',()=>{
+ $('fullScreenToggle').textContent=document.fullscreenElement?'⤢ Sair da tela cheia':'⛶ Tela cheia';
+ resize();
+});
 $('quality').onclick=()=>{
  qualityIndex=(qualityIndex+1)%qualityModes.length;
- const ratio=qualityIndex===1?Math.min(devicePixelRatio,isMobile?.72:1):qualityIndex===2?Math.min(devicePixelRatio,isMobile?1.15:1.5):Math.min(devicePixelRatio,isMobile?.9:1.25);
+ const ratio=qualityIndex===3?Math.min(devicePixelRatio,.55):qualityIndex===1?Math.min(devicePixelRatio,isMobile?.72:.80):qualityIndex===2?Math.min(devicePixelRatio,isMobile?1.15:1.5):Math.min(devicePixelRatio,isMobile?.9:1.25);
  renderer.setPixelRatio(ratio);
- renderer.shadowMap.enabled=qualityIndex===2||(!isMobile&&qualityIndex===0);
+ renderer.shadowMap.enabled=qualityIndex===2||(!isMobile&&!weakDesktop&&qualityIndex===0);
  sun.castShadow=renderer.shadowMap.enabled;
  $('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex];
  fpsLast=0;fpsFrames=0;resize();
@@ -1272,7 +1295,7 @@ function frame(){
  requestAnimationFrame(frame);
  if(document.hidden||!sceneVisible){fpsLast=0;fpsFrames=0;return;}
  const nowFrame=performance.now();
- const targetFps=isMobile?(qualityIndex===2?27:20):(qualityIndex===2?55:qualityIndex===1?25:35);
+ const targetFps=qualityIndex===3?12:isMobile?(qualityIndex===2?27:20):(qualityIndex===2?50:qualityIndex===1?20:30);
  if(nowFrame-lastRenderedAt<1000/targetFps)return;
  lastRenderedAt=nowFrame;
  const t=clock.getElapsedTime();updateTeam(t);
@@ -1285,7 +1308,7 @@ restroomDoorAmount+=(Number(bathroomNear)-restroomDoorAmount)*.085;restroomDoor.
   if(now-fpsLast>=4000){
    const fps=Math.round(fpsFrames*1000/(now-fpsLast));
    qualityFps=fps;const cap=Math.min(devicePixelRatio,isMobile?1.25:1.5),ratio=renderer.getPixelRatio();
-   if(fps<24&&ratio>.82)renderer.setPixelRatio(Math.max(.82,ratio-.13));
+   if(fps<24&&ratio>.65)renderer.setPixelRatio(Math.max(.65,ratio-.13));
    else if(fps>47&&ratio<cap-.04)renderer.setPixelRatio(Math.min(cap,ratio+.06));
    $('quality').textContent='⚙️ Qualidade: Auto · '+fps+' fps';
    fpsLast=now;fpsFrames=0;
@@ -1314,6 +1337,7 @@ function hubLockButtons(){
  $('hubLogoutBtn').disabled=hubBusy||hubState?.running===true||hubState?.uncertain===true;
  $('hubRefreshBtn').disabled=hubBusy;
  $('hubLoginBtn').disabled=hubBusy;
+ $('liveChartRefresh').disabled=hubBusy||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('lab40Run').disabled=hubBusy||lab40Working||!hubState?.connected||hubState?.running||hubState?.uncertain;
 }
 function hubLockData(){
@@ -1323,7 +1347,7 @@ function hubLockData(){
  $('realBridgePanel').hidden=true;
  $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
  hubNote('Entre com a chave do painel para acessar os controles de sua conta.',false);
- $('hubStartBtn').disabled=true;$('hubStopBtn').disabled=true;$('lab40Run').disabled=true;
+ $('hubStartBtn').disabled=true;$('hubStopBtn').disabled=true;$('lab40Run').disabled=true;$('liveChartRefresh').disabled=true;
  refreshPipeline();
 }
 function hubApplyConfig(c){
@@ -1428,6 +1452,21 @@ $('hubLogoutBtn').onclick=async()=>{
  await hubExecute('logout',{},'Saindo do painel…');hubLockData();
 };
 
+$('liveChartRefresh').onclick=async()=>{
+ if(hubBusy||!hubState?.connected||hubState?.running||hubState?.uncertain){
+  hubNote('Atualização manual disponível só com conta PRACTICE conectada e robô parado. Durante operações, o gráfico usa velas do streaming.',true);
+  return;
+ }
+ hubBusy=true;hubLockButtons();
+ hubNote('Consultando velas M1 reais da Bullex PRACTICE... Aguarde alguns segundos.');
+ try{
+  const asset=hubState?.config?.asset;
+  const r=await hubApi('office/chart/refresh',{asset});
+  hubNote('Recebidas '+r.count+' velas M1 fechadas de '+r.asset+' na recepção.');
+  await hubRefresh();
+ }catch(e){hubNote('Não foi possível atualizar o gráfico: '+e.message,true);}
+ finally{hubBusy=false;hubLockButtons();}
+};
 const LAB40_CACHE_KEY='xtreme-tiger-lab40-validated-v1';
 function lab40Message(message){$('lab40Status').textContent=message;}
 function lab40Use(result,fromCache=false){
