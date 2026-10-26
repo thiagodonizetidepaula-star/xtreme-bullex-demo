@@ -105,9 +105,13 @@
 import * as THREE from 'three';import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 const $=id=>document.getElementById(id), canvas=$('scene'),scene=new THREE.Scene();scene.background=new THREE.Color('#314858');scene.fog=new THREE.Fog('#314858',24,48);
 const camera=new THREE.PerspectiveCamera(48,1,.1,100);camera.position.set(0,12.6,22);
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'low-power'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
+// Lower GPU usage on Android; rendering and account controls remain separate.
+const mobileGpu=matchMedia('(max-width: 750px)').matches;
+const renderer=new THREE.WebGLRenderer({canvas,antialias:!mobileGpu,powerPreference:'low-power'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,mobileGpu?.72:1.15));
+renderer.shadowMap.enabled=!mobileGpu;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.1,1.4);controls.enableDamping=true;controls.maxPolarAngle=Math.PI/2.05;controls.minDistance=7;controls.maxDistance=34;controls.enablePan=false;controls.update();
-scene.add(new THREE.HemisphereLight(0xddeeff,0x526474,1.65));const sun=new THREE.DirectionalLight(0xffefdc,2.8);sun.position.set(13,13,4);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-20;sun.shadow.camera.right=20;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-18;sun.shadow.bias=-0.0004;sun.shadow.normalBias=.018;scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xddeeff,0x526474,1.65));const sun=new THREE.DirectionalLight(0xffefdc,2.8);sun.position.set(13,13,4);sun.castShadow=!mobileGpu;sun.shadow.mapSize.set(mobileGpu?512:1024,mobileGpu?512:1024);sun.shadow.camera.left=-20;sun.shadow.camera.right=20;sun.shadow.camera.top=18;sun.shadow.camera.bottom=-18;sun.shadow.bias=-0.0004;sun.shadow.normalBias=.018;scene.add(sun);
 const mat=(color,metalness=0)=>new THREE.MeshStandardMaterial({color,metalness,roughness:.65});const wood=mat('#927052'),steel=mat('#3d5567',.4),screen=mat('#0f2635',.1),green=mat('#3ce6ac'),wall=mat('#617d88'),tile=mat('#85969a'),chair=mat('#243b4b');
 function box(w,h,d,m,x,y,z,parent=scene){const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh}
 function ball(r,m,x,y,z,parent=scene){const mesh=new THREE.Mesh(new THREE.SphereGeometry(r,12,10),m);mesh.position.set(x,y,z);mesh.castShadow=true;parent.add(mesh);return mesh}
@@ -804,14 +808,19 @@ function restoreDemoHistory(){
 restoreDemoHistory();
 refreshPipeline();
 const isMobile=matchMedia('(max-width: 750px)').matches;
-const qualityModes=['Auto','Econômica','Alta'];let qualityIndex=0,qualityFps=0;let fpsFrames=0,fpsLast=0;
+const qualityModes=['Auto','Econômica','Alta'];let qualityIndex=isMobile?1:0,qualityFps=0;let fpsFrames=0,fpsLast=0;
+renderer.setPixelRatio(Math.min(devicePixelRatio,isMobile?.72:1.15));
+renderer.shadowMap.enabled=!isMobile;
+sun.castShadow=!isMobile;
+$('quality').textContent='⚙️ Qualidade: '+(isMobile?'Econômica · 20 fps':'Auto');
 $('quality').onclick=()=>{
  qualityIndex=(qualityIndex+1)%qualityModes.length;
- const ratio=qualityIndex===1?1:qualityIndex===2?Math.min(devicePixelRatio,1.7):Math.min(devicePixelRatio,isMobile?1.25:1.5);
+ const ratio=qualityIndex===1?Math.min(devicePixelRatio,isMobile?.72:1):qualityIndex===2?Math.min(devicePixelRatio,isMobile?1.15:1.5):Math.min(devicePixelRatio,isMobile?.9:1.25);
  renderer.setPixelRatio(ratio);
- renderer.shadowMap.enabled=qualityIndex!==1;
- $('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex];fpsLast=0;fpsFrames=0;
- resize();
+ renderer.shadowMap.enabled=qualityIndex===2||(!isMobile&&qualityIndex===0);
+ sun.castShadow=renderer.shadowMap.enabled;
+ $('quality').textContent='⚙️ Qualidade: '+qualityModes[qualityIndex];
+ fpsLast=0;fpsFrames=0;resize();
 };
 function resize(){const r=canvas.getBoundingClientRect();if(r.width&&r.height){camera.aspect=r.width/r.height;camera.updateProjectionMatrix();renderer.setSize(r.width,r.height,false)}}new ResizeObserver(resize).observe(canvas);resize();
 // Xtreme Tiger team: twelve distinct original stylized executives (six women, six men).
@@ -1164,7 +1173,19 @@ $('avatarTest').onclick=()=>{
  else $('avatarStatus').textContent='Equipe original de 12 traders · versão anterior';
 };
 updateShift(0);
-const clock=new THREE.Clock();function frame(){requestAnimationFrame(frame);const t=clock.getElapsedTime();if(document.hidden){fpsLast=0;fpsFrames=0;return}updateTeam(t);
+const clock=new THREE.Clock();// Render 3D only while on screen, without blocking the separate controls.
+let sceneVisible=true,lastRenderedAt=0;
+if('IntersectionObserver' in window){
+ new IntersectionObserver(entries=>{sceneVisible=entries.some(entry=>entry.isIntersecting&&entry.intersectionRatio>.03);},{threshold:[0,.05]}).observe(canvas);
+}
+function frame(){
+ requestAnimationFrame(frame);
+ if(document.hidden||!sceneVisible){fpsLast=0;fpsFrames=0;return;}
+ const nowFrame=performance.now();
+ const targetFps=isMobile?(qualityIndex===2?27:20):(qualityIndex===2?55:qualityIndex===1?25:35);
+ if(nowFrame-lastRenderedAt<1000/targetFps)return;
+ lastRenderedAt=nowFrame;
+ const t=clock.getElapsedTime();updateTeam(t);
 for(const car of exteriorTraffic){let z=car.initial+t*car.speed;z=((z+11)%25+25)%25-11;car.group.position.z=z;}
 const bathroomNear=team.some(p=>p.role==='bathroom'||Math.abs(p.group.position.x-2.45)<1.35&&Math.abs(p.group.position.z-7.60)<1.3);
 restroomDoorAmount+=(Number(bathroomNear)-restroomDoorAmount)*.085;restroomDoor.rotation.y=-restroomDoorAmount*1.55;people.forEach((p,i)=>{const cycle=(t*.22+i*1.41)%(Math.PI*2);const going=false;p.walk=false;p.group.position.set(p.x,0,p.z+1);p.group.rotation.y=Math.PI;p.head.rotation.z=Math.sin(t*2+i)*.06;p.head.rotation.x=.12+Math.sin(t*.9+i)*.025;p.head.scale.y=(Math.sin(t*1.6+i*1.8)>.995?.94:1);p.smile.scale.x=t<p.celebrate?(p.win?1.4:.55):1;signals[i].material.opacity=Math.max(0,Math.min(1,(p.celebrate-t)*1.5));signals[i].position.y=2.38+(signals[i].material.opacity?Math.sin(t*5)*.055:0);p.arms.forEach((arm,k)=>{arm.rotation.z=(k===0?-.09:.09)+(t<p.celebrate?Math.sin(t*4+i)*.08:Math.sin(t*8+i+k*Math.PI)*.045);arm.rotation.x=-1.2+Math.sin(t*9+i+k*Math.PI)*.065});p.legs.forEach((leg,k)=>{leg.rotation.x=going?Math.sin(t*8+i+k*Math.PI)*.3:0})});controls.update();renderer.render(scene,camera);
@@ -1222,6 +1243,7 @@ function hubApplyConfig(c){
 }
 function hubLoadLive(p){
  if(!p)return;
+ if(p.source!=='XTREME_BULLEX_DEMO_BACKEND'||p.mode!=='PRACTICE')throw Error('Servidor não confirmou modo PRACTICE.');
  const newWins=(p.trades||[]).filter(t=>t&&t.status==='WIN'&&t.id!==undefined).map(t=>String(t.id));
  if(!hubHaveBaseline){hubLastWins=new Set(newWins);hubHaveBaseline=true;}
  else for(const trade of (p.trades||[])){
@@ -1255,7 +1277,7 @@ function hubLoadLive(p){
 async function hubRefresh(){
  if(hubRefreshing)return;hubRefreshing=true;
  try{
-  const p=await hubApi('state');
+  const p=await hubApi('office/overview');
   hubLoadLive(p);
  }catch(e){
   if(e.code===401){hubLockData();}
@@ -1313,7 +1335,7 @@ $('hubLogoutBtn').onclick=async()=>{
  await hubExecute('logout',{},'Saindo do painel…');hubLockData();
 };
 hubRefresh();
-hubPolling=setInterval(()=>{if(!document.hidden&&!hubBusy)hubRefresh();},3500);
+hubPolling=setInterval(()=>{if(!document.hidden&&!hubBusy)hubRefresh();},6500);
 
 frame();
 </script></body></html>
