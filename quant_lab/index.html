@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071821"><title>NOVA QUANT | Strategy Lab</title>
+<style>
+:root{--bg:#071821;--panel:#102833;--panel2:#16343d;--line:#25505c;--muted:#8bb0b8;--text:#effbfa;--mint:#65edbd;--cyan:#73cffa;--amber:#ffd188;--red:#ff858a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Arial,sans-serif;font-size:14px}
+body:before{content:"";position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 55% 60% at 85% -10%,#0e5a66aa,transparent),radial-gradient(ellipse 35% 50% at -10% 70%,#273f6c88,transparent)}
+header{position:sticky;top:0;z-index:4;backdrop-filter:blur(16px);background:#071821ec;border-bottom:1px solid #274955}
+.header{max-width:1500px;margin:auto;min-height:72px;padding:12px 24px;display:flex;gap:18px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:12px}.glyph{height:42px;width:42px;display:grid;place-items:center;background:linear-gradient(130deg,#67edbd,#6dc5fa);color:#071821;font-weight:900;font-size:24px;border-radius:13px;box-shadow:0 0 30px #55cdb039}
+.brand strong{font-size:20px;letter-spacing:2px}.brand small{display:block;font-size:10px;color:var(--muted);letter-spacing:3px;font-weight:700}
+.pill{border:1px solid var(--line);border-radius:30px;padding:7px 12px;font-size:11px;font-weight:800;letter-spacing:1px;color:var(--muted);white-space:nowrap}
+.pill.live{border-color:#57ccaa;color:var(--mint);background:#164436}.pill.warn{color:var(--amber);border-color:#917a48}
+main{max-width:1500px;margin:auto;padding:25px 24px 60px}.layout{display:grid;grid-template-columns:228px minmax(0,1fr);gap:24px;align-items:start}
+aside{position:sticky;top:103px}.asidePanel{padding:18px;border:1px solid var(--line);border-radius:18px;background:#0d2730}.asidePanel h3{font-size:11px;letter-spacing:2px;color:var(--muted);margin:4px 0 16px}
+.nav{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:13px 14px;margin:5px 0;color:var(--muted);border:0;border-radius:11px;background:transparent;cursor:pointer;font-weight:700}
+.nav.active{color:#031e1e;background:var(--mint)}.nav:hover:not(.active){background:#1a3b43;color:var(--text)}
+aside .hint{color:var(--muted);font-size:12px;line-height:1.7;border-top:1px solid var(--line);padding-top:16px;margin-top:22px}
+.sectionTitle{display:flex;justify-content:space-between;align-items:start;gap:12px;margin:5px 0 22px}
+.eyebrow{font-size:11px;color:var(--mint);letter-spacing:3px;font-weight:900}.sectionTitle h1{margin:9px 0;font-size:clamp(25px,3vw,39px);line-height:1.16;letter-spacing:-.8px}
+.lead{color:var(--muted);line-height:1.55;max-width:750px;margin:5px 0}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.card{border:1px solid var(--line);border-radius:17px;background:linear-gradient(165deg,#122e39,#0d2630);padding:21px;min-width:0}
+.card .label{color:var(--muted);font-size:11px;letter-spacing:1.2px;font-weight:700;text-transform:uppercase}.card .big{font-size:30px;font-weight:850;line-height:1.3;margin-top:11px;letter-spacing:-1.1px}
+.green{color:var(--mint)}.blue{color:var(--cyan)}.gold{color:var(--amber)}.red{color:var(--red)}
+.panels{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(290px,.85fr);gap:17px;margin-top:18px}.stack{display:grid;gap:17px;min-width:0}
+.panel{border:1px solid var(--line);border-radius:19px;background:linear-gradient(160deg,#102a35,#0b242e);padding:22px;min-width:0}
+.panel h2{font-size:17px;margin:0 0 10px;letter-spacing:-.2px}.subhead{color:var(--muted);font-size:12px;margin:0 0 17px;line-height:1.6}
+.flex{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}.minor{color:var(--muted);font-size:12px;line-height:1.5}
+.signal{padding:17px;background:#091f29;border:1px solid #2f6570;border-radius:14px;margin:13px 0}.signal .direction{font-size:29px;font-weight:900;letter-spacing:1px}
+.separator{height:1px;background:var(--line);margin:18px 0}.canvas{width:100%;height:230px;background:#09212b;border:1px solid #294c58;border-radius:12px}
+.tableWrap{overflow-x:auto}.table{width:100%;border-collapse:collapse;min-width:580px}.table th{text-align:left;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-size:10px;padding:14px 9px;border-bottom:1px solid var(--line)}
+.table td{padding:13px 9px;border-bottom:1px solid #224552;font-size:12px;white-space:nowrap}.table tbody tr:hover{background:#1b3b44}
+button{font:inherit;cursor:pointer}.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:11px;padding:12px 17px;background:var(--mint);color:#05232a;font-weight:850;border:1px solid transparent;min-height:44px}
+.btn:hover{filter:brightness(1.08)}.btn.secondary{background:#204651;color:#effbfa;border-color:#376572}.btn.danger{background:#58313c;color:#ffd9dd;border-color:#8b4759}
+.btn:disabled{opacity:.42;cursor:not-allowed}.btn.small{padding:8px 12px;min-height:36px;font-size:12px}
+input,select{display:block;width:100%;min-height:44px;padding:12px 13px;margin:8px 0 14px;border:1px solid #376171;border-radius:10px;background:#08222d;color:white;font:inherit;outline:none}
+input:focus,select:focus{border-color:var(--mint);box-shadow:0 0 0 2px #61ddb037}label{font-size:12px;color:var(--muted);font-weight:700}
+form .gridForm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.actionRow{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}.notice{border:1px solid #907f50;background:#5547253b;border-radius:12px;padding:14px;color:#ffe3ae;font-size:12px;line-height:1.65}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:12px;line-height:1.6;color:var(--text);margin:10px 0}.check input{width:17px;height:17px;margin:2px 0;flex-shrink:0;accent-color:var(--mint)}
+.empty{padding:34px 14px;text-align:center;color:var(--muted);border:1px dashed #355f6c;border-radius:12px}
+.tag{font-size:10px;letter-spacing:.7px;font-weight:900;border:1px solid #356672;color:#b9e8f1;background:#173a46;border-radius:6px;padding:5px 7px;display:inline-block}
+.tag.ok{border-color:#2c8c6c;color:#8bf5c3;background:#103b34}.tag.caution{border-color:#926c35;color:#ffdc9c;background:#393222}
+.labgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.hypothesis{border:1px solid #2b5361;background:#102c36;border-radius:14px;padding:17px}
+.hypothesis h3{font-size:15px;margin:12px 0 10px}.hypothesis .metric{font-size:22px;font-weight:800}.foot{font-size:12px;color:var(--muted);line-height:1.7;margin-top:26px}
+[hidden]{display:none!important}
+@media(max-width:1080px){.cards{grid-template-columns:repeat(2,1fr)}.panels{grid-template-columns:1fr}.layout{grid-template-columns:188px minmax(0,1fr)}}
+@media(max-width:700px){.header{padding:12px 15px}.header .pill{font-size:10px}.layout{display:block}main{padding:16px 12px 75px}aside{position:static;margin-bottom:18px}.asidePanel{padding:9px;display:flex;gap:4px;align-items:center;flex-wrap:wrap}.asidePanel h3,.asidePanel .hint{display:none}.nav{width:auto;flex:1;justify-content:center;font-size:11px;margin:0;padding:12px 5px}.panel,.card{padding:15px}.labgrid{grid-template-columns:1fr}.sectionTitle{display:block}.sectionTitle h1{font-size:28px}form .gridForm{grid-template-columns:1fr}.cards{gap:9px}.card .big{font-size:25px}}
+</style></head><body>
+<header><div class="header"><div class="brand"><div class="glyph">N</div><div><strong>NOVA QUANT</strong><small>STRATEGY LAB • M1 / M5</small></div></div><div class="flex"><span class="pill" id="connBadge">DESCONECTADO</span><span class="pill warn">BULLEX PRACTICE</span></div></div></header>
+<main><div class="layout">
+<aside><div class="asidePanel"><h3>PAINEL DE PESQUISA</h3><button class="nav active" data-tab="desk">◈ Mercado</button><button class="nav" data-tab="lab">◎ Laboratório</button><button class="nav" data-tab="broker">⚙ Conexão e risco</button><div class="hint">Este projeto tem motor, layout e serviço Render separados do Xtreme-Tiger. Não use a mesma conta Bullex nos dois robôs simultaneamente.</div></div></aside>
+<div>
+<section id="desk">
+<div class="sectionTitle"><div><div class="eyebrow">PAINEL DE INTELIGÊNCIA QUANTITATIVA</div><h1>Leitura ao vivo. Decisões com evidência.</h1><p class="lead">Bollinger, RSI 14, EMA 9/21 e ATR 14. Comparação de M1 e M5 usando velas reais fechadas. Os parâmetros são testados e reavaliados, sem prometer WIN.</p></div><div class="pill" id="modeBadge">MODO ANÁLISE</div></div>
+<div class="cards">
+<div class="card"><div class="label">Mercados disponíveis</div><div class="big blue" id="marketCount">—</div><div class="minor">Payout mínimo de 80%</div></div>
+<div class="card"><div class="label">Leituras M1/M5</div><div class="big green" id="readCount">—</div><div class="minor">Candles nativos da corretora</div></div>
+<div class="card"><div class="label">Hipóteses avaliadas</div><div class="big" id="proposalCount">—</div><div class="minor">Comparadas por janela histórica</div></div>
+<div class="card"><div class="label">Resultado PRACTICE</div><div class="big" id="pnl">US$ 0,00</div><div class="minor" id="score">0 WIN · 0 LOSS</div></div>
+</div>
+<div class="panels">
+<div class="stack">
+<div class="panel"><div class="flex"><div><h2>Radar de candles</h2><p class="subhead">Gráfico das últimas velas fechadas • atualização após leitura</p></div><span class="tag" id="chartTF">M1 + M5</span></div>
+<canvas class="canvas" id="priceChart" width="900" height="300" aria-label="Gráfico de velas"></canvas>
+<div class="flex" style="margin-top:12px"><div class="minor" id="chartAsset">Aguardando dados reais da Bullex...</div><div class="minor" id="chartIndicators">Bollinger 20 · RSI 14 · ATR 14</div></div></div>
+<div class="panel"><div class="flex"><h2>Comparação M1 vs M5</h2><span class="tag">TEMPO REAL</span></div><p class="subhead">Cada timeframe é avaliado com candles próprios; conflitos de direção são bloqueados em operações.</p>
+<div id="timeframeComparison" class="labgrid"><div class="empty">Conecte a PRACTICE e inicie as análises.</div></div></div>
+<div class="panel"><h2>Histórico de ordens confirmadas</h2><p class="subhead">Apenas ordens PRACTICE efetivamente reconhecidas pela Bullex. Sem resultados inventados.</p><div id="tradeList" class="empty">Nenhuma ordem confirmada nesta sessão.</div></div>
+</div>
+<div class="stack">
+<div class="panel"><div class="flex"><h2>Melhor sinal observado</h2><span id="evidenceBadge" class="tag caution">EM ESTUDO</span></div>
+<div class="signal" id="signalCard"><div class="minor">NENHUMA SUGESTÃO ATÉ AGORA</div><div class="direction">AGUARDANDO</div></div>
+<div class="minor" id="signalExplanation">O motor só classifica sinais depois de receber candles fechados; não dispara ordem por antecipação.</div>
+<div class="separator"></div><h2>Motor</h2><div id="runStatus" class="minor">Robô parado</div>
+<div class="actionRow"><button id="startBtn" class="btn">▶ Analisar ao vivo</button><button id="stopBtn" class="btn danger" disabled>■ Parar</button></div></div>
+<div class="panel"><h2>Autonomia controlada</h2><p class="subhead">O motor procura parâmetros, avalia a parte recente do histórico e escolhe entre M1 e M5. A amostra é limitada e não prova lucratividade.</p>
+<div class="flex"><span class="minor">Estado do algoritmo</span><span class="tag" id="modelStatus">OBSERVANDO</span></div>
+<div class="separator"></div><div class="notice"><b>Modo seguro por padrão</b><div>O robô começa somente analisando. Para permitir ordens reais da conta PRACTICE, é necessário habilitar explicitamente o modo DEMO nas configurações. Nunca envia ordens em conta real.</div></div></div>
+</div></div></section>
+<section id="lab" hidden>
+<div class="sectionTitle"><div><div class="eyebrow">EXPERIMENTOS EM EVOLUÇÃO</div><h1>Laboratório de estratégias</h1><p class="lead">O motor compara nove versões de quatro famílias de estratégias. Dados de treino e validação são separados cronologicamente. Uma hipótese sem amostra suficiente continua experimental.</p></div></div>
+<div class="panel"><div class="flex"><h2>Hipóteses em observação</h2><span class="tag">REAVALIAÇÃO CONTÍNUA</span></div><div id="labResults" class="labgrid" style="margin-top:18px"><div class="empty">Aguardando a primeira leitura do mercado.</div></div></div>
+<div class="panel" style="margin-top:17px"><h2>Como o motor cria suas versões</h2><p class="minor">A cada nova vela fechada, testa períodos diferentes das Bandas de Bollinger, desvio-padrão, limites do RSI e filtros de EMA/volatilidade. Classifica os resultados e só autoriza operação PRACTICE quando uma hipótese passa pelos critérios mínimos na janela de validação. Isso é uma busca experimental de parâmetros; não é uma inteligência infalível nem um modelo que inventa estratégias sem evidência.</p></div>
+</section>
+<section id="broker" hidden>
+<div class="sectionTitle"><div><div class="eyebrow">AMBIENTE INDEPENDENTE</div><h1>Conexão e gerenciamento de risco</h1><p class="lead">Acesso separado do Xtreme-Tiger. Não há conexão compartilhada, login persistido ou negociação em conta REAL.</p></div></div>
+<div class="panels">
+<div class="panel"><h2>Conectar Bullex PRACTICE</h2><p class="subhead">Somente conta de demonstração. Os dados de login são usados para conectar ao broker e não ficam gravados no banco.</p>
+<form id="loginForm"><label>E-mail da Bullex</label><input id="email" autocomplete="username" type="email" required><label>Senha</label><input id="password" autocomplete="current-password" type="password" required>
+<div class="actionRow"><button type="submit" id="loginBtn" class="btn">Conectar PRACTICE</button><button type="button" id="logoutBtn" class="btn secondary" disabled>Desconectar</button></div></form><p class="minor" id="loginStatus"></p>
+<div class="notice" style="margin-top:16px">Evite conectar a mesma conta Bullex ao Xtreme-Tiger simultaneamente. Plataformas de opções binárias são arriscadas; nenhum indicador garante desempenho.</div></div>
+<div class="stack">
+<div class="panel"><h2>Limites de sessão DEMO</h2><div class="gridForm">
+<div><label>Entrada (US$)</label><input id="stake" type="number" min="2" max="100" step=".01" value="2"></div><div><label>Stop Loss (US$)</label><input id="stopLoss" type="number" min="2" max="200" step=".01" value="15"></div><div><label>Stop Win (US$)</label><input id="stopWin" type="number" min="2" max="500" step=".01" value="20"></div><div><label>Máximo de ordens</label><input id="maxTrades" type="number" min="1" max="100" step="1" value="12"></div>
+</div><button id="saveRisk" class="btn secondary">Salvar limites</button><p class="minor" id="saveMessage"></p></div>
+<div class="panel"><h2>Modo de execução</h2><p class="subhead">Apenas hipóteses com amostra mínima e validação separada podem produzir operações automáticas.</p>
+<label class="check"><input id="acceptDemo" type="checkbox"><span>Entendo que são operações de DEMONSTRAÇÃO, que os sinais não garantem lucro e que quero permitir ordens automáticas na PRACTICE.</span></label>
+<div class="actionRow"><button class="btn secondary" id="researchMode">Somente analisar</button><button class="btn" id="tradeMode" disabled>Ativar DEMO automático</button></div><p id="modeInfo" class="minor" style="margin-top:14px"></p></div>
+</div></div></section>
+<footer class="foot">NOVA QUANT — Laboratório independente • Somente PRACTICE • Dados de mercado fornecidos pela corretora • Resultados históricos e validação de parâmetros não garantem resultados futuros.</footer>
+</div></div></main>
+<script>
+const $=id=>document.getElementById(id);
+let last={},selectedTab='desk',localDirty=false;
+const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const dollars=n=>'US$ '+Number(n||0).toFixed(2).replace('.',',');
+async function post(route,data={}){const r=await fetch(route,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const x=await r.json();if(!r.ok)throw Error(x.error||'Não foi possível comunicar com o servidor');return x}
+function switchTab(which){selectedTab=which;for(const x of ['desk','lab','broker'])$(x).hidden=x!==which;for(const n of document.querySelectorAll('.nav'))n.classList.toggle('active',n.dataset.tab===which)}
+for(const nav of document.querySelectorAll('.nav'))nav.onclick=()=>switchTab(nav.dataset.tab);
+function setLoading(btn,yes){btn.disabled=!!yes}
+$('loginForm').onsubmit=async e=>{e.preventDefault();setLoading($('loginBtn'),true);$('loginStatus').textContent='Conectando leitura e executor PRACTICE...';const password=$('password').value;$('password').value='';try{show(await post('/api/connect',{email:$('email').value,password}));$('loginStatus').textContent='Conta PRACTICE conectada. Abra Mercado e clique Analisar ao vivo.';switchTab('desk')}catch(err){$('loginStatus').textContent=err.message}finally{setLoading($('loginBtn'),false)}};
+$('logoutBtn').onclick=async()=>{if(!confirm('Desconectar apenas este NOVA QUANT? Ordens pendentes não serão refeitas.'))return;try{show(await post('/api/logout',{}))}catch(e){$('loginStatus').textContent=e.message}};
+$('startBtn').onclick=async()=>{try{show(await post('/api/start',{}))}catch(e){$('runStatus').textContent=e.message}};
+$('stopBtn').onclick=async()=>{try{show(await post('/api/stop',{}))}catch(e){$('runStatus').textContent=e.message}};
+$('saveRisk').onclick=async()=>{try{const data={stake:Number($('stake').value),stop_loss:Number($('stopLoss').value),stop_win:Number($('stopWin').value),max_trades:Number($('maxTrades').value)};show(await post('/api/settings',data));localDirty=false;$('saveMessage').textContent='Limites salvos nesta sessão.'}catch(e){$('saveMessage').textContent=e.message}};
+for(const id of ['stake','stopLoss','stopWin','maxTrades'])$(id).addEventListener('input',()=>localDirty=true);
+$('acceptDemo').onchange=()=>{$('tradeMode').disabled=!$('acceptDemo').checked||!last.connected||!last.connected_executor};
+$('researchMode').onclick=async()=>{try{show(await post('/api/mode',{mode:'research'}))}catch(e){$('modeInfo').textContent=e.message}};
+$('tradeMode').onclick=async()=>{try{show(await post('/api/mode',{mode:'practice',acknowledge:$('acceptDemo').checked}))}catch(e){$('modeInfo').textContent=e.message}};
+function show(s){
+ last=s||{};
+ const connected=!!s.connected;
+ $('connBadge').className='pill '+(connected?'live':'warn');
+ $('connBadge').textContent=connected?'● PRACTICE CONECTADA':'● DESCONECTADO';
+ $('modeBadge').textContent=s.mode==='practice'?'DEMO AUTOMÁTICO':'SOMENTE ANÁLISE';
+ $('marketCount').textContent=connected?(s.assets||0):'—';
+ $('readCount').textContent=connected?(s.scanned||0):'—';
+ $('proposalCount').textContent=connected?(s.proposals_tested||0):'—';
+ $('pnl').textContent=dollars(s.profit);
+ $('pnl').className='big '+(s.profit>=0?'green':'red');
+ $('score').textContent=(s.wins||0)+' WIN · '+(s.losses||0)+' LOSS · '+(s.sent||0)+' ordens';
+ $('runStatus').textContent=(s.status||'ROBÔ PARADO')+' · '+(s.stop_reason||s.message||'Aguardando conexão');
+ $('startBtn').disabled=!connected||!!s.running||!!s.pending;
+ $('stopBtn').disabled=!s.running;
+ $('logoutBtn').disabled=!connected;
+ $('loginBtn').disabled=connected;
+ $('loginForm').hidden=connected;
+ $('modelStatus').textContent=(s.running?'LENDO AO VIVO':'AGUARDANDO');
+ $('modeInfo').textContent=s.mode==='practice'?'Ordens automáticas PRACTICE permitidas apenas com sinal aprovado pela validação; stops ativos.':'Apenas monitoramento e pesquisa. Nenhuma ordem será executada.';
+ $('tradeMode').disabled=!connected||!s.connected_executor||!$('acceptDemo').checked;
+ $('saveRisk').disabled=!connected||!!s.running||!!s.pending;
+ for(const id of ['stake','stopLoss','stopWin','maxTrades'])$(id).disabled=!!s.running||!!s.pending;
+ if(s.settings&&!localDirty){$('stake').value=s.settings.stake;$('stopLoss').value=s.settings.stop_loss;$('stopWin').value=s.settings.stop_win;$('maxTrades').value=s.settings.max_trades;}
+ const signal=s.signal&&s.signal.best;
+ if(signal&&signal.signal){
+   const tf=s.signal.tf||1;const dir=signal.signal.direction;const safeName=esc(s.signal.asset);
+   $('signalCard').innerHTML='<div class="minor">'+safeName+' · M'+tf+' · '+esc(signal.name)+'</div><div class="direction '+(dir==='CALL'?'green':'red')+'">'+esc(dir)+'</div><div class="flex"><span class="tag '+(s.signal.approved?'ok':'caution')+'">'+(s.signal.approved?'VALIDAÇÃO PASSOU':'EM ESTUDO')+'</span><span class="minor">RSI '+esc(signal.signal.rsi)+'</span></div>';
+   $('signalExplanation').textContent=signal.signal.reason+'. Validação: '+(signal.validation||0)+' operações; '+(signal.winrate==null?'dados insuficientes':signal.winrate+'% observado')+'. Entrada apenas na janela válida e se aprovada.';
+   $('evidenceBadge').textContent=s.signal.approved?'HISTÓRICO VALIDADO*':'HIPÓTESE EXPERIMENTAL';
+   $('evidenceBadge').className='tag '+(s.signal.approved?'ok':'caution');
+ }else{$('signalCard').innerHTML='<div class="minor">SEM SINAL ATUAL CONFIRMADO</div><div class="direction">EM LEITURA</div>';$('signalExplanation').textContent=s.message||'Aguardando velas fechadas e sinais válidos.';$('evidenceBadge').textContent='EM ESTUDO';}
+ const reports=s.reports||[];
+ const tops=[1,5].map(tf=>reports.find(r=>r.tf===tf)).filter(Boolean);
+ $('timeframeComparison').innerHTML=tops.length?tops.map(r=>'<div class="hypothesis"><div class="flex"><b>M'+r.tf+' · '+esc(r.asset)+'</b><span class="tag">'+(r.approved?'APROVADO*':'EXPERIMENTAL')+'</span></div><div class="minor" style="margin-top:10px">'+esc(r.best?.name||'Aguardando condições')+'</div><div class="metric '+(r.best?.signal?.direction==='CALL'?'green':'blue')+'">'+esc(r.best?.signal?.direction||'Sem sinal')+'</div><div class="minor">Amostra: '+esc(r.best?.train??0)+' treino / '+esc(r.best?.validation??0)+' validação</div></div>').join(''):'<div class="empty">Aguardando histórico M1 e M5 suficiente.</div>';
+ const all=reports.flatMap(r=>(r.candidates||[]).map(h=>({...h,asset:r.asset,tf:r.tf}))).sort((a,b)=>Number(b.validated)-Number(a.validated)||b.score-a.score).slice(0,12);
+ $('labResults').innerHTML=all.length?all.map(h=>'<div class="hypothesis"><div class="flex"><span class="tag">M'+h.tf+' · '+esc(h.asset)+'</span><span class="tag '+(h.validated?'ok':'caution')+'">'+(h.validated?'VALIDADO*':'AMOSTRA INSUFICIENTE')+'</span></div><h3>'+esc(h.name)+'</h3><div class="metric">'+(h.winrate==null?'—':h.winrate+'%')+'</div><p class="minor">Taxa direcional observada na validação, não previsão de lucro.</p><div class="flex"><span class="minor">Treino: '+h.train+'</span><span class="minor">Validação: '+h.validation+'</span><span class="minor">Nota: '+Number(h.score||0).toFixed(2)+'</span></div><div class="minor" style="margin-top:10px">Bandas '+h.params.n+' / '+h.params.k+'σ · RSI '+h.params.rsi+'</div></div>').join(''):'<div class="empty">Sem histórico suficiente para avaliar hipóteses.</div>';
+ const t=s.trades||[];
+ $('tradeList').className=t.length?'tableWrap':'empty';
+ $('tradeList').innerHTML=t.length?'<table class="table"><thead><tr><th>Ativo</th><th>Período</th><th>Direção</th><th>Entrada</th><th>Resultado</th><th>P/L</th></tr></thead><tbody>'+t.slice().reverse().map(x=>'<tr><td>'+esc(x.asset)+'</td><td>M'+esc(x.tf)+'</td><td>'+esc(x.direction)+'</td><td>'+dollars(x.stake)+'</td><td>'+esc(x.result)+'</td><td class="'+(x.profit>0?'green':'red')+'">'+dollars(x.profit)+'</td></tr>').join('')+'</tbody></table>':'Nenhuma ordem confirmada nesta sessão.';
+ const c=reports.find(x=>x.chart&&x.chart.length);
+ drawChart(c||null);
+}
+function drawChart(rep){
+ const el=$('priceChart'),c=el.getContext('2d');
+ let w=el.clientWidth*devicePixelRatio,h=el.clientHeight*devicePixelRatio;
+ if(el.width!==w||el.height!==h){el.width=w;el.height=h}
+ c.clearRect(0,0,w,h);c.fillStyle='#09212b';c.fillRect(0,0,w,h);
+ c.strokeStyle='#254752';c.lineWidth=1;for(let y=1;y<5;y++){c.beginPath();c.moveTo(0,h*y/5);c.lineTo(w,h*y/5);c.stroke()}
+ if(!rep||!rep.chart.length){c.fillStyle='#87abb3';c.font=(14*devicePixelRatio)+'px sans-serif';c.fillText('Aguardando velas reais da Bullex PRACTICE',22,35);$('chartAsset').textContent='Nenhum ativo disponível';return}
+ $('chartAsset').textContent=rep.asset+' · M'+rep.tf+' · candles reais fechados';
+ let bars=rep.chart;let lo=Math.min(...bars.map(x=>x.l)),hi=Math.max(...bars.map(x=>x.h)),range=Math.max(hi-lo,1e-9);
+ let x=i=>(i+.5)*w/bars.length;let y=v=>h-20-(v-lo)/range*(h-40);
+ const low=rep.indicators?.bb_lower,mid=rep.indicators?.bb_middle,up=rep.indicators?.bb_upper;
+ for(const [value,color] of [[low,'#497aa1'],[mid,'#d4aa69'],[up,'#497aa1']]){if(value==null)continue;c.setLineDash([6,5]);c.strokeStyle=color;c.beginPath();c.moveTo(0,y(value));c.lineTo(w,y(value));c.stroke();c.setLineDash([])}
+ const wide=Math.max(2,w/bars.length*.55);
+ bars.forEach((v,i)=>{c.strokeStyle=v.c>=v.o?'#65edbd':'#ff858a';c.fillStyle=c.strokeStyle;c.lineWidth=Math.max(1,devicePixelRatio);c.beginPath();c.moveTo(x(i),y(v.h));c.lineTo(x(i),y(v.l));c.stroke();let top=Math.min(y(v.o),y(v.c));c.fillRect(x(i)-wide/2,top,wide,Math.max(2,Math.abs(y(v.o)-y(v.c)))});
+ $('chartIndicators').textContent='RSI14 '+(rep.indicators?.rsi??'—')+' · ATR14 '+(rep.indicators?.atr??'—')+' · Bandas 20/2';
+}
+async function refresh(){try{let r=await fetch('/api/state',{credentials:'same-origin',cache:'no-store'});if(r.ok)show(await r.json())}catch(e){$('runStatus').textContent='Servidor indisponível; tentando reconectar a tela'}}
+show({connected:false});refresh();setInterval(refresh,4000);
+</script></body></html>
