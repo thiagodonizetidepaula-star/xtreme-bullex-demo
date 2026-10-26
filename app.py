@@ -145,14 +145,14 @@ def auth():
         if not office_origin_allowed():return office_error('Origem não autorizada.',403)
         if request.method=='OPTIONS':return make_response('',204)
         return
-    if request.path in ['/','/office','/health','/api/access']:return
+    if request.path in ['/','/office','/legacy','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
 
 @app.after_request
 def security(r):
     r.headers['Cache-Control']='no-store';r.headers['X-Content-Type-Options']='nosniff';r.headers['X-Frame-Options']='DENY';r.headers['Referrer-Policy']='no-referrer'
-    if request.path=='/office':
+    if request.path in ['/office','/']:
         # Three.js module imports are only used by this dedicated 3D office page.
         r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'; object-src 'none'"
     else:
@@ -229,7 +229,14 @@ def office():
     return send_file(ROOT/'templates'/'office.html',mimetype='text/html')
 
 @app.get('/')
-def home():return render_template('index.html')
+def home():
+    # The full 3D office is now the only primary interface.
+    return office()
+
+@app.get('/legacy')
+def legacy_panel():
+    # Old control dashboard remains available if troubleshooting is necessary.
+    return render_template('index.html')
 @app.get('/health')
 def health():return jsonify(status='ok')
 @app.post('/api/access')
