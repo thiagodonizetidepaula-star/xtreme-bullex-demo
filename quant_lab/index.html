@@ -59,6 +59,10 @@ form .gridForm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 <div class="card"><div class="label">Hipóteses avaliadas</div><div class="big" id="proposalCount">—</div><div class="minor">Comparadas por janela histórica</div></div>
 <div class="card"><div class="label">Resultado PRACTICE</div><div class="big" id="pnl">US$ 0,00</div><div class="minor" id="score">0 WIN · 0 LOSS</div></div>
 </div>
+<div class="panel" style="margin-bottom:17px" aria-live="polite"><div class="flex"><h2>Busca automática: mercado regular + OTC</h2><span class="tag" id="marketCatalogStatus">AGUARDANDO</span></div>
+<p class="minor" id="marketAvailability">Ao iniciar qualquer um dos motores, serão verificados mercados abertos e fechados.</p>
+<p class="minor" id="marketClosedInfo">Ativos fechados aparecem na consulta, mas nunca recebem ordens. Se o regular fechar, o scanner procura OTC aberto.</p>
+<p class="minor" id="marketActiveScan">Aguardando ativos para análise M1/M5.</p></div>
 <div class="panels">
 <div class="stack">
 <div class="panel"><div class="flex"><div><h2>Radar de candles</h2><p class="subhead">Gráfico das últimas velas fechadas • atualização após leitura</p></div><span class="tag" id="chartTF">M1 + M5</span></div>
@@ -136,6 +140,18 @@ function show(s){
  $('connBadge').textContent=connected?'● PRACTICE CONECTADA':'● DESCONECTADO';
  $('modeBadge').textContent=s.mode==='practice'?'DEMO AUTOMÁTICO':'SOMENTE ANÁLISE';
  $('marketCount').textContent=connected?(s.assets||0):'—';
+ const mk=s.market_summary||{};
+ const known=Number.isFinite(Number(mk.total)) && Number(mk.total)>0;
+ $('marketCatalogStatus').textContent=!s.running?'PARADO':known?'CATÁLOGO CONSULTADO':'PROCURANDO';
+ $('marketAvailability').textContent=known
+  ?'Regulares abertos: '+(mk.open_regular||0)+' · OTC abertos: '+(mk.open_otc||0)+' · Regulares fechados: '+(mk.closed_regular||0)+' · OTC fechados: '+(mk.closed_otc||0)+' · Elegíveis (payout ≥80%): '+(mk.eligible||0)
+  :(s.running?'Consultando status de abertura dos mercados regulares e OTC...':'A busca começa quando você iniciar Analisar ao vivo ou DEMO automático.');
+ $('marketClosedInfo').textContent=known
+  ?'Ativos fechados no catálogo: '+(mk.closed_samples||[]).join(', ')+(mk.closed_regular+mk.closed_otc>8?' e outros.':'')+' Nenhum ativo fechado será negociado.'
+  :'Ativos fechados são apenas identificados; o bot analisa velas ao vivo somente de ativos abertos.';
+ $('marketActiveScan').textContent=Array.isArray(s.tracked_assets)&&s.tracked_assets.length
+  ?'Rodada atual M1/M5: '+s.tracked_assets.join(', ')+'. A cada atualização do catálogo, outros ativos elegíveis entram na análise.'
+  :'Nenhum ativo elegível nesta rodada. O scanner tentará novamente automaticamente.';
  $('readCount').textContent=connected?(s.scanned||0):'—';
  $('proposalCount').textContent=connected?(s.proposals_tested||0):'—';
  $('pnl').textContent=dollars(s.profit);

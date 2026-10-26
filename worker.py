@@ -62,9 +62,13 @@ def market(force=False):
     for asset_id,a in info.get('turbo',{}).get('actives',{}).items():
         name=str(a.get('name','')).split('.',1)[-1]
         commission=a.get('option',{}).get('profit',{}).get('commission')
-        if not name or not isinstance(commission,(int,float)) or not math.isfinite(commission) or not 0<=commission<=100:continue
-        payout=100-float(commission)
-        fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
+        if not name:continue
+        # A closed market may omit commission. Keep it visible for status only;
+        # zero payout prevents it from ever becoming eligible for PRACTICE.
+        valid_payout=isinstance(commission,(int,float)) and not isinstance(commission,bool) and math.isfinite(commission) and 0<=commission<=100
+        payout=100-float(commission) if valid_payout else 0.0
+        fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,
+                     'otc':'OTC' in name.upper(),'payout_known':bool(valid_payout)}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
     market_cache=fresh;market_at=requested_at
     return fresh
@@ -86,7 +90,15 @@ def dispatch(c):
     demo()
     if op=='market':
         available=market(force=True)
-        return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest') else v['payout']>max(80,c['payout']))]}
+        eligible=[{'asset':a,**v} for a,v in available.items() if v['open'] and
+                  (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest')
+                   else v['payout']>max(80,c['payout']))]
+        response={'assets':eligible}
+        # Opt-in catalog visibility for NOVA QUANT; old bot API remains unchanged.
+        if c.get('include_closed') is True:
+            response['catalog']=[{'asset':a,**v} for a,v in available.items()]
+            response['checked_at']=int(time.time())
+        return response
     if op=='snapshot':
         now=broker_now()
         # broker_now valida amostra, divergência e avanço monotônico.

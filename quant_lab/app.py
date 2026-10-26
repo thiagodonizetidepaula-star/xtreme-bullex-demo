@@ -13,6 +13,7 @@ from socketserver import ThreadingMixIn
 ROOT=Path(__file__).resolve().parent.parent
 sys.path.insert(0,str(ROOT))
 from quant_lab.brain import normalize,analyze
+from quant_lab.markets import classify_catalog,next_batch
 
 sessions={}
 sessions_guard=threading.RLock()
@@ -43,6 +44,8 @@ def view(s):
         'connected_executor':bool(s.get('executor') and s['executor'].poll() is None),
         'balance':s['balance'],'currency':s['currency'],'status':s['status'],
         'message':s['message'],'scanned':s['scanned'],'assets':s['assets'],
+        'market_summary':dict(s.get('market_summary',{})),
+        'tracked_assets':list(s.get('tracked_assets',[])),
         'reports':s['reports'][:10],'signal':s['signal'],
         'trades':s['trades'][-20:],'wins':s['wins'],'losses':s['losses'],
         'profit':round(s['profit'],2),'sent':s['sent'],
@@ -88,25 +91,38 @@ def settle(s,order,meta):
     
 def scanner(s):
     reader=s['reader'];read_lock=s['read_lock']
-    last_market=0;market=[];last_prepared=-1;last_reports={}
+    last_market=0;market=[];tracked=[];market_batch=0;last_prepared=-1;last_reports={}
     try:
         while not s['stop'].is_set():
             now=time.time()
             if now-last_market>85:
                 try:
-                    items=call(reader,read_lock,{'op':'market','payout':80,'strategy':'sniper'},20)
-                    market=[a for a in items.get('assets',[]) if a.get('payout',0)>=80]
-                    market.sort(key=lambda x:x['payout'],reverse=True)
+                    # Query regular and OTC symbols, including closed status.
+                    # Closed symbols never enter the trading/scanning shortlist.
+                    items=call(reader,read_lock,{'op':'market','payout':80,'strategy':'sniper','include_closed':True},20)
+                    summary,market=classify_catalog(items,80)
+                    tracked=next_batch(market,market_batch,6)
+                    market_batch+=1
                     last_market=now
-                    with s['lock']:s['assets']=len(market)
+                    with s['lock']:
+                        s['assets']=len(market)
+                        s['market_summary']=summary
+                        s['tracked_assets']=[x['asset'] for x in tracked]
+                        s['status']='BUSCANDO MERCADOS REGULARES E OTC'
                 except Exception:
-                    with s['lock']:s['message']='Catálogo indisponível; nova tentativa de leitura'
+                    # Never trade with an outdated catalog when refresh fails.
+                    market=[];tracked=[];last_market=0
+                    with s['lock']:
+                        s['assets']=0;s['tracked_assets']=[]
+                        s['message']='Catálogo de mercados indisponível; repetindo busca por regulares e OTC'
                     s['stop'].wait(4);continue
             if not market:
-                with s['lock']:s['message']='Aguardando ativos abertos com payout ≥80%'
+                with s['lock']:
+                    s['status']='AGUARDANDO MERCADO DISPONÍVEL'
+                    s['message']='Regulares e OTC conferidos: nenhum ativo ABERTO com payout ≥80%. Tentando novamente.'
                 s['stop'].wait(3);continue
-            # Limit scan CPU and broker subscriptions on the free Render instance.
-            tracked=market[:6]
+            # Rotate at each catalog refresh. Never subscribe to closed assets.
+            # Keep at most six streams to respect the free instance budget.
             sec=now%60
             if 56<=sec<59 and int(now//60)!=last_prepared and s['executor'] is not None:
                 try:
@@ -149,7 +165,7 @@ def scanner(s):
                 s['signal']=live[0] if live else None
                 s['status']='ANALISANDO M1 + M5'
                 s['message']=('Sinal recente sob avaliação: '+live[0]['asset'] if live
-                    else 'Comparando Bollinger, RSI, EMA e volatilidade em velas fechadas')
+                    else 'Analisando M1/M5 em mercados regulares e OTC abertos; velas fechadas confirmadas')
                 enabled=s['mode']=='practice' and s['running'] and not s['pending']
             if enabled and s['executor'] and live:
                 # Only validated walk-forward hypotheses; never force entry.
@@ -256,7 +272,7 @@ def api(environ,start):
                     'mode':'research','balance':answer_reader.get('balance'),
                     'currency':answer_reader.get('currency','USD'),'status':'PRONTO',
                     'message':'Sessão nova: análises separadas do Xtreme-Tiger',
-                    'assets':0,'scanned':0,'reports':[],'signal':None,'trades':[],
+                    'assets':0,'scanned':0,'market_summary':{},'tracked_assets':[],'reports':[],'signal':None,'trades':[],
                     'wins':0,'losses':0,'profit':0.0,'sent':0,'last_update':0,
                     'proposals_tested':0,'stop_reason':None,'last_seen':time.time(),
                     'settings':{'stake':2,'stop_loss':15,'stop_win':20,'max_trades':12}}

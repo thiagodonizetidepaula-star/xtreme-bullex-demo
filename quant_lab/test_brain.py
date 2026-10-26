@@ -105,4 +105,42 @@ class NOVAQuantStartTests(unittest.TestCase):
         self.assertTrue(self.s['running'])
         self.assertEqual(self.s['mode'],'practice')
 
+
+class NOVAQuantMarketTests(unittest.TestCase):
+    def test_regular_closed_otc_open_are_distinguished(self):
+        from quant_lab.markets import classify_catalog
+        snapshot={'checked_at':42,'catalog':[
+            {'asset':'EURUSD','open':False,'otc':False,'payout':0,'payout_known':False},
+            {'asset':'EURUSD-OTC','open':True,'otc':True,'payout':82,'payout_known':True},
+            {'asset':'GBPUSD','open':True,'otc':False,'payout':90,'payout_known':True},
+            {'asset':'LOW-OTC','open':True,'otc':True,'payout':70,'payout_known':True}]}
+        s,active=classify_catalog(snapshot)
+        self.assertEqual((s['closed_regular'],s['open_otc'],s['open_regular'],s['below_payout']),(1,2,1,1))
+        self.assertEqual({x['asset'] for x in active},{'EURUSD-OTC','GBPUSD'})
+    def test_closed_never_traded_even_with_high_payout(self):
+        from quant_lab.markets import classify_catalog,next_batch
+        info,eligible=classify_catalog({'catalog':[
+            {'asset':'CLOSED-OTC','open':False,'otc':True,'payout':99},
+            {'asset':'OPEN-OTC','open':True,'otc':True,'payout':80},
+            {'asset':'NO-PAYOUT','open':True,'otc':False,'payout':0,'payout_known':False}]})
+        self.assertEqual([x['asset'] for x in next_batch(eligible)],['OPEN-OTC'])
+        self.assertEqual(info['closed_otc'],1)
+    def test_rotation_covers_all_and_both_market_types(self):
+        from quant_lab.markets import classify_catalog,next_batch
+        rows=[{'asset':('OTC-' if i%2 else 'REG-')+str(i),'open':True,'otc':bool(i%2),'payout':80+i} for i in range(18)]
+        _,eligible=classify_catalog({'catalog':rows})
+        pages=[next_batch(eligible,i,6) for i in range(3)]
+        self.assertEqual(set(x['asset'] for page in pages for x in page),
+                         set(x['asset'] for x in rows))
+        for page in pages:
+            self.assertTrue(any(x['otc'] for x in page))
+            self.assertTrue(any(not x['otc'] for x in page))
+    def test_all_closed_keeps_scanner_idle(self):
+        from quant_lab.markets import classify_catalog,next_batch
+        summary,eligible=classify_catalog({'catalog':[
+            {'asset':'A','open':False,'payout':95},
+            {'asset':'A-OTC','open':False,'otc':True,'payout':96}]})
+        self.assertEqual(summary['eligible'],0)
+        self.assertEqual(next_batch(eligible),[])
+
 if __name__=='__main__':unittest.main()
