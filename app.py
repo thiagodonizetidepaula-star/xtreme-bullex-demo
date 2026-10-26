@@ -245,6 +245,24 @@ def access():
     if not secrets.compare_digest(str(data.get('key','')),ACCESS):return jsonify(error='Chave inválida.'),401
     session.clear();session['owner']=True;session['csrf']=secrets.token_hex(24)
     return jsonify(csrf=session['csrf'])
+# Lightweight authenticated summary used by the 3D office dashboard.
+# The trading worker and all existing order-validation paths are unchanged.
+@app.get('/api/office/overview')
+def office_overview():
+    with lock:
+        recent=[]
+        for t in state['trades'][-45:]:
+            recent.append({k:t[k] for k in ('id','time','asset','direction','strategy','strategy_key',
+                'status','profit','stake','payout','expiration','result_time') if k in t})
+        return jsonify(source='XTREME_BULLEX_DEMO_BACKEND',mode='PRACTICE',
+            csrf=session['csrf'],
+            connected=bool(state['connected']),running=bool(state['running']),
+            uncertain=bool(state['uncertain']),message=str(state['message'])[:240],
+            balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
+            config=state['config'],comparison=comparison(),management=management(),
+            trades=recent,stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
+            analyzed_count=state.get('analyzed_count',0),server_now=time.time())
+
 @app.get('/api/state')
 def status():
     with lock:return jsonify(**state,management=management(),comparison=comparison(),server_now=time.time(),csrf=session['csrf'])
