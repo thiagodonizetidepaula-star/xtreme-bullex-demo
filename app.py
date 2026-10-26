@@ -1,6 +1,6 @@
 import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math,hashlib
 from datetime import datetime,timezone,timedelta
-from flask import Flask,request,jsonify,session,render_template,make_response
+from flask import Flask,request,jsonify,session,render_template,make_response,send_file
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
@@ -145,14 +145,18 @@ def auth():
         if not office_origin_allowed():return office_error('Origem não autorizada.',403)
         if request.method=='OPTIONS':return make_response('',204)
         return
-    if request.path in ['/','/health','/api/access']:return
+    if request.path in ['/','/office','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
 
 @app.after_request
 def security(r):
     r.headers['Cache-Control']='no-store';r.headers['X-Content-Type-Options']='nosniff';r.headers['X-Frame-Options']='DENY';r.headers['Referrer-Policy']='no-referrer'
-    r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
+    if request.path=='/office':
+        # Three.js module imports are only used by this dedicated 3D office page.
+        r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh; connect-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; frame-ancestors 'none'; object-src 'none'"
+    else:
+        r.headers['Content-Security-Policy']="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"
     if request.path in ['/api/office/exchange','/api/office/state'] and office_origin_allowed():
         r.headers['Access-Control-Allow-Origin']=OFFICE_ORIGIN
         r.headers['Access-Control-Allow-Methods']='GET,POST,OPTIONS'
@@ -217,6 +221,12 @@ def office_bridge_state():
             'trades':trades,'server_now':time.time()
         }
     return jsonify(result)
+
+@app.get('/office')
+def office():
+    # Same-origin single-app office: authenticated control API uses the
+    # owner's existing HttpOnly session and CSRF token, not a public broker key.
+    return send_file(ROOT/'templates'/'office.html',mimetype='text/html')
 
 @app.get('/')
 def home():return render_template('index.html')
