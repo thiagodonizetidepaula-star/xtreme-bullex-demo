@@ -133,8 +133,10 @@ a{color:#ffd075}
 <section class="card" id="monitorCard">
 <h2>ACOMPANHAR PELO CELULAR</h2>
 <div id="monitorHost" hidden>
-<p class="muted">O PC é o controle principal. Gere um código temporário e digite-o no celular, sem precisar entrar de novo na Bullex. O celular será somente leitura.</p>
-<button type="button" class="btn outline" id="monitorCodeBtn">Gerar código para o celular</button>
+<p class="muted">O PC controla a sessão PRACTICE. Escolha o tipo de acesso que será liberado ao celular. Cada código é temporário e funciona uma vez.</p>
+<button type="button" class="btn outline" id="monitorCodeBtn">Gerar código de acompanhamento</button>
+<button type="button" class="btn outline" id="monitorControlCodeBtn">Gerar código de controle remoto</button>
+<p class="muted">Controle remoto: permite configurar, iniciar e parar a automação. Não permite abrir ordens manuais, acessar a senha Bullex, desconectar o PC nem trocar a conta.</p>
 <p id="monitorCodeBox" class="monitor-code" hidden aria-live="polite"></p>
 <button type="button" class="btn outline" id="monitorRevokeBtn">Revogar acessos do celular</button>
 </div>
@@ -143,7 +145,7 @@ a{color:#ffd075}
 <form id="monitorPairForm"><label for="monitorCodeInput">Código de acompanhamento</label><input id="monitorCodeInput" maxlength="12" autocomplete="one-time-code" autocapitalize="characters" placeholder="Código do PC" required><button class="btn" id="monitorPairBtn">Acompanhar PC</button></form>
 </div>
 <div id="monitorViewer" hidden>
-<p class="muted">● MODO ACOMPANHAMENTO — placar e ordens do PC em tempo real. Este aparelho NÃO envia ordens.</p>
+<p class="muted" id="monitorViewerText">● MODO ACOMPANHAMENTO — placar e ordens do PC em tempo real. Este aparelho NÃO envia ordens.</p>
 <button type="button" class="btn outline" id="monitorLeaveBtn">Sair do acompanhamento</button>
 </div>
 <p id="monitorMessage" class="muted" role="status" aria-live="polite"></p>
@@ -206,21 +208,29 @@ function show(v){lastState=v;monitorMode=!!v.monitor_only;if(v.stop_reason&&v.st
 function applyMonitorMode(v){
  const owner=!!v.connected&&!v.monitor_only;
  const watching=!!v.connected&&!!v.monitor_only;
+ const remote=watching&&!!v.remote_control;
  el('monitorHost').hidden=!owner;
  el('monitorJoin').hidden=!!v.connected;
  el('monitorViewer').hidden=!watching;
- for(const id of ['preflight','stopBot','disconnectBtn'])if(watching)el(id).hidden=true;
- if(owner){el('preflight').hidden=false;el('stopBot').hidden=false;el('disconnectBtn').hidden=false;}
- if(!v.connected){el('preflight').hidden=false;el('stopBot').hidden=false;el('disconnectBtn').hidden=true;}
- for(const id of ['tabSettings','tabStudy'])el(id).hidden=watching;
+ el('monitorViewerText').textContent=remote
+  ?'● CONTROLE REMOTO AUTORIZADO · configure, inicie ou pare a automação PRACTICE do PC. Não há botão de compra/venda manual neste aparelho.'
+  :'● MODO ACOMPANHAMENTO · somente leitura das operações e placar do PC.';
+ el('preflight').hidden=watching&&!remote;
+ el('stopBot').hidden=watching&&!remote;
+ el('disconnectBtn').hidden=!owner;
+ el('preflight').disabled=watching&&!remote||!v.executor_connected||!!v.running;
+ el('stopBot').disabled=watching&&!remote||!v.running;
+ for(const id of ['tabSettings','tabStudy'])el(id).hidden=watching&&(id==='tabStudy'||!remote);
  const nav=document.querySelector('.bot-tabs');
- if(nav)nav.classList.toggle('monitor-tabs',watching);
+ if(nav)nav.classList.toggle('monitor-tabs',watching&&!remote);
  if(watching){
    el('brokerForm').hidden=true;
-   if(!el('botPanel').hidden)switchTab('bot');
-   if(!el('settingsPanel').hidden||!el('studyPanel').hidden)switchTab('bot');
-   el('state').textContent='● Acompanhando Bullex PRACTICE do PC';
-   el('brokerDetail').textContent='Somente leitura · não abre ordens neste aparelho.';
+   if(!remote&&(!el('settingsPanel').hidden||!el('studyPanel').hidden))switchTab('bot');
+   if(remote&&!el('studyPanel').hidden)switchTab('bot');
+   el('state').textContent=remote?'● Controle remoto do PC · Bullex PRACTICE':'● Acompanhando Bullex PRACTICE do PC';
+   el('brokerDetail').textContent=remote
+    ?'Controle permitido apenas para automação PRACTICE. Conta, senha e ordens manuais indisponíveis.'
+    :'Somente leitura · nenhuma ordem pode ser enviada por este aparelho.';
  }
  if(!v.connected&&!watching){
    el('brokerDetail').textContent='Conecte no PC para operar, ou use o código acima no celular.';
@@ -228,16 +238,26 @@ function applyMonitorMode(v){
 }
 el('monitorCodeBtn').onclick=async()=>{
  el('monitorCodeBtn').disabled=true;
- try{const data=await send('/api/monitor/code',{});el('monitorCodeBox').hidden=false;el('monitorCodeBox').textContent=data.code+' · válido por 5 minutos';el('monitorMessage').textContent='No celular: abra este mesmo site, procure Acompanhar pelo celular e digite o código.';}
+ try{const data=await send('/api/monitor/code',{});el('monitorCodeBox').hidden=false;el('monitorCodeBox').textContent=data.code+' · válido por 5 minutos';el('monitorMessage').textContent='Código somente leitura: no celular, abra este site e informe o código.';}
  catch(e){el('monitorMessage').textContent='Não foi possível gerar código: '+e.message;}
  finally{el('monitorCodeBtn').disabled=false;}
+};
+el('monitorControlCodeBtn').onclick=async()=>{
+ el('monitorControlCodeBtn').disabled=true;
+ try{
+  const data=await send('/api/monitor/control-code',{});
+  el('monitorCodeBox').hidden=false;
+  el('monitorCodeBox').textContent=data.code+' · CONTROLE REMOTO · válido por 5 minutos';
+  el('monitorMessage').textContent='Autorização de controle: use este código no celular. Acesso temporário por até 4 horas, revogável aqui no PC.';
+ }catch(e){el('monitorMessage').textContent='Não foi possível autorizar controle remoto: '+e.message;}
+ finally{el('monitorControlCodeBtn').disabled=false;}
 };
 el('monitorPairForm').onsubmit=async(e)=>{
  e.preventDefault();el('monitorPairBtn').disabled=true;
  try{
   const v=await send('/api/monitor/pair',{code:el('monitorCodeInput').value.trim().toUpperCase()});
   el('monitorCodeInput').value='';
-  el('monitorMessage').textContent='Conectado ao mesmo robô do PC em modo leitura.';
+  el('monitorMessage').textContent=v.remote_control?'Controle remoto autorizado: configurações, iniciar e parar no mesmo robô do PC.':'Conectado ao mesmo robô do PC em modo leitura.';
   switchTab('bot');show(v);
  }catch(error){el('monitorMessage').textContent='Pareamento não concluído: '+error.message;}
  finally{el('monitorPairBtn').disabled=false;}
@@ -247,7 +267,7 @@ el('monitorLeaveBtn').onclick=async()=>{
  catch(e){el('monitorMessage').textContent=e.message;}
 };
 el('monitorRevokeBtn').onclick=async()=>{
- try{await send('/api/monitor/revoke',{});el('monitorCodeBox').hidden=true;el('monitorMessage').textContent='Acessos de acompanhamento revogados. O bot no PC continua funcionando.';}
+ try{await send('/api/monitor/revoke',{});el('monitorCodeBox').hidden=true;el('monitorMessage').textContent='Acompanhamento e controle remoto revogados. O bot no PC continua funcionando.';}
  catch(e){el('monitorMessage').textContent=e.message;}
 };
 
@@ -453,7 +473,8 @@ def app(environ,start_response):
         if current:current['last_seen']=time.time()
         if not current and monitored:
             monitored['last_seen']=time.time()
-            return respond(start_response,'200 OK',state_view(monitored)|{'monitor_only':True})
+            return respond(start_response,'200 OK',state_view(monitored)|{
+                'monitor_only':True,'remote_control':viewer_info.get('scope')=='control'})
         return respond(start_response,'200 OK',state_view(current)|{'monitor_only':False})
     if path=='/api/study':
         if not current:return respond(start_response,'401 Unauthorized',{'error':'Conecte a Bullex PRACTICE para acessar o estudo'})
@@ -468,18 +489,19 @@ def app(environ,start_response):
         data=HTML.encode()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),('Content-Length',str(len(data))),('Cache-Control','no-store')])
         return [data]
-    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings','/api/monitor/code','/api/monitor/pair','/api/monitor/leave','/api/monitor/revoke'):
+    if method=='POST' and path in ('/api/connect','/api/disconnect','/api/prepare','/api/start','/api/stop','/api/settings','/api/monitor/code','/api/monitor/control-code','/api/monitor/pair','/api/monitor/leave','/api/monitor/revoke'):
         origin=environ.get('HTTP_ORIGIN','')
         host=environ.get('HTTP_HOST','')
         if origin and origin not in ('https://'+host,'http://'+host):return respond(start_response,'403 Forbidden',{'error':'Origem inválida'})
-        if path=='/api/monitor/code':
-            if not current:return respond(start_response,'403 Forbidden',{'error':'Somente o PC principal pode gerar códigos'})
+        if path in ('/api/monitor/code','/api/monitor/control-code'):
+            if not current:return respond(start_response,'403 Forbidden',{'error':'Somente o PC principal pode autorizar acessos ao celular'})
+            scope='control' if path=='/api/monitor/control-code' else 'read'
             with guard:
                 for key,data in list(monitor_codes.items()):
                     if data['owner']==token or data['expires']<=time.time():monitor_codes.pop(key,None)
                 code=''.join(secrets.choice(monitor_alphabet) for _ in range(10))
-                monitor_codes[code]={'owner':token,'expires':time.time()+300}
-            return respond(start_response,'200 OK',{'code':code,'expires_in_seconds':300})
+                monitor_codes[code]={'owner':token,'expires':time.time()+300,'scope':scope}
+            return respond(start_response,'200 OK',{'code':code,'expires_in_seconds':300,'scope':scope})
         if path=='/api/monitor/revoke':
             if not current:return respond(start_response,'403 Forbidden',{'error':'Somente o PC principal revoga acessos'})
             with guard:
@@ -512,12 +534,20 @@ def app(environ,start_response):
                 monitor_codes.pop(code,None)
                 owner=sessions[pairing['owner']]
                 watch_token=secrets.token_urlsafe(32)
-                monitor_viewers[watch_token]={'owner':pairing['owner'],'expires':now+43200}
-            return respond(start_response,'200 OK',state_view(owner)|{'monitor_only':True},
-                [('Set-Cookie','xb_viewer='+watch_token+'; Max-Age=43200; HttpOnly; Secure; SameSite=Strict; Path=/')])
-        # Read-only viewers have no access to bot controls, even via direct requests.
+                monitor_viewers[watch_token]={'owner':pairing['owner'],'expires':now+(14400 if pairing.get('scope')=='control' else 43200),'scope':pairing.get('scope','read')}
+            return respond(start_response,'200 OK',state_view(owner)|{
+                'monitor_only':True,'remote_control':pairing.get('scope')=='control'},
+                [('Set-Cookie','xb_viewer='+watch_token+'; Max-Age='+('14400' if pairing.get('scope')=='control' else '43200')+'; HttpOnly; Secure; SameSite=Strict; Path=/')])
+        # Permission is enforced server-side, never inferred from mobile buttons.
+        # Remote controllers only operate the EXISTING PRACTICE automation.
+        # They cannot call demo_order, prepare, connect, disconnect or create codes.
+        remote_action=False
         if monitored and not current:
-            return respond(start_response,'403 Forbidden',{'error':'Acompanhamento somente leitura; controle o robô no PC'})
+            if viewer_info.get('scope')=='control' and path in ('/api/settings','/api/start','/api/stop'):
+                current=monitored
+                remote_action=True
+            else:
+                return respond(start_response,'403 Forbidden',{'error':'Acesso limitado ao acompanhamento; use um código autorizado de controle remoto no PC'})
         if path=='/api/settings':
             if not current:return respond(start_response,'401 Unauthorized',{'error':'Conecte à PRACTICE primeiro'})
             if current['running'] or current['pending']:return respond(start_response,'409 Conflict',{'error':'Pare o robô e conclua a ordem antes de alterar os stops'})
@@ -537,14 +567,14 @@ def app(environ,start_response):
                 if isinstance(stake,bool) or not isinstance(stake,(int,float)) or not 2<=stake<=100:raise ValueError('Entrada permitida entre US$ 2 e US$ 100')
                 if round(float(stake),2)>round(float(sl),2):raise ValueError('A entrada não pode ultrapassar o Stop Loss configurado')
                 current['stop_loss']=round(float(sl),2);current['stop_win']=round(float(sw),2);current['max_orders']=mo;current['stake']=round(float(stake),2);current['expiration_minutes']=em;current['strategy_mode']=sm;current['enabled_strategies']=tuple(selected);current['signal_policy']=policy;current['stop_reason']=None
-                return respond(start_response,'200 OK',state_view(current))
+                return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
             except (ValueError,TypeError) as exc:return respond(start_response,'400 Bad Request',{'error':str(exc) if str(exc) else 'Configuração inválida'})
         if path in ('/api/start','/api/stop'):
             if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor PRACTICE desconectado'})
             if path=='/api/stop':
                 current['running']=False;current['stop'].set();current['phase']='stopped';current['message']='Parada solicitada. Ordem já enviada continuará em confirmação.'
-                return respond(start_response,'200 OK',state_view(current))
-            if current['running']:return respond(start_response,'200 OK',state_view(current))
+                return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
+            if current['running']:return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
             if current['pending'] or current.get('uncertain'):return respond(start_response,'409 Conflict',{'error':'Há ordem anterior incerta; confira a Bullex'})
             if current['orders']>=current['max_orders'] or current['profit']<=-current['stop_loss'] or current['profit']>=current['stop_win']:
                 return respond(start_response,'409 Conflict',{'error':'Limite ou stop da sessão atingido; conecte nova sessão PRACTICE para reiniciar o placar'})
@@ -559,7 +589,7 @@ def app(environ,start_response):
                         except Exception:pass
                     return answer
             threading.Thread(target=run_bot,args=(current,ccall),daemon=True).start()
-            return respond(start_response,'200 OK',state_view(current))
+            return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
         if path=='/api/prepare':
             if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor DEMO desconectado'})
             try:
