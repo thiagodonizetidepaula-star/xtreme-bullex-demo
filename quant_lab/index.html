@@ -174,7 +174,7 @@ function drawChart(rep){
  const low=rep.indicators?.bb_lower,mid=rep.indicators?.bb_middle,up=rep.indicators?.bb_upper;
  for(const [value,color] of [[low,'#497aa1'],[mid,'#d4aa69'],[up,'#497aa1']]){if(value==null)continue;c.setLineDash([6,5]);c.strokeStyle=color;c.beginPath();c.moveTo(0,y(value));c.lineTo(w,y(value));c.stroke();c.setLineDash([])}
  const wide=Math.max(2,w/bars.length*.55);
- bars.forEach((v,i)=>{c.strokeStyle=v.c>=v.o?'#65edbd':'#ff858a';c.fillStyle=c.strokeStyle;c.lineWidth=Math.max(1,devicePixelRatio);c.beginPath();c.moveTo(x(i),y(v.h));c.lineTo(x(i),y(v.l));c.stroke();let top=Math.min(y(v.o),y(v.c));c.fillRect(x(i)-wide/2,top,wide,Math.max(2,Math.abs(y(v.o)-y(v.c)))});
+ bars.forEach((v,i)=>{c.strokeStyle=v.c>=v.o?'#65edbd':'#ff858a';c.fillStyle=c.strokeStyle;c.lineWidth=Math.max(1,devicePixelRatio);c.beginPath();c.moveTo(x(i),y(v.h));c.lineTo(x(i),y(v.l));c.stroke();let top=Math.min(y(v.o),y(v.c));c.fillRect(x(i)-wide/2,top,wide,Math.max(2,Math.abs(y(v.o)-y(v.c))))});
  $('chartIndicators').textContent='RSI14 '+(rep.indicators?.rsi??'—')+' · ATR14 '+(rep.indicators?.atr??'—')+' · Bandas 20/2';
 }
 async function refresh(){try{let r=await fetch('/api/state',{credentials:'same-origin',cache:'no-store'});if(r.ok)show(await r.json())}catch(e){$('runStatus').textContent='Servidor indisponível; tentando reconectar a tela'}}
