@@ -10,6 +10,7 @@ from clean_v1.trend_regime import trending
 from clean_v1.exhaustion_guard import exhausted
 from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
+from clean_v1 import martingale as mg
 from engine import normalized
 
 def limit_reason(state):
@@ -23,26 +24,30 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
     try:
         result=call('exec',{'op':'demo_result','id':order['id'],'h':expiration_minutes},expiration_minutes*60+120)
         pnl=float(result['profit'])
+        was_recovery=bool(candle_features.get('martingale'))
         state['profit']+=pnl
         if pnl>0:state['wins']+=1
         elif pnl<0:state['losses']+=1
-        state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name,'expiration_minutes':expiration_minutes,'timeframe_minutes':timeframe_minutes,'rsi_14':candle_features.get('rsi_14')}
+        state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name,'expiration_minutes':expiration_minutes,'timeframe_minutes':timeframe_minutes,'rsi_14':candle_features.get('rsi_14'),'stake':candle_features.get('stake',state.get('stake',2)),'martingale':was_recovery}
         state.setdefault('research',[]).append({'asset':asset,'direction':direction,'status':result['status'],'profit':pnl,'features':candle_features,'at':time.time()})
         state['research']=state['research'][-300:]
         state['research_summary']=summarize(state['research'])
+        mg.after_result(state,pnl,asset,timeframe_minutes,was_recovery)
         try:
             state['archive_last_saved']=archive.record(state,order,asset,direction,result,candle_features)
         except Exception:
             state['archive_last_saved']=False
-        state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['current_strategy']='';state['current_expiration_minutes']=0;state['current_timeframe_minutes']=0;state['current_rsi_14']=None;state['expire_ts']=0
+        state['current_asset']='';state['current_direction']='';state['current_order_id']='';state['current_strategy']='';state['current_expiration_minutes']=0;state['current_timeframe_minutes']=0;state['current_rsi_14']=None;state['current_stake']=0;state['current_martingale']=False;state['expire_ts']=0
         reason=limit_reason(state)
         if reason:
+            mg.reset_on_stop(state)
             state['running']=False;state['stop'].set();state['stop_reason']=reason
             state['message']=reason;state['phase']='limit_reached'
         else:
             state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
             state['phase']='scan' if state['running'] else 'result'
     except Exception:
+        mg.reset_on_stop(state)
         state['running']=False;state['uncertain']=True
         state['phase']='uncertain';state['message']='Resultado incerto; confira a ordem na Bullex antes de retomar'
     finally:
@@ -94,6 +99,9 @@ def run(state, call):
                 subset=frozen_subset
             else:
                 rot+=10
+            pending_watch=state.get('martingale_pending')
+            if pending_watch and pending_watch.get('mode')=='next_candle' and pending_watch['asset'] not in [x['asset'] for x in subset]:
+                subset=[{'asset':pending_watch['asset']}] + subset[:21]
             try:
                 snap=call('read',{'op':'snapshot','assets':[x['asset'] for x in subset],'sniper_only':True,'enable_m5':True},15)
                 state['read_failures']=0
@@ -110,6 +118,7 @@ def run(state, call):
             # Do not mistake old provider snapshots for a fresh executable signal.
             wall_now=time.time()
             boundary=int(server_now//60)*60
+            mg.expire(state,boundary,wall_now)
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
                 if len(bars)<55 or bars[-1]['t']!=boundary-60:continue
@@ -171,6 +180,8 @@ def run(state, call):
                 chosen=m5 or m1
                 if not chosen:continue
                 signal,strategy_name,signal_bars,timeframe_minutes,rsi_value=chosen
+                stake_to_send,is_recovery=mg.amount_for_signal(state,boundary,item['asset'],timeframe_minutes)
+                if stake_to_send is None:continue
                 key=(boundary,item['asset'])
                 if key in state['seen']:continue
                 state['seen'].add(key)
@@ -204,8 +215,9 @@ def run(state, call):
                     state['phase']='sending';state['message']='Sinal válido, enviando ordem DEMO...'
                 try:
                     expiration_minutes=5 if timeframe_minutes==5 else state['expiration_minutes']
-                    order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':state['stake'],'h':expiration_minutes,'candle':boundary-60,'min_payout':80},13)
+                    order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':stake_to_send,'h':expiration_minutes,'candle':boundary-60,'min_payout':80},13)
                     if order.get('sent') and order.get('id'):
+                        mg.record_sent(state,is_recovery,stake_to_send)
                         state['orders']+=1
                         state['phase']='running_order'
                         state['expire_ts']=int(order.get('expiration',0))
@@ -218,8 +230,8 @@ def run(state, call):
                         state['current_rsi_14']=rsi_value
                         state['current_expiration_minutes']=expiration_minutes
                         state['message']='Ordem em andamento; analisando outros ativos'
-                        state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value}
-                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],{**features(signal_bars,state['current_direction']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value},expiration_minutes,strategy_name,timeframe_minutes),daemon=True).start()
+                        state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value,'stake':stake_to_send,'martingale':is_recovery}
+                        threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],{**features(signal_bars,state['current_direction']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value,'stake':stake_to_send,'martingale':is_recovery},expiration_minutes,strategy_name,timeframe_minutes),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
                         reason=str(order.get('reason','Ordem não aceita'))[:150]
@@ -227,6 +239,7 @@ def run(state, call):
                         state['message']=reason
                         with state['order_lock']:state['pending']=False
                 except Exception:
+                    mg.reset_on_stop(state)
                     state['running']=False;state['uncertain']=True
                     state['phase']='uncertain'
                     state['message']='Envio incerto; confira a Bullex antes de retomar'
@@ -234,4 +247,6 @@ def run(state, call):
             state['stop'].wait(.4)
     except Exception as e:
         state['running']=False;state['phase']='error';state['message']='Análise interrompida: '+str(e)[:120]
-    finally:state['running']=False
+    finally:
+        state['running']=False
+        mg.reset_on_stop(state)
