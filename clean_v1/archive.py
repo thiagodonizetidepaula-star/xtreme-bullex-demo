@@ -11,12 +11,14 @@ ZONE=datetime.timezone(datetime.timedelta(hours=-3))
 def configured():
     return bool(os.environ.get('SUPABASE_URL') and os.environ.get('SUPABASE_SERVICE_ROLE_KEY'))
 
-def _request(method,params='',payload=None):
-    url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/'+TABLE+params
+def _request(method,params='',payload=None,table=TABLE):
+    if table not in (TABLE,'xtreme_trusted_phones'):raise ValueError('Tabela não permitida')
+    url=os.environ['SUPABASE_URL'].rstrip('/')+'/rest/v1/'+table+params
     key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
     data=json.dumps(payload,ensure_ascii=False).encode('utf-8') if payload is not None else None
     headers={'apikey':key,'Authorization':'Bearer '+key,'Content-Type':'application/json'}
     if method=='POST':headers['Prefer']='resolution=ignore-duplicates,return=minimal'
+    if method=='PATCH':headers['Prefer']='return=minimal'
     req=urllib.request.Request(url,data=data,headers=headers,method=method)
     with urllib.request.urlopen(req,timeout=8) as response:
         return json.loads(response.read()) if method=='GET' else None
