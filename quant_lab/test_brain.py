@@ -1,5 +1,6 @@
 """Offline validation tests: no market requests or order execution."""
 import unittest
+import unittest.mock
 from quant_lab import brain
 
 def candles(n=140,frame=1):
@@ -47,4 +48,61 @@ class NOVAQuantTests(unittest.TestCase):
         now=rows[-1]['from']+30
         recent=brain.normalize(rows,1,now)
         self.assertEqual(recent[-1]['t'],rows[-2]['from'])
+
+class NOVAQuantStartTests(unittest.TestCase):
+    """Offline WSGI lifecycle tests; no Bullex login or order can be sent."""
+    def setUp(self):
+        import threading
+        from quant_lab import app
+        self.app=app
+        class Connected:
+            def poll(self):return None
+        self.worker=Connected()
+        self.s={'lock':threading.RLock(),'reader':self.worker,'executor':self.worker,
+            'running':False,'pending':False,'mode':'research','status':'PRONTO',
+            'message':'Teste','stop':threading.Event(),'stop_reason':None,'settings':{
+                'stake':2,'stop_loss':15,'stop_win':20,'max_trades':12},
+            'sent':0,'profit':0,'wins':0,'losses':0,'trades':[],'reports':[],
+            'signal':None,'assets':0,'scanned':0,'proposals_tested':0,
+            'last_update':0,'balance':1000,'currency':'USD','last_seen':0}
+        app.sessions['offline-test-session']=self.s
+    def tearDown(self):
+        self.app.sessions.pop('offline-test-session',None)
+    def request(self,path,payload):
+        import io,json
+        data=json.dumps(payload).encode()
+        result={}
+        def begin(status,headers):result['status']=status
+        environ={'PATH_INFO':path,'REQUEST_METHOD':'POST','HTTP_HOST':'testserver',
+            'HTTP_COOKIE':'nova_lab=offline-test-session',
+            'CONTENT_LENGTH':str(len(data)),'wsgi.input':io.BytesIO(data)}
+        with unittest.mock.patch.object(self.app,'scanner',lambda _session:None):
+            result['json']=json.loads(b''.join(self.app.api(environ,begin)))
+        return result
+    def test_mode_button_starts_scanner_with_ack_and_executor(self):
+        import unittest.mock
+        out=self.request('/api/mode',{'mode':'practice','acknowledge':True})
+        self.assertTrue(out['status'].startswith('200'))
+        self.assertTrue(self.s['running'])
+        self.assertEqual(self.s['mode'],'practice')
+    def test_no_ack_does_not_start(self):
+        import unittest.mock
+        out=self.request('/api/mode',{'mode':'practice','acknowledge':False})
+        self.assertTrue(out['status'].startswith('400'))
+        self.assertFalse(self.s['running'])
+    def test_no_executor_does_not_start(self):
+        import unittest.mock
+        self.s['executor']=None
+        out=self.request('/api/mode',{'mode':'practice','acknowledge':True})
+        self.assertTrue(out['status'].startswith('409'))
+        self.assertFalse(self.s['running'])
+        self.assertEqual(self.s['mode'],'research')
+    def test_existing_scanner_not_duplicated(self):
+        import unittest.mock
+        self.s['running']=True
+        out=self.request('/api/mode',{'mode':'practice','acknowledge':True})
+        self.assertTrue(out['status'].startswith('200'))
+        self.assertTrue(self.s['running'])
+        self.assertEqual(self.s['mode'],'practice')
+
 if __name__=='__main__':unittest.main()

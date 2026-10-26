@@ -96,7 +96,7 @@ form .gridForm{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 </div><button id="saveRisk" class="btn secondary">Salvar limites</button><p class="minor" id="saveMessage"></p></div>
 <div class="panel"><h2>Modo de execução</h2><p class="subhead">Apenas hipóteses com amostra mínima e validação separada podem produzir operações automáticas.</p>
 <label class="check"><input id="acceptDemo" type="checkbox"><span>Entendo que são operações de DEMONSTRAÇÃO, que os sinais não garantem lucro e que quero permitir ordens automáticas na PRACTICE.</span></label>
-<div class="actionRow"><button class="btn secondary" id="researchMode">Somente analisar</button><button class="btn" id="tradeMode" disabled>Ativar DEMO automático</button></div><p id="modeInfo" class="minor" style="margin-top:14px"></p></div>
+<div class="actionRow"><button class="btn secondary" id="researchMode">Somente analisar</button><button class="btn" id="tradeMode" type="button">▶ Iniciar operações automáticas · DEMO</button></div><p id="modeInfo" class="minor" style="margin-top:14px"></p><p id="modeActionMessage" class="minor" role="status" aria-live="polite"></p></div>
 </div></div></section>
 <footer class="foot">NOVA QUANT — Laboratório independente • Somente PRACTICE • Dados de mercado fornecidos pela corretora • Resultados históricos e validação de parâmetros não garantem resultados futuros.</footer>
 </div></div></main>
@@ -109,15 +109,26 @@ async function post(route,data={}){const r=await fetch(route,{method:'POST',cred
 function switchTab(which){selectedTab=which;for(const x of ['desk','lab','broker'])$(x).hidden=x!==which;for(const n of document.querySelectorAll('.nav'))n.classList.toggle('active',n.dataset.tab===which)}
 for(const nav of document.querySelectorAll('.nav'))nav.onclick=()=>switchTab(nav.dataset.tab);
 function setLoading(btn,yes){btn.disabled=!!yes}
-$('loginForm').onsubmit=async e=>{e.preventDefault();setLoading($('loginBtn'),true);$('loginStatus').textContent='Conectando leitura e executor PRACTICE...';const password=$('password').value;$('password').value='';try{show(await post('/api/connect',{email:$('email').value,password}));$('loginStatus').textContent='Conta PRACTICE conectada. Abra Mercado e clique Analisar ao vivo.';switchTab('desk')}catch(err){$('loginStatus').textContent=err.message}finally{setLoading($('loginBtn'),false)}};
+$('loginForm').onsubmit=async e=>{e.preventDefault();setLoading($('loginBtn'),true);$('loginStatus').textContent='Conectando leitura e executor PRACTICE...';const password=$('password').value;$('password').value='';try{const result=await post('/api/connect',{email:$('email').value,password});show(result);if(result.connected_executor){$('loginStatus').textContent='PRACTICE conectada para análise e execução DEMO.';switchTab('desk')}else{$('loginStatus').textContent='Leitura conectada, mas executor DEMO indisponível. Desconecte e conecte novamente; verifique a autenticação Bullex.';$('modeActionMessage').textContent='Execução automática bloqueada: o executor PRACTICE não confirmou a conexão. A análise continua disponível.';switchTab('broker')}}catch(err){$('loginStatus').textContent=err.message}finally{setLoading($('loginBtn'),false)}};
 $('logoutBtn').onclick=async()=>{if(!confirm('Desconectar apenas este NOVA QUANT? Ordens pendentes não serão refeitas.'))return;try{show(await post('/api/logout',{}))}catch(e){$('loginStatus').textContent=e.message}};
-$('startBtn').onclick=async()=>{try{show(await post('/api/start',{}))}catch(e){$('runStatus').textContent=e.message}};
+$('startBtn').onclick=async()=>{if(!last.connected){$('modeActionMessage').textContent='Primeiro conecte sua conta Bullex PRACTICE aqui.';switchTab('broker');return}if(last.mode==='practice'&&!last.connected_executor){$('modeActionMessage').textContent='Não é possível enviar ordens: executor PRACTICE indisponível. Desconecte e conecte novamente.';switchTab('broker');return}try{const result=await post('/api/start',{});show(result)}catch(e){$('runStatus').textContent=e.message}};
 $('stopBtn').onclick=async()=>{try{show(await post('/api/stop',{}))}catch(e){$('runStatus').textContent=e.message}};
 $('saveRisk').onclick=async()=>{try{const data={stake:Number($('stake').value),stop_loss:Number($('stopLoss').value),stop_win:Number($('stopWin').value),max_trades:Number($('maxTrades').value)};show(await post('/api/settings',data));localDirty=false;$('saveMessage').textContent='Limites salvos nesta sessão.'}catch(e){$('saveMessage').textContent=e.message}};
 for(const id of ['stake','stopLoss','stopWin','maxTrades'])$(id).addEventListener('input',()=>localDirty=true);
-$('acceptDemo').onchange=()=>{$('tradeMode').disabled=!$('acceptDemo').checked||!last.connected||!last.connected_executor};
+$('acceptDemo').onchange=()=>{$('modeActionMessage').textContent=$('acceptDemo').checked?'Confirmação marcada. Toque no botão para ativar somente na conta DEMO.':'Para iniciar ordens automáticas, marque a confirmação PRACTICE acima.'};
 $('researchMode').onclick=async()=>{try{show(await post('/api/mode',{mode:'research'}))}catch(e){$('modeInfo').textContent=e.message}};
-$('tradeMode').onclick=async()=>{try{show(await post('/api/mode',{mode:'practice',acknowledge:$('acceptDemo').checked}))}catch(e){$('modeInfo').textContent=e.message}};
+$('tradeMode').onclick=async()=>{
+ const feedback=$('modeActionMessage');
+ if(!last.connected){feedback.textContent='Conecte primeiro sua conta Bullex PRACTICE nesta tela.';$('email').focus();return}
+ if(!last.connected_reader){feedback.textContent='Leitura Bullex desconectada. Desconecte e entre novamente.';return}
+ if(!last.connected_executor){feedback.textContent='Executor Bullex PRACTICE indisponível. Desconecte e conecte novamente para habilitar operações DEMO.';return}
+ if(!$('acceptDemo').checked){feedback.textContent='Marque a confirmação de operações DEMO acima antes de iniciar.';return}
+ if(last.pending){feedback.textContent='Existe uma ordem pendente ou incerta. Confira o resultado na Bullex antes de reiniciar.';return}
+ const btn=$('tradeMode');btn.disabled=true;feedback.textContent='Ativando motor automático PRACTICE...';
+ try{const result=await post('/api/mode',{mode:'practice',acknowledge:true});show(result);feedback.textContent=result.running?'Análise automática iniciada na PRACTICE. Uma ordem só será enviada com sinal e filtros aprovados.':'Modo DEMO selecionado; pressione Iniciar no painel Mercado.';switchTab('desk')}
+ catch(e){feedback.textContent='Não foi possível iniciar: '+e.message}
+ finally{btn.disabled=false}
+};
 function show(s){
  last=s||{};
  const connected=!!s.connected;
@@ -131,14 +142,21 @@ function show(s){
  $('pnl').className='big '+(s.profit>=0?'green':'red');
  $('score').textContent=(s.wins||0)+' WIN · '+(s.losses||0)+' LOSS · '+(s.sent||0)+' ordens';
  $('runStatus').textContent=(s.status||'ROBÔ PARADO')+' · '+(s.stop_reason||s.message||'Aguardando conexão');
- $('startBtn').disabled=!connected||!!s.running||!!s.pending;
+ $('startBtn').disabled=!!s.running||!!s.pending;
+ $('startBtn').textContent=s.mode==='practice'?'▶ Iniciar operação automática':'▶ Analisar ao vivo';
  $('stopBtn').disabled=!s.running;
  $('logoutBtn').disabled=!connected;
  $('loginBtn').disabled=connected;
  $('loginForm').hidden=connected;
  $('modelStatus').textContent=(s.running?'LENDO AO VIVO':'AGUARDANDO');
- $('modeInfo').textContent=s.mode==='practice'?'Ordens automáticas PRACTICE permitidas apenas com sinal aprovado pela validação; stops ativos.':'Apenas monitoramento e pesquisa. Nenhuma ordem será executada.';
- $('tradeMode').disabled=!connected||!s.connected_executor||!$('acceptDemo').checked;
+ $('modeInfo').textContent=s.mode==='practice'
+   ?(s.running?'Motor DEMO ativo. As entradas exigem sinais aprovados, payout e stops válidos.':'Modo DEMO selecionado, mas scanner parado.')
+   :(!connected?'Conecte sua conta Bullex PRACTICE para ativar o motor.':!s.connected_executor?'Leitura conectada, mas executor DEMO indisponível. Reconecte a PRACTICE.':'Somente análise. Marque a confirmação e use o botão para iniciar DEMO automático.');
+ $('tradeMode').textContent=s.mode==='practice'&&s.running?'● DEMO automático ativo':'▶ Iniciar operações automáticas · DEMO';
+ // Botão DEMO permanece clicável para mostrar o pré-requisito ausente.
+ if(s.connected && !s.connected_executor && !$('modeActionMessage').textContent){
+  $('modeActionMessage').textContent='Executor PRACTICE não conectado. Desconecte e conecte novamente para operar em DEMO.'
+ }
  $('saveRisk').disabled=!connected||!!s.running||!!s.pending;
  for(const id of ['stake','stopLoss','stopWin','maxTrades'])$(id).disabled=!!s.running||!!s.pending;
  if(s.settings&&!localDirty){$('stake').value=s.settings.stake;$('stopLoss').value=s.settings.stop_loss;$('stopWin').value=s.settings.stop_win;$('maxTrades').value=s.settings.max_trades;}

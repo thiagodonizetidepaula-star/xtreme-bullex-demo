@@ -296,6 +296,10 @@ def api(environ,start):
         with s['lock']:
             if s['running']:return answer(start,'200 OK',view(s))
             if s['pending']:return answer(start,'409 Conflict',{'error':'Ordem incerta ou pendente; confira a Bullex'})
+            if s['reader'].poll() is not None:
+                return answer(start,'409 Conflict',{'error':'Leitor Bullex desconectado; conecte sua PRACTICE novamente'})
+            if s['mode']=='practice' and (not s.get('executor') or s['executor'].poll() is not None):
+                return answer(start,'409 Conflict',{'error':'Executor PRACTICE indisponível; conecte novamente'})
             if getattr(s.get('thread'),'is_alive',lambda:False)():
                 return answer(start,'409 Conflict',{'error':'Encerrando análise anterior'})
             err=risk_error(s,s['settings']['stake'])
@@ -311,14 +315,40 @@ def api(environ,start):
             data=json.loads(environ['wsgi.input'].read(size))
             requested=data.get('mode')
             if requested not in ('research','practice'):raise ValueError('Modo inválido')
-            if requested=='practice':
-                if data.get('acknowledge') is not True:raise ValueError('Confirme que ordens PRACTICE têm risco experimental')
-                if not s.get('executor'):raise ValueError('Executor PRACTICE indisponível')
+            if requested=='practice' and data.get('acknowledge') is not True:
+                raise ValueError('Marque a confirmação para operar somente na conta PRACTICE')
             with s['lock']:
-                if s['pending']:return answer(start,'409 Conflict',{'error':'Aguarde o resultado da ordem'})
-                s['mode']=requested
+                if s['pending']:
+                    return answer(start,'409 Conflict',{'error':'Ordem pendente ou incerta; confira primeiro na Bullex'})
+                if requested=='practice':
+                    if s['reader'].poll() is not None:
+                        return answer(start,'409 Conflict',{'error':'Leitura Bullex desconectada. Reconecte sua conta PRACTICE'})
+                    if not s.get('executor') or s['executor'].poll() is not None:
+                        return answer(start,'409 Conflict',{'error':'Executor PRACTICE indisponível. Desconecte e conecte novamente'})
+                    if not s['running']:
+                        if getattr(s.get('thread'),'is_alive',lambda:False)():
+                            return answer(start,'409 Conflict',{'error':'Análise anterior ainda está encerrando; tente novamente'})
+                        err=risk_error(s,s['settings']['stake'])
+                        if err:return answer(start,'409 Conflict',{'error':err})
+                        s['stop']=threading.Event()
+                        s['mode']='practice'
+                        s['running']=True
+                        s['stop_reason']=None
+                        s['status']='INICIANDO DEMO AUTOMÁTICO'
+                        s['message']='Monitorando M1 e M5. Entradas PRACTICE apenas com validação e filtros aprovados.'
+                        s['thread']=threading.Thread(target=scanner,args=(s,),daemon=True,name='NovaQuantPractice')
+                        s['thread'].start()
+                    else:
+                        # The existing live scanner now monitors the PRACTICE mode.
+                        # No second scanner or duplicate order loop is created.
+                        s['mode']='practice'
+                        s['message']='DEMO automático habilitado no scanner ativo'
+                else:
+                    s['mode']='research'
+                    s['message']='Somente análise; nenhuma nova ordem será enviada'
             return answer(start,'200 OK',view(s))
-        except (ValueError,TypeError) as e:return answer(start,'400 Bad Request',{'error':str(e)})
+        except (ValueError,TypeError) as e:
+            return answer(start,'400 Bad Request',{'error':str(e)})
     if path=='/api/stop':
         with s['lock']:
             s['mode']='research';s['running']=False;s['stop'].set()
