@@ -571,15 +571,18 @@ def app(environ,start_response):
             except (ValueError,TypeError) as exc:return respond(start_response,'400 Bad Request',{'error':str(exc) if str(exc) else 'Configuração inválida'})
         if path in ('/api/start','/api/stop'):
             if not current or not current.get('executor'):return respond(start_response,'409 Conflict',{'error':'Executor PRACTICE desconectado'})
-            if path=='/api/stop':
-                current['running']=False;current['stop'].set();current['phase']='stopped';current['message']='Parada solicitada. Ordem já enviada continuará em confirmação.'
-                return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
-            if current['running']:return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
-            if current['pending'] or current.get('uncertain'):return respond(start_response,'409 Conflict',{'error':'Há ordem anterior incerta; confira a Bullex'})
-            if current['orders']>=current['max_orders'] or current['profit']<=-current['stop_loss'] or current['profit']>=current['stop_win']:
-                return respond(start_response,'409 Conflict',{'error':'Limite ou stop da sessão atingido; conecte nova sessão PRACTICE para reiniciar o placar'})
-            current['stop_reason']=None
-            current['stop']=threading.Event();current['running']=True;current['message']='Preparando catálogo PRACTICE'
+            # PC and phone share this lock so pressing start on both devices
+            # can never launch two strategy loops for one Bullex session.
+            with guard:
+                if path=='/api/stop':
+                    current['running']=False;current['stop'].set();current['phase']='stopped';current['message']='Parada solicitada. Ordem já enviada continuará em confirmação.'
+                    return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
+                if current['running']:return respond(start_response,'200 OK',state_view(current)|({'monitor_only':True,'remote_control':True} if remote_action else {}))
+                if current['pending'] or current.get('uncertain'):return respond(start_response,'409 Conflict',{'error':'Há ordem anterior incerta; confira a Bullex'})
+                if current['orders']>=current['max_orders'] or current['profit']<=-current['stop_loss'] or current['profit']>=current['stop_win']:
+                    return respond(start_response,'409 Conflict',{'error':'Limite ou stop da sessão atingido; conecte nova sessão PRACTICE para reiniciar o placar'})
+                current['stop_reason']=None
+                current['stop']=threading.Event();current['running']=True;current['message']='Preparando catálogo PRACTICE'
             def ccall(mode,command,timeout=50):
                 with current['exec_lock'] if mode=='exec' else current['read_lock']:
                     answer=proc_call(current['executor'] if mode=='exec' else current['proc'],command,timeout)
