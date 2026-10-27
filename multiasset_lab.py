@@ -143,6 +143,28 @@ class ResearchRegistry:
                     self.records.pop(key,None)
             self.error=None
 
+    @staticmethod
+    def _merge(prior, newer, timeframe):
+        step=60 if timeframe=='M1' else 300
+        ordered={}
+        for bar in list(prior or [])+list(newer or []):
+            try:
+                t=int(bar['from'])
+                o,c,h,l=(float(bar[k]) for k in ('open','close','max','min'))
+            except (ValueError,TypeError,KeyError,OverflowError):
+                raise ValueError('Histórico M1/M5 inválido.')
+            if t%step or not all(math.isfinite(v) and v>0 for v in (o,c,h,l)):
+                raise ValueError('Dados M1/M5 fora do período ou com preço inválido.')
+            if not l<=min(o,c)<=max(o,c)<=h:
+                raise ValueError('OHLC inconsistente.')
+            ordered[t]={'from':t,'open':o,'close':c,'max':h,'min':l}
+        if not ordered:return []
+        seq=[ordered[k] for k in sorted(ordered)]
+        start=len(seq)-1
+        while start>0 and seq[start]['from']-seq[start-1]['from']==step:
+            start-=1
+        return seq[start:][-1500:]
+
     def ingest(self, asset, timeframe, bars, source='stream'):
         if timeframe not in ('M1','M5'):
             raise ValueError('Período de estudo inválido')
