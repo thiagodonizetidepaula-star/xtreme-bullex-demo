@@ -45,7 +45,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/"}}</script></head>
 <body><header><h1>🐯 XTREME TIGER <small>· Escritório 3D</small></h1><b class="win">● BULLEX PRACTICE</b></header><main>
 <div class="controls"><button id="start" class="primary">▶ Iniciar fluxo DEMO</button><button id="pause">⏸ Pausar</button><button id="reset">↺ Zerar</button><button id="camera">🎥 Vista geral</button><button id="fullScreenToggle" title="Expandir o escritório para ocupar a tela">⛶ Tela cheia</button>
-<button id="liveChartRefresh" title="Atualizar velas PRACTICE com robô parado" disabled>📡 Atualizar gráfico</button><details class="cameraTools"><summary>🎥 Mais câmeras e desempenho</summary><div class="controls"><button id="camLeft">🏢 Sala esquerda</button><button id="camRight">📈 Sala direita</button><button id="camHall">🚶 Corredor</button><button id="camLounge">☕ Recepção</button><button id="quality">⚙️ Qualidade: Auto</button></div></details><button id="soundToggle" aria-pressed="false">🔇 Ativar sons</button><button id="phoneTest" title="Ouvir agora o telefone da recepção">☎️ Testar telefone</button><button id="avatarTest" class="primary">↩ Ver equipe original</button><small id="avatarStatus" aria-live="polite">🐯 Equipe Tiger · 6 homens e 6 mulheres · rodízio automático</small><small>Arraste para girar · toque numa TV/monitor para ampliar · no foco, arraste para centralizar</small></div>
+<button id="liveChartRefresh" title="Atualizar velas PRACTICE com robô parado" disabled>📡 Atualizar gráfico</button><details class="cameraTools"><summary>🎥 Mais câmeras e desempenho</summary><div class="controls"><button id="camLeft">🏢 Sala esquerda</button><button id="camRight">📈 Sala direita</button><button id="camHall">🚶 Corredor</button><button id="camLounge">☕ Recepção</button><button id="quality">⚙️ Qualidade: Auto</button></div></details><button id="soundToggle" aria-pressed="false">🔇 Ativar sons</button><button id="phoneTest" title="Ouvir agora o telefone da recepção">☎️ Testar telefone</button><button id="avatarTest" class="primary">↩ Ver equipe original</button><small id="avatarStatus" aria-live="polite">🐯 Sala Tiger · quatro traders em operação visual</small><small>Arraste para girar · toque numa TV/monitor para ampliar · no foco, arraste para centralizar</small></div>
 <div class="stage"><canvas id="scene"></canvas><div id="fallback">Não foi possível carregar o motor 3D. Verifique a conexão com a internet.</div><div class="board"><strong>🐯 XTREME TIGER · LOUSA DIGITAL</strong><span id="headline">Equipe analisando o mercado fictício…</span></div><div class="info">🏙️ 2 salas de luxo · Toque numa tela para visualizar</div><div id="inspector" class="screenInspector" role="region" aria-label="Resultados na tela"><div class="inspectorHeader"><h3 id="screenTitle">📊 Tela</h3><div class="inspectorHeadButtons"><button id="focusReset">🎯</button><button id="closeInspector" aria-label="Fechar inspeção">✕</button></div></div><small id="screenSource">SIMULAÇÃO · Sem corretora</small><div class="summary" id="screenSummary"></div><strong id="inspectorListTitle">Últimas operações nesta tela</strong><div id="screenOps"></div><small>Arraste sobre o cenário para deslocar o foco. Pinça para zoom. Volte ao escritório para girar 360°.</small></div><div id="winToast" class="winToast" aria-live="polite"></div></div>
 <div class="statusNote" id="brokerLinkControl"><strong>🔌 Bullex DEMO: <span id="brokerState" class="loss">NÃO VINCULADA</span></strong> · Visualização em tempo real do bot, sem enviar ordens pelo escritório.
 <div class="pairRow"><input id="officePairCode" type="text" placeholder="Cole o código gerado no bot Bullex" maxlength="256" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="bindOffice" class="primary">🔗 Vincular DEMO</button><button id="unbindOffice" hidden>Desvincular</button></div><small id="brokerMessage" aria-live="polite">Abra seu bot Bullex DEMO, entre com a chave do painel, toque em “Gerar código para o escritório” e cole aqui. O código é de uso único.</small><div style="margin-top:8px"><a href="https://xtreme-bullex-demo.onrender.com" target="_blank" rel="noopener noreferrer" style="color:#a1eed1">Abrir bot Bullex DEMO para gerar código</a></div>
@@ -259,7 +259,7 @@ function refreshPipeline(){
  charts.filter(c=>c.big&&(c.roomView||c.reception)).forEach(drawBigChart);
  if(typeof refreshInspector==='function')refreshInspector();
 }
-const positions=[[-6.55,-3.5],[-4.5,-3.5],[-2.55,-3.5],[2.55,-3.5],[4.5,-3.5],[6.55,-3.5],[-6.55,.6],[-4.5,.6],[-2.55,.6],[2.55,.6],[4.5,.6],[6.55,.6]];
+const positions=[[-1.58,-1.25],[1.58,-1.25],[-1.58,1.48],[1.58,1.48],[4.5,-3.5],[6.55,-3.5],[-6.55,.6],[-4.5,.6],[-2.55,.6],[2.55,.6],[4.5,.6],[6.55,.6]];
 positions.forEach(([x,z],i)=>{const work=new THREE.Group();work.position.set(x,0,z);scene.add(work);box(1.12,.16,1.25,wood,0,1.05,-.2,work);for(let dx of [-.46,.46])for(let dz of [-.65,.25])box(.1,1,.1,steel,dx,.5,dz,work);box(.92,.68,.08,screen,0,1.56,-.61,work);const cv=document.createElement('canvas');cv.width=192;cv.height=112;const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);const plane=new THREE.Mesh(new THREE.PlaneGeometry(.83,.5),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));plane.position.set(0,1.56,-.55);work.add(plane);plane.userData.screen={kind:'desk',index:i};screenTargets.push(plane);charts.push({ctx,tex,seed:i,prices:Array.from({length:18},(_,k)=>50+k*.5+Math.sin(k+i)*8)});box(.42,.05,.18,steel,0,1.12,-.37,work);box(.8,.1,.15,steel,0,1.11,.25,work);
 box(.85,.12,.7,chair,0,.62,1.03,work);box(.85,.9,.14,chair,0,1.05,1.36,work);box(.15,.6,.15,steel,0,.3,1,work);
 const person=new THREE.Group();person.position.set(x,0,z+1);person.rotation.y=Math.PI;scene.add(person);const shirt=mat(colors[i]),skin=mat(['#dfb48b','#a87c5d','#f0caa8','#9e674a'][i%4]),hair=mat(['#25222a','#603b27','#d8b065','#33232a'][i%4]);const head=new THREE.Group();head.position.y=1.49;person.add(head);ball(.24,skin,0,0,0,head);ball(.23,hair,0,.13,-.05,head);for(const side of [-1,1]){ball(.033,mat('#172735'),side*.085,.025,.216,head);ball(.013,mat('#ffffff'),side*.08,.03,.239,head)}box(.11,.018,.012,mat('#874653'),0,-.103,.23,head);box(.52,.61,.32,shirt,0,1.02,0,person);const arms=[];for(const side of [-1,1]){const joint=new THREE.Group();joint.position.set(side*.35,1.22,.18);person.add(joint);box(.18,.44,.18,shirt,0,-.25,.08,joint);ball(.075,skin,0,-.48,.20,joint);joint.rotation.x=-1.2;joint.rotation.z=side*.09;arms.push(joint)}const legs=[];for(const side of [-1,1])legs.push(box(.22,.49,.22,chair,side*.15,.52,0,person));// Distinct stylized game avatars: haircuts, eyes, brows, jackets and footwear.
@@ -1002,7 +1002,7 @@ $('phoneTest').onclick=()=>{
 // One desk / one assigned strategy. 3D confetti appears at that exact table.
 const deskConfetti=[];
 function showDeskConfetti(index){
- if(!Number.isInteger(index)||index<0||index>=positions.length)return;
+ if(!Number.isInteger(index)||index<0||index>=4)return; // No imaginary on-screen desk for back-office staff.
  const desk=positions[index];
  const palette=[0x57f5b4,0xffd278,0xffffff,0xff96b4,0x8de0fa];
  const now=clock.getElapsedTime();
@@ -1381,6 +1381,7 @@ function patrolSupervisor(p,t){
 }
 
 function updateShift(t){
+ if(fourTraderRoom)return; // New central trading room keeps all four staff at their desks.
  const shift=Math.floor(t/80);
  if(shift!==lastShift){
   const initial=lastShift<0;
@@ -1428,6 +1429,7 @@ function updateTeam(t){
  const dt=Math.min(.05,Math.max(0,t-lastTeamFrame));lastTeamFrame=t;
  for(const p of team){
   const i=p.index;
+  if(fourTraderRoom&&i>=4)continue;
   if(p.walking||p.route.length){walkStaff(p,dt,t);continue;}
   const cheering=p.role==='desk'&&p.celebrateUntil>t;
   const rise=cheering?Math.min(1,(t-p.celebrateStart)/.35):0;
@@ -1463,13 +1465,159 @@ function updateTeam(t){
   }
  }
 }
+// ---------------------------------------------------------------
+// XTREME TIGER | NEW FOUR-TRADER CENTRAL DEALING ROOM (visual ONLY).
+// Preserve every existing authenticated Bullex API, strategy and engine.
+// Reuse four original stylized Tiger characters, with a facing desk island.
+// ---------------------------------------------------------------
+const fourTraderRoom=true;
+const previousVisuals=scene.children.slice();
+const activeTigerStaff=team.slice(0,4).map(p=>p.group);
+// Hide the old 12-desk / two-glass-room diorama; lights and four avatars stay.
+for(const object of previousVisuals){
+ if(!object.isLight&&!activeTigerStaff.includes(object))object.visible=false;
+}
+screenTargets.length=0;clickTargets.length=0;charts.length=0;
+const midnight=mat('#162936'),slate=mat('#263b4b'),darkGlass=new THREE.MeshPhysicalMaterial({
+ color:0x87bacb,metalness:.08,roughness:.14,transparent:true,opacity:.25,
+ depthWrite:false,side:THREE.DoubleSide
+});
+const brassRoom=mat('#c99a55',.6),deskSurface=mat('#7a5a44'),monitorMetal=mat('#101b2a',.25),chairFabric=mat('#213544');
+scene.background=new THREE.Color('#2d4353');
+scene.fog=new THREE.Fog('#2d4353',24,58);
+// Floor, surrounding architecture, warm ambient accents and roomy walking lanes.
+box(13.8,.24,12.5,midnight,0,-.15,0);
+box(13.2,.026,12.0,slate,0,-.018,0);
+for(let x=-5.4;x<=5.4;x+=1.8)
+ for(let z=-4.3;z<=4.7;z+=1.8){
+  const seam=box(1.77,.008,1.77,mat((Math.round(x+z)&1)?'#304557':'#344959'),x,.005,z);
+  seam.castShadow=false;
+ }
+box(9.45,.035,7.25,mat('#1d3240'),0,.036,.18);
+for(const x of [-4.69,4.69])box(.055,.018,7.34,brassRoom,x,.061,.18);
+for(const z of [-3.42,3.78])box(9.42,.018,.055,brassRoom,0,.061,z);
+box(13.65,5.1,.20,midnight,0,2.42,-6.08);
+for(const x of [-6.75,6.75]){
+ box(.16,4.85,12.15,slate,x,2.42,0);
+ for(let z=-4.5;z<=4.5;z+=2.3){
+  const panel=box(.055,3.5,2.12,darkGlass,x,2.45,z);
+  panel.castShadow=false;
+  box(.10,4.55,.12,brassRoom,x,2.45,z-1.12);
+ }
+ box(.12,.08,11.9,brassRoom,x,4.40,0);
+}
+// A clean visible city backdrop through side glass.
+for(const side of [-1,1]){
+ for(let j=0;j<7;j++){
+  const height=2.5+(j%4)*.76;
+  const skyline=box(1.2,height,1.35,mat(['#627f8e','#7b94a0','#94a9ab'][j%3]),
+    side*(10.5+j%2),height*.5-.3,-5.1+j*1.72);
+  skyline.castShadow=false;
+ }
+}
+// Tiger headquarters sign above the widescreen displays.
+const headlineTexture=document.createElement('canvas');
+headlineTexture.width=1024;headlineTexture.height=192;
+const hdr=headlineTexture.getContext('2d');
+hdr.fillStyle='#132b3c';hdr.fillRect(0,0,1024,192);
+hdr.textAlign='center';hdr.fillStyle='#efc47a';hdr.font='bold 68px system-ui';
+hdr.fillText('XTREME TIGER',512,81);
+hdr.fillStyle='#7bedd0';hdr.font='bold 31px system-ui';
+hdr.fillText('SALA DE TRADERS  •  4 ESTAÇÕES',512,143);
+const headerTex=new THREE.CanvasTexture(headlineTexture);headerTex.colorSpace=THREE.SRGBColorSpace;
+const headerPlane=new THREE.Mesh(new THREE.PlaneGeometry(5.9,1.12),
+ new THREE.MeshBasicMaterial({map:headerTex,side:THREE.DoubleSide}));
+headerPlane.position.set(0,4.42,-5.90);scene.add(headerPlane);
+// Wall screens keep their original informational / read-only data bindings.
+bigTV('LABORATÓRIO',-4.18,2.78,-5.89,3.42,1.92,6);
+bigTV('OPERAÇÕES DEMO',0,2.78,-5.89,3.70,1.92,16);
+bigTV('MURAL DOS TRADERS',4.18,2.78,-5.89,3.42,1.92,17);
+// Suspended contemporary fixtures over two pairs of large monitor stations.
+for(const x of [-1.58,1.58]){
+ box(.06,.84,.06,brassRoom,x,4.23,.12);
+ box(2.65,.12,.32,mat('#d7b57d'),x,3.82,.12);
+ const light=new THREE.PointLight(0xffd5a2,.66,7);
+ light.position.set(x,3.52,.12);scene.add(light);
+}
+const workstationPositions=[
+ {x:-1.58,z:-1.25,turn:Math.PI},{x:1.58,z:-1.25,turn:Math.PI},
+ {x:-1.58,z:1.48,turn:0},{x:1.58,z:1.48,turn:0}
+];
+const monitorSupport=mat('#394858',.35);
+for(let i=0;i<4;i++){
+ const station=workstationPositions[i],w=new THREE.Group();
+ w.position.set(station.x,0,station.z);w.rotation.y=station.turn;scene.add(w);
+ // Oversized desk tops with two large physical workstation monitors.
+ box(2.83,.15,1.20,deskSurface,0,1.03,0,w);
+ box(2.77,.035,1.18,brassRoom,0,1.10,0,w);
+ for(const xx of [-1.21,1.21])for(const zz of [-.42,.42])
+  box(.11,.92,.11,monitorSupport,xx,.51,zz,w);
+ box(2.48,.055,.14,monitorMetal,0,.98,.55,w);
+ for(const mx of [-.63,.63]){
+  box(1.25,.87,.10,monitorMetal,mx,1.70,-.48,w);
+  box(1.17,.77,.017,mat('#08303b'),mx,1.71,-.419,w);
+  const cv=document.createElement('canvas');cv.width=192;cv.height=112;
+  const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  const plane=new THREE.Mesh(new THREE.PlaneGeometry(1.12,.72),
+    new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+  plane.position.set(mx,1.71,-.405);w.add(plane);
+  plane.userData.screen={kind:'desk',index:i};
+  screenTargets.push(plane);
+  charts.push({ctx,tex,seed:i,prices:Array.from({length:18},(_,k)=>51+k*.47+Math.sin(k+i*2)*6)});
+  box(.075,.20,.08,monitorSupport,mx,1.20,-.43,w);
+  box(.30,.028,.22,monitorSupport,mx,1.12,-.38,w);
+ }
+ box(1.08,.035,.24,mat('#172b35'),0,1.135,.20,w); // Keyboard
+ const mouse=box(.10,.035,.15,mat('#d1dce0'),.88,1.137,.22,w);
+ mouse.castShadow=false;
+ const chairBase=new THREE.Group();chairBase.position.set(0,0,1.02);w.add(chairBase);
+ box(.72,.14,.72,chairFabric,0,.64,0,chairBase);
+ box(.76,.91,.13,chairFabric,0,1.12,.31,chairBase);
+ box(.13,.52,.13,monitorSupport,0,.32,0,chairBase);
+ box(.63,.055,.11,monitorSupport,0,.08,0,chairBase);
+ // Per-station desk lamp and tiger-branded nameplate.
+ box(.09,.04,.37,brassRoom,-1.22,1.15,.10,w);
+ const cvLabel=document.createElement('canvas');cvLabel.width=288;cvLabel.height=72;
+ const tx=cvLabel.getContext('2d');
+ tx.fillStyle='#183142';tx.fillRect(0,0,288,72);tx.fillStyle='#efc47a';
+ tx.font='bold 30px system-ui';tx.textAlign='center';tx.fillText(names[i]+' · TRADER',144,43);
+ const tt=new THREE.CanvasTexture(cvLabel);tt.colorSpace=THREE.SRGBColorSpace;
+ const plate=new THREE.Mesh(new THREE.PlaneGeometry(1.08,.27),
+  new THREE.MeshBasicMaterial({map:tt,side:THREE.DoubleSide}));
+ plate.position.set(0,1.15,.43);plate.rotation.x=-Math.PI/2;w.add(plate);
+ const person=team[i];
+ person.group.visible=true;person.role='desk';person.route=[];person.walking=false;
+ person.group.position.set(station.x,0,station.z+(i<2?-1.02:1.02));
+ person.group.rotation.y=i<2?0:Math.PI;
+ poseForRole(person,'desk');
+ person.group.traverse(obj=>{if(obj.isMesh){obj.userData.index=i;clickTargets.push(obj)}});
+}
+for(const p of team.slice(4))p.group.visible=false;
+// Decorative corner plants and a centered round Tiger medallion in the rug.
+const potMat=mat('#b49a7b'),stemMat=mat('#536b52');
+for(const x of [-5.2,5.2])for(const z of [-4.65,4.6]){
+ box(.47,.60,.47,potMat,x,.30,z);
+ const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(.48,1),stemMat);
+ crown.position.set(x,1.15,z);scene.add(crown);
+}
+const emblem=new THREE.Mesh(new THREE.PlaneGeometry(1.16,1.16),
+ new THREE.MeshBasicMaterial({map:logoMaterial.map,transparent:true,side:THREE.DoubleSide}));
+emblem.rotation.x=-Math.PI/2;emblem.position.set(0,.067,.12);scene.add(emblem);
+// Camera starts on a cinematic diagonal that shows both facing rows.
+camera.position.set(7.7,8.6,12.6);
+controls.target.set(0,1.3,.08);controls.minDistance=5;controls.maxDistance=30;
+controls.update();
+$('avatarTest').textContent='🎥 Vista da sala';
+$('avatarStatus').textContent='🐯 Quatro traders · mesas frente a frente · monitores duplos';
+
 $('avatarTest').onclick=()=>{
- premiumActive=!premiumActive;
- for(const p of team)p.group.visible=premiumActive;
- for(const p of people)p.group.visible=!premiumActive;
- $('avatarTest').textContent=premiumActive?'↩ Ver equipe original':'🐯 Mostrar equipe Tiger';
- if(premiumActive){lastTeamFrame=clock.getElapsedTime();updateShift(lastTeamFrame)}
- else $('avatarStatus').textContent='Equipe original de 12 traders · versão anterior';
+ camera.position.set(7.7,8.6,12.6);
+ controls.target.set(0,1.3,.08);
+ controls.minDistance=5;controls.maxDistance=30;
+ releaseFocus();
+ controls.update();
+ $('avatarStatus').textContent='🐯 Quatro traders · mesas frente a frente · monitores duplos';
 };
 updateShift(0);
 const clock=new THREE.Clock();// Render 3D only while on screen, without blocking the separate controls.
