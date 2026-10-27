@@ -136,8 +136,7 @@ def evaluate_primary(bars, asset):
     """Research baseline: the existing site's Sniper + provided Xtreme Tendência.
 
     IMPORTANT: Xtreme Tendência is based on the user's original Lua script
-    (ATR Wilder RMA 18 x 2, default high_low=False); the Sniper code uploaded
-    was only a placeholder. This Sniper uses the already-running code in
+    (ATR Wilder RMA 18 x 2, default high_low=False); the Xtreme Sniper Lua source now provided confirms SMA1/SMA34, WMA5 and strict crossovers. This Sniper uses the already-running code in
     strategy.sniper_buffers, not a claimed transcription of the missing original.
     """
     from strategy import sniper_buffers
