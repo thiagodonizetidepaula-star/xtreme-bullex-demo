@@ -153,8 +153,7 @@ class ResearchRegistry:
             payout=self.market[asset]
             previous=self.records.get(key)
             last=previous['to'] if previous else None
-        from lab40_autoupdate import merge_closed_bars
-        merged=merge_closed_bars(self.last_bars.get(key,[]),bars,limit=1500) if bars else []
+        merged=self._merge(self.last_bars.get(key,[]),bars,timeframe) if bars else []
         if not merged:
             return False
         t=merged[-1]['from']
