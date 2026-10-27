@@ -605,7 +605,17 @@ def office_overview():
                    'bars':state.get('candles',[])[-45:],
                    'source':'BULLEX_PRACTICE_M1_CLOSED',
                    'mode':'CLOSED_CANDLES_NOT_TICKS'},
-            lab40=lab40_summary(),multi_lab=multi_research.snapshot(),
+            lab40=lab40_summary(),multi_lab={
+                **multi_research.snapshot(),
+                'diagnostics':{
+                    **multi_diag,
+                    'pending_queue':multi_queue.qsize(),
+                    'scanner_busy':multi_scan_state['busy'],
+                    'scanner_last_error':multi_scan_state['last_error'],
+                    'live_bars_ready':state.get('stream_ready',0),
+                    'bot_running':bool(state['running'])
+                }
+            },
             stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
             analyzed_count=state.get('analyzed_count',0),server_now=time.time())
 
