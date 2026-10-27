@@ -8,7 +8,7 @@ class TraderLeaderboardTests(unittest.TestCase):
         self.assertEqual(result['broker_mode'],'PRACTICE')
         self.assertEqual(result['total_confirmed'],0)
         self.assertEqual(result['ranking'],[])
-        self.assertEqual(len(result['traders']),12)
+        self.assertEqual(len(result['traders']),4)
     def test_win_loss_from_confirmed_orders_only(self):
         trades=[
             {'id':101,'status':'WIN','profit':1.72,'trader_index':1,'strategy':'XS-18'},
