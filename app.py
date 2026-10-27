@@ -6,6 +6,7 @@ from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
 from dual_motor import assign_desks,select_lab_order,desk_work
+from trader_leaderboard import leaderboard
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -177,6 +178,8 @@ def office_error(message,status):return jsonify(error=message),status
 state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'chart_asset':None,'chart_updated_at':None,'candles':[],'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
 state['lab_orders_enabled']=False  # Must be explicitly enabled on the authenticated PRACTICE panel.
+state['lab_signal_diag']={'reason':'AGUARDANDO_MOTOR','eligible':0,'assigned':0,
+                           'fresh_assets':0,'crossings':0,'valid_signals':0,'checked_at':None}
 def log(s):
     state['message']=s
     state['logs'].append({'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'text':s})
@@ -374,15 +377,33 @@ def loop(c):
             item,a=selected
             lab_choice=None
             if not a.get('direction') and state['lab_orders_enabled']:
-                proposal=select_lab_order(multi_research.snapshot(),candidates,batch['now'],True)
+                # Do not wait for research worker to publish its historical signals
+                # after the M1 entry deadline. Evaluate already-qualified
+                # strategies against the CURRENT broker-confirmed closed bars.
+                diag={}
+                proposal=select_lab_order(
+                    multi_research.snapshot(),candidates,batch['now'],True,
+                    live_items=batch['items'],diagnostics=diag)
+                diag['checked_at']=time.time()
+                state['lab_signal_diag']=diag
                 if proposal:
                     matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
-                    if matched and matched.get('candles') and max(int(b.get('from',0)) for b in matched['candles'])==proposal['candle']:
+                    if matched and matched.get('candles') and int(max(
+                        int(b.get('from',0)) for b in matched['candles']))==proposal['candle']:
                         lab_choice=proposal
                         item=matched
                         a={'direction':proposal['direction'],'candle':proposal['candle'],
-                           'signal':proposal['direction'],'reason':'Motor laboratório validado (PRACTICE M1) · '+proposal['strategy'],
-                           'checks':{'validação':str(proposal['samples'])+' resultados','assertividade':str(proposal['accuracy'])+'%'}}
+                           'signal':proposal['direction'],
+                           'reason':'Motor B, trader '+proposal['trader_name']+
+                            ' · sinal M1 validado no streaming atual · '+proposal['strategy'],
+                           'checks':{'validação':str(proposal['samples'])+' resultados',
+                                     'assertividade':str(proposal['accuracy'])+'%'}}
+                    else:
+                        state['lab_signal_diag']['reason']='ATIVO_SEM_VELA_FECHADA_COMPATIVEL'
+            elif not state['lab_orders_enabled']:
+                state['lab_signal_diag']={'reason':'MOTOR_B_DESLIGADO','eligible':0,
+                    'assigned':0,'fresh_assets':0,'crossings':0,
+                    'valid_signals':0,'checked_at':time.time()}
             c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
@@ -687,6 +708,8 @@ def office_overview():
             lab_orders_enabled=bool(state['lab_orders_enabled']),
             trader_roster=trader_roster,
             trader_work=current_work,
+            trader_leaderboard=leaderboard(state['trades']),
+            lab_signal_diag=state['lab_signal_diag'],
             trades=recent,
             chart={'asset':state.get('chart_asset'),
                    'updated_at':state.get('chart_updated_at'),
