@@ -1510,7 +1510,7 @@ function renderMultiLab(data,p){
  $('multiLast').textContent='Última vela analisada: '+multiNumberDate(data.updated)+
   ' · Diagnóstico: '+seen+' lotes de ativos recebidos, '+queued+' enfileirados, '+processed+
   ' processados, '+Number(diag.pending_queue||0)+' pendentes (limite '+Number(diag.research_queue_capacity||3)+').'+
-  (diag.active_asset?' Estudando '+diag.active_asset+' há '+Number(diag.active_seconds||0)+' s.':'')+
+  (diag.active_asset?' Estudando '+diag.active_asset+' ('+String(diag.active_stage||'etapa não identificada')+') há '+Number(diag.active_seconds||0)+' s.':'')+
   (Number(diag.last_duration_seconds||0)>0?' Último estudo: '+Number(diag.last_duration_seconds).toFixed(1)+' s.':'')+
   ' Para validação são necessárias pelo menos 30 entradas concluídas fora da amostra em cada estratégia. As demais continuam em estudo.';
 
