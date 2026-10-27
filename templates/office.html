@@ -480,6 +480,32 @@ function drawBigChart(c){
 }
 
 function drawRoomTV(c){
+ if(lastMultiLab){
+  const lab=c.roomView==='lab',d=lastMultiLab,g=c.ctx,w=c.cv.width,h=c.cv.height;
+  g.fillStyle='#092432';g.fillRect(0,0,w,h);
+  g.fillStyle=lab?'#eed196':'#80efbf';g.font='bold 29px system-ui';
+  g.fillText(lab?'LABORATORIO AUTOMATICO':'SALA DE OPERACOES PRACTICE',22,45);
+  g.fillStyle='#b8d0d8';g.font='16px system-ui';
+  g.fillText(lab?'M1 + M5 | ATIVOS COM PAYOUT M1 > 80%':'ESTRATEGIA VENCEDORA PRESERVADA | SEM NOVAS ORDENS DO LAB',22,73);
+  const items=lab?(d.candidates||[]):(d.signals||[]);
+  const stats=lab?('ATIVOS '+d.asset_count+' | ESTUDADOS '+d.researched_assets+' | CANDIDATAS '+(d.candidates||[]).length):
+   ('SINAIS DE ESTUDO '+(d.signals||[]).length+' | PRACTICE '+(officeSnapshot?.running?'RODANDO':'PARADO'));
+  g.fillStyle='#ebf4f3';g.font='bold 20px system-ui';g.fillText(stats,22,115);
+  for(let i=0;i<Math.min(8,items.length);i++){
+   const x=items[i],y=160+i*28;
+   g.fillStyle=i%2?'#113343':'#0e2c3d';g.fillRect(15,y-20,w-30,26);
+   g.fillStyle='#dff9ef';g.font='15px system-ui';
+   g.fillText((x.principal?'XS ★ ':'')+String(x.asset||'')+' / '+String(x.timeframe||'')+' / '+String(x.name||x.id||'').slice(0,32),23,y);
+   g.textAlign='right';g.fillStyle='#80efbf';
+   g.fillText((lab?Number(x.accuracy||0).toFixed(1)+'%':String(x.direction||'').toUpperCase()),w-20,y);
+   g.textAlign='left';
+  }
+  if(!items.length){g.fillStyle='#acc7c6';g.font='bold 20px system-ui';g.fillText('Aguardando historico M1/M5 e validacoes suficientes.',25,195);}
+  g.fillStyle='#f0cf8a';g.font='bold 17px system-ui';
+  g.fillText('ESTUDOS NAO EXECUTAM ORDENS | ULTIMA LEITURA '+multiNumberDate(d.updated),22,h-24);
+  c.tex.needsUpdate=true;return;
+ }
+
  const g=c.ctx,w=c.cv.width,h=c.cv.height,lab=c.roomView==='lab',live=bridgeLinked,shot=officeSnapshot;
  g.fillStyle='#071c29';g.fillRect(0,0,w,h);
  g.fillStyle=lab?'#f2c881':'#7bf0c4';g.font='bold 30px system-ui';
