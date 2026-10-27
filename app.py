@@ -5,7 +5,7 @@ from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
-from dual_motor import assign_desks,select_lab_order,desk_work
+from dual_motor import TRADERS,MIN_TEST_RATE_EXCLUSIVE,assign_desks,select_lab_order,desk_work
 from closed_m1_cache import ClosedM1Cache
 from trader_leaderboard import leaderboard
 ROOT=pathlib.Path(__file__).resolve().parent
@@ -130,8 +130,9 @@ def multi_paused_scanner():
     """Backfill real, read-only M1 research history for a candidate-free office.
 
     A short streaming buffer cannot satisfy the laboratory's 30-result
-    out-of-sample validation rule. Until the first strategy qualifies,
-    the active DEMO office may request full history away from the M1 close.
+    out-of-sample validation rule. While fewer than four different strategies qualify, the active DEMO
+    office keeps researching; once four qualify it periodically checks
+    other markets for potentially stronger validated candidates.
     Never place orders here, bypass validation, or compete with a trader
     once a qualified candidate exists.
     """
@@ -141,7 +142,7 @@ def multi_paused_scanner():
         now=time.time()
         with lock:
             idle=state['connected'] and not state['running'] and not state['uncertain'] and not (bot and bot.is_alive()) and client is not None and not lab40_fetch_busy
-            bootstrap=state['connected'] and state['running'] and state['lab_orders_enabled'] and not state['uncertain'] and client is not None and not lab40_fetch_busy and not assign_desks(multi_research.snapshot().get('candidates') or [])
+            bootstrap=state['connected'] and state['running'] and state['lab_orders_enabled'] and not state['uncertain'] and client is not None and not lab40_fetch_busy and (len(assign_desks(multi_research.snapshot().get('candidates') or []))<len(TRADERS) or now>=multi_scan_state['next_asset_at'])
             if not idle and not (bootstrap and 5<=now%60<=12):continue
             source_client=client
             refresh_catalog=now-multi_scan_state['catalog_at']>75
@@ -180,7 +181,7 @@ def multi_paused_scanner():
         except Exception as error:
             multi_scan_state['last_error']='Pesquisa pausada: '+str(error)[:130]
         finally:
-            multi_scan_state['next_asset_at']=time.time()+25
+            multi_scan_state['next_asset_at']=time.time()+(25 if len(assign_desks(multi_research.snapshot().get('candidates') or []))<len(TRADERS) else 300)
             with lock:
                 lab40_fetch_busy=False
                 multi_scan_state['busy']=False
@@ -772,6 +773,7 @@ def office_overview():
             trader_work=current_work,
             trader_leaderboard=leaderboard(state['trades']),
             lab_signal_diag=state['lab_signal_diag'],
+            min_strategy_test_rate_exclusive=MIN_TEST_RATE_EXCLUSIVE,
             lab_executions=dict(state['lab_executions']),
             trades=recent,
             chart={'asset':state.get('chart_asset'),
@@ -797,7 +799,9 @@ def office_overview():
                     'scanner_busy':multi_scan_state['busy'],
                     'scanner_last_error':multi_scan_state['last_error'],
                     'live_bars_ready':state.get('stream_ready',0),
-                    'bot_running':bool(state['running'])
+                    'bot_running':bool(state['running']),
+                    'strategy_target_desks':len(TRADERS),
+                    'qualified_strategy_desks':len(trader_roster)
                 }
             },
             stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),

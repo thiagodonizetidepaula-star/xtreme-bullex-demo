@@ -21,12 +21,12 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertEqual(len(roster),1)
         self.assertEqual(roster[0]['index'],0)
         self.assertEqual(roster[0]['motor'],'LAB_M1')
-    def test_twelve_desks_no_duplicate_strategy(self):
+    def test_four_desks_no_duplicate_strategy(self):
         rows=[candidate('XS-%02d'%n) for n in range(1,29)]
         roster=assign_desks(rows)
-        self.assertEqual(len(roster),12)
-        self.assertEqual(len({x['strategy_id'] for x in roster}),12)
-        self.assertEqual([x['index'] for x in roster],list(range(12)))
+        self.assertEqual(len(roster),4)
+        self.assertEqual(len({x['strategy_id'] for x in roster}),4)
+        self.assertEqual([x['index'] for x in roster],list(range(4)))
     def test_payout_and_break_even_fail_closed(self):
         self.assertFalse(research_eligible(candidate(payout=80)))
         self.assertFalse(research_eligible(candidate(win=16,loss=14,payout=81)))
@@ -156,11 +156,31 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertEqual(info[0]['active_order']['id'],50)
         self.assertEqual(info[0]['wins'],0)
         self.assertEqual(info[0]['executed'],0)
-    def test_lab_requires_more_than_sixty_percent_oos(self):
-        self.assertFalse(research_eligible(candidate(win=18,loss=12,payout=90)))
-        self.assertTrue(research_eligible(candidate(win=19,loss=11,payout=90)))
+    def test_lab_requires_strictly_more_than_58_percent_oos(self):
+        self.assertFalse(research_eligible(candidate(win=29,loss=21,payout=90)))
+        self.assertTrue(research_eligible(candidate(win=35,loss=25,payout=90)))
+        self.assertTrue(research_eligible(candidate(win=18,loss=12,payout=90)))
+        self.assertFalse(research_eligible(candidate(win=17,loss=13,payout=90)))
 
-    def test_m5_never_execute_even_above_60(self):
+    def test_multiple_strategies_share_four_real_traders(self):
+        from unittest.mock import patch
+        a=candidate('XS-03',win=19,loss=11,payout=90,asset='EURUSD')
+        b=candidate('XS-08',win=21,loss=9,payout=90,asset='USDJPY-OTC')
+        book={'candidates':[a,b],'signals':[]}
+        bars=[{'from':1700000040+i*60,'open':1.1,'close':1.13,'max':1.17,'min':1.08}
+              for i in range(90)]
+        now=bars[-1]['from']+60
+        with patch('multiasset_lab.latest_direction',return_value='call'):
+            order=select_lab_order(book,
+                [{'asset':'EURUSD','payout':90},{'asset':'USDJPY-OTC','payout':90}],
+                now,True,
+                live_items=[{'asset':'EURUSD','candles':bars},
+                            {'asset':'USDJPY-OTC','candles':bars}])
+        self.assertEqual(order['strategy_id'],'XS-08')
+        self.assertEqual(order['trader_name'],'Alex')
+        self.assertEqual(len(assign_desks(book['candidates'])),2)
+
+    def test_m5_never_execute_even_above_58(self):
         c=candidate(tf='M5')
         book={'candidates':[c],'signals':[{**c,'direction':'call','candle_close':1700000100}]}
         self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':92}],1700000100,True))
