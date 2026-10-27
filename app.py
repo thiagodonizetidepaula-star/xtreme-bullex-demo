@@ -38,24 +38,37 @@ def lab40_summary():
             'total_strategies':40,'data_source':'BULLEX_PRACTICE_CLOSED_CANDLES'}
 
 multi_research=ResearchRegistry()
-multi_queue=queue.Queue(maxsize=100)
+multi_queue=queue.Queue(maxsize=3)  # CPU-limited Render: no backlog of hundreds of historical 41-strategy studies
 multi_last_queued={}
+multi_next_dispatch=0.0
+multi_scan_cursor=0
 multi_pending=set()
 multi_pending_lock=threading.Lock()
 multi_diag={'snapshots':0,'received_items':0,'queued':0,'queue_full':0,'processed':0,'processed_m1':0,'processed_m5':0,'last_asset':None,'last_bars_count':0,'last_error':None,'last_processed':0}
 multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
 
 def multi_enqueue(batch):
-    """Queue closed candles for research, never wait on the trading thread."""
-    now=batch.get('now',time.time())
+    """Fair and CPU-budgeted lab ingestion without slowing down PRACTICE orders.
+
+    A small queue and time-based round robin allow the trading strategy to
+    retain timing priority. Only one new asset joins every >=5 seconds, and
+    duplicates must wait for their pending batch to finish.
+    """
+    global multi_next_dispatch,multi_scan_cursor
+    now=time.time()
     multi_diag['snapshots']+=1
     items=batch.get('items') or []
     multi_diag['received_items']+=len(items)
-    for item in items:
+    if now<multi_next_dispatch or multi_queue.qsize()>=2 or not items:return
+    count=len(items)
+    for offset in range(count):
+        n=(multi_scan_cursor+offset)%count
+        item=items[n]
         asset=item.get('asset')
-        bars=is_closed_m1(item.get('candles') or [],now)
-        if not bars or not asset:continue
-        bars.sort(key=lambda x:x.get('from',0))
+        if not isinstance(asset,str) or not asset:continue
+        bars=is_closed_m1(item.get('candles') or [],batch.get('now',now))
+        if not bars:continue
+        bars.sort(key=lambda bar:int(bar.get('from',0)))
         newest=int(bars[-1]['from'])
         if newest<=multi_last_queued.get(asset,0):continue
         with multi_pending_lock:
@@ -63,12 +76,18 @@ def multi_enqueue(batch):
             try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
             except queue.Full:
                 multi_diag['queue_full']+=1
-                break
+                return
             multi_pending.add(asset)
         multi_last_queued[asset]=newest
         multi_diag['queued']+=1
         multi_diag['last_asset']=asset
         multi_diag['last_bars_count']=len(bars)
+        multi_diag['last_enqueued_at']=now
+        multi_next_dispatch=now+5
+        multi_scan_cursor=(n+1)%count
+        return
+    multi_scan_cursor=(multi_scan_cursor+1)%count
+
 
 def multi_worker():
     """Independent worker. Preserve analysis errors until next successful result."""
@@ -78,15 +97,21 @@ def multi_worker():
         multi_diag['active_asset']=asset
         multi_diag['active_since']=time.time()
         try:
+            multi_diag['active_stage']='calculando 41 estratégias M1'
             m1=multi_research.ingest(asset,'M1',bars,source)
+            multi_diag['active_stage']='agregando velas M5'
             m5bars=aggregate_m5(bars)
+            multi_diag['active_stage']='calculando M5' if m5bars else 'sem histórico M5 suficiente'
             m5=bool(m5bars) and multi_research.ingest(asset,'M5',m5bars,source)
             multi_diag['processed']+=1
+            multi_diag['last_duration_seconds']=round(time.time()-multi_diag['active_since'],2)
             if m1:multi_diag['processed_m1']+=1
             if m5:multi_diag['processed_m5']+=1
             multi_diag['last_processed']=time.time()
             if m1 or m5:multi_diag['last_error']=None
         except Exception as error:
+            multi_diag['failed']=multi_diag.get('failed',0)+1
+            multi_diag['last_duration_seconds']=round(time.time()-multi_diag.get('active_since',time.time()),2)
             multi_diag['last_error']=str(asset)+': '+str(error)[:165]
             multi_diag['last_processed']=time.time()
             with multi_research.lock:multi_research.error='Leitura rejeitada: '+multi_diag['last_error']
@@ -94,6 +119,7 @@ def multi_worker():
         finally:
             with multi_pending_lock:multi_pending.discard(asset)
             multi_diag['active_asset']=None
+            multi_diag['active_stage']=None
             multi_diag['active_since']=0
             multi_queue.task_done()
         time.sleep(.07)
@@ -661,8 +687,12 @@ def office_overview():
                     'pending_queue':multi_queue.qsize(),
                     'pending_unique_assets':len(multi_pending),
                     'active_asset':multi_diag.get('active_asset'),
+                    'active_stage':multi_diag.get('active_stage'),
                     'active_since':multi_diag.get('active_since'),
                     'active_seconds':max(0,int(time.time()-multi_diag['active_since'])) if multi_diag.get('active_since') else 0,
+                    'research_queue_capacity':multi_queue.maxsize,
+                    'next_stream_research_at':multi_next_dispatch,
+                    'worker_alive':any(t.name=='MultiTimeframeStudy' and t.is_alive() for t in threading.enumerate()),
                     'scanner_busy':multi_scan_state['busy'],
                     'scanner_last_error':multi_scan_state['last_error'],
                     'live_bars_ready':state.get('stream_ready',0),
@@ -742,6 +772,22 @@ def logout():
         state['connected']=False;session.clear()
     return jsonify(ok=True)
 threading.Thread(target=lab40_auto_worker,daemon=True,name='XtremeLabM1').start()
-threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy').start()
+multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
+multi_worker_thread.start()
+def multi_worker_supervisor():
+    """Recover an unexpectedly exited research thread without affecting broker orders."""
+    global multi_worker_thread
+    while True:
+        time.sleep(20)
+        if multi_worker_thread.is_alive():continue
+        multi_diag['last_error']='Processador de estudos reiniciado após encerramento inesperado.'
+        print('XTREME LAB: restarting research worker',flush=True)
+        with multi_pending_lock:multi_pending.clear()
+        while True:
+            try:multi_queue.get_nowait();multi_queue.task_done()
+            except queue.Empty:break
+        multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
+        multi_worker_thread.start()
+threading.Thread(target=multi_worker_supervisor,daemon=True,name='ResearchSupervisor').start()
 threading.Thread(target=multi_paused_scanner,daemon=True,name='ResearchMarketScanner').start()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
