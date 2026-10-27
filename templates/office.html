@@ -1545,6 +1545,7 @@ function hubLockData(){
 function hubApplyConfig(c){
  if(!c)return;
  for(const [name,id] of Object.entries(hubIds))if(c[name]!==undefined&&c[name]!==null)$(id).value=String(c[name]);
+ $('hubStrategy').value='sniper'; // One-button office always uses primary Xtreme Sniper.
  $('hubStopWinEnabled').checked=c.stop_win_enabled!==false;
  $('hubStopLossEnabled').checked=c.stop_loss_enabled!==false;
 }
