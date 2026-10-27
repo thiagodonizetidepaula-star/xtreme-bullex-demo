@@ -1,5 +1,6 @@
 """No-network regression tests for the two PRACTICE motor safety gates."""
 import unittest
+import time
 from dual_motor import assign_desks,research_eligible,select_lab_order,desk_work
 
 def candidate(identifier='XS-04',rate=65,payout=85,win=20,loss=10,asset='EURUSD',tf='M1'):
@@ -57,7 +58,7 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertEqual(len(roster),3)
         self.assertEqual([r['strategy_id'] for r in roster],['sniper','XS-18','XS-17'])
         signal={**c1,'signal_status':'SINAL_PARA_ACOMPANHAMENTO',
-                'direction':'call','candle_close':1700000060}
+                'direction':'call','candle_close':int(time.time())-10}
         simulated={'asset':'AUDUSD-OTC','status':'IGNORADA','strategy_key':'lab:XS-18','engine':'LAB_M1'}
         # Only a broker-confirmed order counts as execution/WIN.
         work=desk_work(roster,[c1,c2,c3],[signal],[simulated],True,True)
@@ -72,9 +73,9 @@ class DualMotorSafetyTests(unittest.TestCase):
         trades=[
             {'id':12,'engine':'XTREME_PRINCIPAL','strategy_key':'sniper',
              'asset':'EURUSD','status':'WIN','profit':1.60},
-            {'id':13,'engine':'LAB_M1','strategy_key':'lab:XS-18',
+            {'id':13,'engine':'LAB_M1','trader_index':1,'strategy_key':'lab:XS-18',
              'asset':'EURUSD','status':'LOSS','profit':-2.00},
-            {'id':14,'engine':'LAB_M1','strategy_key':'lab:XS-18',
+            {'id':14,'engine':'LAB_M1','trader_index':1,'strategy_key':'lab:XS-18',
              'asset':'EURUSD','status':'WIN','profit':1.70},
         ]
         info=desk_work(roster,[c],[],trades,True,True)
