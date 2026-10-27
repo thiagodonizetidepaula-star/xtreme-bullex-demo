@@ -69,7 +69,7 @@ class DualMotorSafetyTests(unittest.TestCase):
         c=candidate(payout=86)
         diag={}
         result=select_lab_order({'candidates':[c],'signals':[]},
-            [{'asset':'EURUSD','payout':88}],1700000100,True,
+            [{'asset':'EURUSD','payout':88}],1700000105,True,
             live_items=[],diagnostics=diag)
         self.assertIsNone(result)
         self.assertEqual(diag['reason'],'FORA_JANELA_DE_ENTRADA_M1')
@@ -78,7 +78,7 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertEqual(diag['valid_signals'],0)
     def test_no_fabricated_order_when_candidate_stream_missing(self):
         c=candidate(payout=86)
-        # 1700000100 modulo 60 = 40; choose just after M1 minute boundary.
+        # Choose just after the M1 minute boundary.
         minute=1700000100//60*60
         diag={}
         result=select_lab_order({'candidates':[c],'signals':[]},
