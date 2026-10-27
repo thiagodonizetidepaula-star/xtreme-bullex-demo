@@ -1,9 +1,9 @@
-"""Two DEMO signal engines with one guarded order channel.
+"""Lab-only PRACTICE order routing for traders in the office.
 
-The original Xtreme Sniper engine remains the priority and is never replaced.
-Research signals may be promoted ONLY from validated M1 results with verified
-payout >80%, positive theoretical EV, fresh candle age and explicit opt-in.
-The execution channel is shared and serial: no overlapping broker commands.
+No Xtreme Sniper / principal strategy is a source of automatic orders.
+Only an independently validated M1 research candidate may generate a current
+closed-candle signal. The broker's final strict safety checks still apply.
+All trader orders are serialized, with no overlapping broker commands.
 """
 import math
 from datetime import datetime
@@ -33,16 +33,14 @@ def research_eligible(candidate):
         return False
 
 def assign_desks(candidates):
-    """One research strategy per available desk; Xtreme owns desk zero.
+    """Allocate up to 12 PRACTICE desks from independently qualified lab strategies.
 
-    Rankings can change as candles arrive, so a strategy is associated by its
-    immutable ID. Historical trades also store their original desk index.
+    The retired Sniper has no reserved desk or priority. A strategy ID is
+    assigned once; candidates for the same strategy on multiple assets are
+    watched by the same trader.
     """
-    roster=[{'index':0,'name':TRADERS[0],'strategy_id':'sniper',
-             'strategy':'Xtreme Sniper + Tendência','motor':'XTREME_PRINCIPAL',
-             'mode':'PRACTICE','asset':'VARIOS','timeframe':'M1',
-             'accuracy':None,'samples':None,'payout_m1':None}]
-    used={'sniper','XS-PRINCIPAL'}
+    roster=[]
+    used=set()
     qualified=sorted((c for c in candidates if research_eligible(c)),
                      key=lambda c:(-float(c['accuracy']),-int(c['samples']),str(c['id']),str(c.get('asset',''))))
     for c in qualified:
@@ -78,15 +76,10 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
     output=[]
     for desk in roster:
         ident=str(desk['strategy_id'])
-        if desk['index']==0:
-            owned=[t for t in trades if t.get('engine')=='XTREME_PRINCIPAL' or
-                   (t.get('engine') is None and t.get('strategy_key')=='sniper')]
-        else:
-            # A completed order belongs to the desk that ACTUALLY submitted it,
-            # even if a newly promoted strategy changes the later roster.
-            owned=[t for t in trades if t.get('engine')=='LAB_M1' and
-                   (t.get('trader_index')==desk['index'] or
-                    (t.get('trader_index') is None and t.get('strategy_key')=='lab:'+ident))]
+        # Associate a historical trade with its actual strategy ID. Re-sorting
+        # the roster must not transfer older results to a different strategy.
+        owned=[t for t in trades if t.get('engine')=='LAB_M1' and
+               t.get('strategy_key')=='lab:'+ident]
         # One operation at a time in the current PRACTICE execution channel.
         latest=owned[-1] if owned else None
         open_order=next((t for t in reversed(owned)
@@ -106,8 +99,6 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
             status='ORDEM CONFIRMADA' if open_order.get('id') is not None else 'ENVIO PENDENTE'
         elif latest and latest.get('status') in ('WIN','LOSS','EMPATE'):
             status='ÚLTIMO '+latest['status']
-        elif desk['index']==0:
-            status='PROCURANDO ENTRADAS' if motor_running else 'AGUARDANDO MOTOR'
         elif not lab_orders_enabled:
             status='SÓ ACOMPANHANDO' if evidence else 'SEM ESTRATÉGIA'
         elif signal:
@@ -116,7 +107,7 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
             status='ANALISANDO GRÁFICOS' if motor_running else 'AGUARDANDO MOTOR'
         completed=[t for t in owned if t.get('status') in ('WIN','LOSS','EMPATE')]
         output.append({
-            **desk,'status':status,'auto_order_enabled':bool(lab_orders_enabled) if desk['index'] else bool(motor_running),
+            **desk,'status':status,'auto_order_enabled':bool(lab_orders_enabled and motor_running),
             'watched_assets':[str(c.get('asset')) for c in watch],
             'active_order':({
                 'id':open_order.get('id'),'asset':open_order.get('asset'),
@@ -144,7 +135,7 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
 
     This avoids the historical-study worker's seconds-long delay after the
     candle closes. It never backdates research signals, extends the broker's
-    strict two-second execution window, or changes the Xtreme primary engine.
+    strict two-second execution window, or fabricates research history.
     """
     stats={'eligible':0,'assigned':0,'fresh_assets':0,'crossings':0,
            'valid_signals':0,'reason':'SEM_CANDIDATAS',
@@ -167,7 +158,7 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
     stats['eligible']=len(candidates)
     if not candidates:return finish(None,'SEM_CANDIDATAS_VALIDADAS')
     roster=assign_desks(candidates)
-    assigned={r['strategy_id']:r for r in roster[1:]}
+    assigned={r['strategy_id']:r for r in roster}
     stats['assigned']=len(assigned)
     if not assigned:return finish(None,'SEM_TRADERS_ATRIBUIDOS')
     # Count eligible desks even outside the entry window. Do not do any
