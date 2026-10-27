@@ -2,6 +2,7 @@
 import math
 import unittest
 from sniper_lab40 import CANDIDATES,evaluate,MIN_OBSERVATIONS
+from lab40_autoupdate import merge_closed_bars,favorite_rows
 
 def sample_bars(n=310):
     rows=[]
@@ -36,6 +37,31 @@ class ResearchLabTests(unittest.TestCase):
         candles=sample_bars()
         candles[95]['max']=candles[95]['min']-.01
         with self.assertRaises(ValueError):evaluate(candles,'EURUSD')
+    def test_auto_merge_is_continuous_and_does_not_invent_candles(self):
+        bars=sample_bars(120)
+        merged=merge_closed_bars(bars[:100],bars[88:])
+        self.assertEqual(len(merged),120)
+        self.assertEqual(merged[-1]['from'],bars[-1]['from'])
+        interrupted=[dict(b) for b in bars]
+        interrupted[93]['from']+=60
+        tail=merge_closed_bars([],interrupted)
+        self.assertLess(len(tail),120)
+        self.assertTrue(all(b['from']-a['from']==60 for a,b in zip(tail,tail[1:])))
+    def test_no_favorite_without_30_oos_tests_and_strict_above_60(self):
+        rows=[
+            {"id":"XS-01","name":"Menos amostras","wins":25,"losses":4,"samples":29},
+            {"id":"XS-02","name":"Exatamente 60%","wins":18,"losses":12,"samples":30},
+            {"id":"XS-03","name":"Favorita real de estudo","wins":19,"losses":11,"samples":30}
+        ]
+        favorite=favorite_rows({"asset":"EURUSD","strategies":rows})
+        self.assertEqual(len(favorite),1)
+        self.assertEqual(favorite[0]['id'],"XS-03")
+        self.assertEqual(favorite[0]['category'],"ESTUDO_HISTORICO_NAO_EXECUTAVEL")
+    def test_research_helper_rejects_invalid_closed_m1_price(self):
+        invalid=sample_bars(100)
+        invalid[30]['open']=-1
+        with self.assertRaises(ValueError):
+            merge_closed_bars([],invalid)
     def test_short_history_rejected(self):
         with self.assertRaises(ValueError):evaluate(sample_bars(40),'EURUSD')
 if __name__=='__main__':
