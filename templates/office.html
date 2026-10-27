@@ -687,7 +687,7 @@ const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null,select
 function setFocusMode(on){controls.enablePan=on;controls.mouseButtons.LEFT=on?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;controls.mouseButtons.RIGHT=on?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN;controls.touches.ONE=on?THREE.TOUCH.PAN:THREE.TOUCH.ROTATE;}
 function focusOnScreen(mesh){
  if(!returnCamera)returnCamera={pos:camera.position.clone(),target:controls.target.clone()};
- const pos=mesh.getWorldPosition(new THREE.Vector3()),screen=mesh.userData.screen,big=screen.kind==='tv';
+ const pos=mesh.getWorldPosition(new THREE.Vector3()),screen=mesh.userData.screen,big=screen.kind!=='desk';
  focusTarget=pos.clone();focusPosition=pos.clone().add(new THREE.Vector3(0,big?.18:.07,big?Math.max(2.2,mesh.geometry.parameters.width*.9):1.05));
  camera.position.copy(focusPosition);controls.target.copy(focusTarget);controls.minDistance=big?1.3:.52;controls.maxDistance=big?13:8;setFocusMode(true);controls.update();
  activeScreen=screen;$('inspector').classList.add('open');refreshInspector();
@@ -1641,6 +1641,53 @@ function renderMultiLab(data,p){
  charts.filter(c=>c.big&&c.roomView).forEach(drawRoomTV);
 }
 
+function renderTraderLeaderboard(p){
+ const data=p?.trader_leaderboard;
+ if(!data||data.broker_mode!=='PRACTICE')return;
+ latestTraderRanking=data;
+ const confirmed=Number(data.total_confirmed||0);
+ $('leaderboardUpdated').textContent='🏆 Ranking por lucro em '+confirmed+
+ ' operações confirmadas na Bullex PRACTICE nesta sessão. '+
+ 'WIN/LOSS do laboratório são apenas estudos e não entram no mural. '+
+ 'Rankings com menos de 10 resultados têm amostra pequena.';
+ const host=$('leaderboardRows');host.replaceChildren();
+ const rank=Array.isArray(data.ranking)?data.ranking:[];
+ if(!rank.length){
+  const empty=document.createElement('small');
+  empty.textContent='Aguardando operações WIN/LOSS confirmadas. Os 12 traders permanecem nas mesas.';
+  host.append(empty);
+ }
+ for(const t of rank.slice(0,12)){
+  const row=document.createElement('div'),number=document.createElement('div'),detail=document.createElement('div'),
+    title=document.createElement('strong'),meta=document.createElement('small'),money=document.createElement('b');
+  row.className='leaderBoardRow';number.className='rank';
+  number.textContent=t.rank<=3?['🥇','🥈','🥉'][t.rank-1]:'#'+t.rank;
+  title.textContent=t.name+' · Mesa '+(t.index+1);
+  meta.textContent='WIN '+t.wins+' · LOSS '+t.losses+' · '+t.trades+' operações'+
+   (t.win_rate!==null?' · '+t.win_rate.toFixed(1)+'%':'')+
+   (t.small_sample?' · pouca amostra':'');
+  money.textContent=officeMoney(t.profit,p.currency||'USD');
+  detail.append(title,meta);row.append(number,detail,money);host.append(row);
+ }
+ const diag=p.lab_signal_diag||{},descriptions={
+  MOTOR_B_DESLIGADO:'Motor B desligado. O laboratório continua estudando.',
+  SEM_CANDIDATAS_VALIDADAS:'Ainda não há estratégias com validação e filtro de payout aprovados.',
+  SEM_TRADERS_ATRIBUIDOS:'Nenhuma estratégia aprovada foi atribuída a uma mesa.',
+  SEM_VELAS_M1_NO_PRAZO:'As velas candidatas não chegaram dentro dos 2 segundos aceitos pela corretora.',
+  SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou cruzamento novo.',
+  ATIVO_SEM_VELA_FECHADA_COMPATIVEL:'O sinal não corresponde à vela fechada mais recente da Bullex.',
+  SINAL_VALIDADO_M1_ATUAL:'Sinal M1 validado na vela atual; ainda sujeito às verificações finais da Bullex.',
+  AGUARDANDO_MOTOR:'Aguardando inicialização do motor.'
+ };
+ const reason=descriptions[diag.reason]||'Aguardando nova vela M1 e verificação de execução.';
+ $('labEntryDiagnostics').textContent='🧪 Motor B · '+reason+
+  ' | Estratégias elegíveis: '+Number(diag.eligible||0)+
+  ' | Traders atribuídos: '+Number(diag.assigned||0)+
+  ' | Velas dentro do prazo: '+Number(diag.fresh_assets||0)+
+  ' | Sinais novos: '+Number(diag.valid_signals||0)+
+  '. Uma ordem só é confirmada após aceitação pela Bullex.';
+ const tv=charts.find(c=>c.roomView==='ranking');if(tv)drawRoomTV(tv);
+}
 function hubLoadLive(p){
  if(!p)return;
  if(p.source!=='XTREME_BULLEX_DEMO_BACKEND'||p.mode!=='PRACTICE')throw Error('Servidor não confirmou modo PRACTICE.');
@@ -1698,6 +1745,7 @@ function hubLoadLive(p){
  }
  // Live stats have a distinct data source. The local synthetic engine is paused.
  officeSnapshot=p;bridgeLinked=true;
+ renderTraderLeaderboard(p);
  $('hubLoginForm').hidden=true;$('hubControlArea').hidden=false;
  $('brokerState').textContent=p.connected?'PRACTICE · CONECTADA':'PRACTICE · DESCONECTADA';
  $('hubConnectForm').hidden=p.connected===true;
