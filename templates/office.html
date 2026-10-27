@@ -924,24 +924,53 @@ $('phoneTest').onclick=()=>{
  }else activateOfficeAudio();
  phoneRing();
 };
+// One desk / one assigned strategy. 3D confetti appears at that exact table.
+const deskConfetti=[];
+function showDeskConfetti(index){
+ if(!Number.isInteger(index)||index<0||index>=positions.length)return;
+ const desk=positions[index];
+ const palette=[0x57f5b4,0xffd278,0xffffff,0xff96b4,0x8de0fa];
+ const now=clock.getElapsedTime();
+ for(let i=0;i<20;i++){
+  const piece=new THREE.Mesh(new THREE.PlaneGeometry(.085,.13),
+   new THREE.MeshBasicMaterial({color:palette[i%palette.length],side:THREE.DoubleSide,transparent:true,opacity:.98,depthWrite:false}));
+  piece.position.set(desk[0]+(Math.random()-.5)*.8,2.0+Math.random()*.8,desk[1]+(Math.random()-.5)*.8);
+  scene.add(piece);
+  deskConfetti.push({mesh:piece,born:now,
+   vx:(Math.random()-.5)*.48,vy:-.45-Math.random()*.22,vz:(Math.random()-.5)*.48,
+   spin:.8+Math.random()*3});
+ }
+}
+function animateDeskConfetti(t){
+ for(let i=deskConfetti.length-1;i>=0;i--){
+  const conf=deskConfetti[i],age=t-conf.born;
+  if(age>3.1||conf.mesh.position.y<.55){
+   scene.remove(conf.mesh);conf.mesh.geometry.dispose();conf.mesh.material.dispose();deskConfetti.splice(i,1);continue;
+  }
+  const dt=Math.min(.05,age-(conf.lastAge||0));conf.lastAge=age;
+  conf.mesh.position.x+=conf.vx*dt;
+  conf.mesh.position.z+=conf.vz*dt;
+  conf.mesh.position.y+=conf.vy*dt;
+  conf.mesh.rotation.x+=conf.spin*dt;
+  conf.mesh.rotation.y+=conf.spin*.5*dt;
+  conf.mesh.material.opacity=Math.max(.05,1-age/3.1);
+ }
+}
 function celebrateWin(op){
  const now=clock.getElapsedTime();
- // Whole trading floor celebrates a WIN, not only the trader who operated.
- for(const p of team){
-  if(p.role==='desk'&&!p.walking){
-   p.celebrateStart=now;
-   p.celebrateUntil=now+3.8;
-  }
+ const idx=Number.isInteger(op.traderIndex)?op.traderIndex:Math.max(0,names.indexOf(op.name));
+ const trader=team[idx];
+ if(trader&&trader.role==='desk'&&!trader.walking){
+  trader.celebrateStart=now;
+  trader.celebrateUntil=now+3.8;
  }
- const toast=$('winToast');toast.textContent='🎉 WIN '+(op.source==='BULLEX_PRACTICE'?'PRACTICE':'SIMULADO')+' · '+op.name+' · '+(op.source==='BULLEX_PRACTICE'?officeMoney(op.v,op.currency||'USD'):money(op.v));toast.classList.remove('active');void toast.offsetWidth;toast.classList.add('active');
+ showDeskConfetti(idx);
+ const toast=$('winToast');
+ toast.textContent='🎉 WIN '+(op.source==='BULLEX_PRACTICE'?'PRACTICE':'SIMULADO')+
+ ' · '+names[idx]+' · '+(op.strategy||'Xtreme')+' · '+
+ (op.source==='BULLEX_PRACTICE'?officeMoney(op.v,op.currency||'USD'):money(op.v));
+ toast.classList.remove('active');void toast.offsetWidth;toast.classList.add('active');
  clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('active'),3200);
- const stage=canvas.parentElement,colors=['#43eaa7','#f4bb53','#ffffff','#61d7fa','#f891a1'];
- for(let k=0;k<38;k++){
-  const bit=document.createElement('i');bit.className='confettiPiece';bit.style.left=(8+Math.random()*84)+'%';
-  bit.style.background=colors[k%colors.length];bit.style.setProperty('--dur',(1.8+Math.random()*1.3)+'s');
-  bit.style.setProperty('--dx',(-100+Math.random()*200)+'px');bit.style.setProperty('--turn',(420+Math.random()*680)+'deg');
-  stage.append(bit);bit.addEventListener('animationend',()=>bit.remove(),{once:true});setTimeout(()=>bit.remove(),3500);
- }
  winSound();
 }
 const demoStorageKey='xtremeTigerOfficeDemo1';
@@ -1380,7 +1409,7 @@ function frame(){
  const targetFps=qualityIndex===3?12:isMobile?(qualityIndex===2?27:20):(qualityIndex===2?50:qualityIndex===1?20:30);
  if(nowFrame-lastRenderedAt<1000/targetFps)return;
  lastRenderedAt=nowFrame;
- const t=clock.getElapsedTime();updateTeam(t);
+ const t=clock.getElapsedTime();updateTeam(t);animateDeskConfetti(t);
 for(const car of exteriorTraffic){let z=car.initial+t*car.speed;z=((z+11)%25+25)%25-11;car.group.position.z=z;}
 const bathroomNear=team.some(p=>p.role==='bathroom'||Math.abs(p.group.position.x-2.45)<1.35&&Math.abs(p.group.position.z-7.60)<1.3);
 restroomDoorAmount+=(Number(bathroomNear)-restroomDoorAmount)*.085;restroomDoor.rotation.y=-restroomDoorAmount*1.55;people.forEach((p,i)=>{const cycle=(t*.22+i*1.41)%(Math.PI*2);const going=false;p.walk=false;p.group.position.set(p.x,0,p.z+1);p.group.rotation.y=Math.PI;p.head.rotation.z=Math.sin(t*2+i)*.06;p.head.rotation.x=.12+Math.sin(t*.9+i)*.025;p.head.scale.y=(Math.sin(t*1.6+i*1.8)>.995?.94:1);p.smile.scale.x=t<p.celebrate?(p.win?1.4:.55):1;signals[i].material.opacity=Math.max(0,Math.min(1,(p.celebrate-t)*1.5));signals[i].position.y=2.38+(signals[i].material.opacity?Math.sin(t*5)*.055:0);p.arms.forEach((arm,k)=>{arm.rotation.z=(k===0?-.09:.09)+(t<p.celebrate?Math.sin(t*4+i)*.08:Math.sin(t*8+i+k*Math.PI)*.045);arm.rotation.x=-1.2+Math.sin(t*9+i+k*Math.PI)*.065});p.legs.forEach((leg,k)=>{leg.rotation.x=going?Math.sin(t*8+i+k*Math.PI)*.3:0})});controls.update();renderer.render(scene,camera);
@@ -1540,7 +1569,12 @@ function hubLoadLive(p){
   if(trade.status!=='WIN'||trade.id===undefined||hubLastWins.has(String(trade.id)))continue;
   hubLastWins.add(String(trade.id));
   if(hubLastWins.size>200)hubLastWins=new Set(newWins);
-  celebrateWin({name:'Equipe Xtreme Tiger',v:Number(trade.profit||0),currency:p.currency||'USD',source:'BULLEX_PRACTICE'});
+  celebrateWin({
+   name:trade.trader_name||'Alex',
+   traderIndex:Number.isInteger(trade.trader_index)?trade.trader_index:0,
+   strategy:String(trade.strategy||'Xtreme Sniper + Tendência'),
+   v:Number(trade.profit||0),currency:p.currency||'USD',source:'BULLEX_PRACTICE'
+  });
  }
  hubState=p;hubCsrf=p.csrf||hubCsrf;
  $('dualMotorPanel').hidden=false;
