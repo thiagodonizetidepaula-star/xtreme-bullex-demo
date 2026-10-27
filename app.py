@@ -4,6 +4,7 @@ from flask import Flask,request,jsonify,session,render_template,make_response,se
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
+from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -20,7 +21,7 @@ lab40_cache={} # Ephemeral study results; no exposure to order executor.
 lab40_history={} # Closed M1 candle history, retained in memory for up to 6 assets.
 lab40_jobs=queue.Queue(maxsize=2)
 lab40_fetch_busy=False
-lab40_tracking={'asset':'EURUSD','enabled':True,'status':'AGUARDANDO_CONEXAO',
+lab40_tracking={'asset':'EURUSD','enabled':False,'status':'AGUARDANDO_CONEXAO',
                 'last_error':None,'last_candle':None,'updated_at':None,
                 'last_attempt_minute':-1,'last_enqueued':0,'version':0,
                 'generation':0,'next_fetch_after':time.time()+60}
@@ -34,6 +35,80 @@ def lab40_summary():
             'running':bool(state['running']),'research_only':True,'min_validation':30,
             'minimum_rate_exclusive':60,'favorites':favs,'favorites_count':len(favs),
             'total_strategies':40,'data_source':'BULLEX_PRACTICE_CLOSED_CANDLES'}
+
+multi_research=ResearchRegistry()
+multi_queue=queue.Queue(maxsize=100)
+multi_last_queued={}
+multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
+
+def multi_enqueue(batch):
+    """Only copies already received closed bars. Does not query or trade."""
+    now=batch.get('now',time.time())
+    for item in batch.get('items',[]):
+        asset=item.get('asset')
+        bars=is_closed_m1(item.get('candles') or [],now)
+        if not bars or not asset:continue
+        newest=bars[-1].get('from',0)
+        if newest<=multi_last_queued.get(asset,0):continue
+        try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
+        except queue.Full:break
+        multi_last_queued[asset]=newest
+
+def multi_worker():
+    """Separate CPU research; the live trading loop never waits for analysis."""
+    while True:
+        try:asset,bars,source=multi_queue.get(timeout=1)
+        except queue.Empty:continue
+        try:
+            multi_research.ingest(asset,'M1',bars,source)
+            m5=aggregate_m5(bars)
+            if m5:multi_research.ingest(asset,'M5',m5,source)
+        except Exception as error:
+            with multi_research.lock:multi_research.error='Dados de estudo pendentes: '+str(error)[:135]
+        finally:
+            multi_queue.task_done()
+        time.sleep(.07)
+
+def multi_paused_scanner():
+    """Round-robin open assets, max 1 historical request every 25 seconds.
+
+    Shared worker and free Render cannot promise all assets every minute.
+    While the live bot is running only its existing streaming data are used.
+    """
+    global lab40_fetch_busy
+    while True:
+        time.sleep(1.5)
+        now=time.time()
+        with lock:
+            idle=state['connected'] and not state['running'] and not state['uncertain'] and not (bot and bot.is_alive()) and client is not None and not lab40_fetch_busy
+            if not idle:continue
+            source_client=client
+            refresh_catalog=now-multi_scan_state['catalog_at']>75
+            if not refresh_catalog and now<multi_scan_state['next_asset_at']:continue
+            lab40_fetch_busy=True
+            multi_scan_state['busy']=True
+        try:
+            if refresh_catalog:
+                results=source_client.call('market',timeout=16,payout=80,strategy='sniper')
+                multi_research.set_market(results.get('assets') or [])
+                multi_scan_state['catalog_at']=time.time()
+            with multi_research.lock:assets=list(multi_research.market)
+            if not assets:continue
+            cursor=multi_scan_state['cursor']%len(assets)
+            asset=assets[cursor]
+            multi_scan_state['cursor']=(cursor+1)%len(assets)
+            result=source_client.call('lab_candles',timeout=28,asset=asset)
+            if result.get('source')!='PRACTICE':raise ValueError('Conta PRACTICE não confirmada.')
+            bars=result.get('candles') or []
+            multi_queue.put((asset,bars,'HISTORICO_PRACTICE'),timeout=2)
+            multi_scan_state['last_error']=None
+        except Exception as error:
+            multi_scan_state['last_error']='Pesquisa pausada: '+str(error)[:130]
+        finally:
+            multi_scan_state['next_asset_at']=time.time()+25
+            with lock:
+                lab40_fetch_busy=False
+                multi_scan_state['busy']=False
 
 def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
 def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
@@ -204,11 +279,13 @@ def loop(c):
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
                 candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
                 state['scan_assets']=candidates
+                multi_research.set_market(candidates)
                 log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
             lab40_offer_stream(batch)
+            multi_enqueue(batch)
             for error in batch.get('errors',[]):log(error)
             selected=None
             for item in batch['items']:
@@ -511,7 +588,7 @@ def office_overview():
                    'bars':state.get('candles',[])[-45:],
                    'source':'BULLEX_PRACTICE_M1_CLOSED',
                    'mode':'CLOSED_CANDLES_NOT_TICKS'},
-            lab40=lab40_summary(),
+            lab40=lab40_summary(),multi_lab=multi_research.snapshot(),
             stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
             analyzed_count=state.get('analyzed_count',0),server_now=time.time())
 
@@ -570,4 +647,6 @@ def logout():
         state['connected']=False;session.clear()
     return jsonify(ok=True)
 threading.Thread(target=lab40_auto_worker,daemon=True,name='XtremeLabM1').start()
+threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy').start()
+threading.Thread(target=multi_paused_scanner,daemon=True,name='ResearchMarketScanner').start()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
