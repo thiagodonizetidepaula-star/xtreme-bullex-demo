@@ -1700,6 +1700,7 @@ function renderTraderLeaderboard(p){
   ' | Sinais novos: '+Number(diag.valid_signals||0)+
   (Number.isFinite(Number(diag.snapshot_ms))?' | Recepção de dados: '+Number(diag.snapshot_ms)+' ms':'')+
   (Number.isFinite(Number(diag.xtreme_scan_ms))?' | Análise Xtreme: '+Number(diag.xtreme_scan_ms)+' ms':'')+
+  (Number.isFinite(Number(diag.cached_candle_calcs))?' | Reanálises evitadas: '+Number(diag.cached_candle_calcs):'')+
   (diag.payout_rejected?' | Payout insuficiente: '+diag.payout_rejected:'')+
   (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
   (diag.stale_candle?' | Velas atrasadas: '+diag.stale_candle:'')+
