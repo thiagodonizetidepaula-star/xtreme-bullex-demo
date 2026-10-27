@@ -182,6 +182,7 @@ const studyWinSeeds=[22,17,19,15,23,16,18,21,17,20,14,24];
 const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],samples:30,source:'SINTÉTICO'}));
 let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
 let lab40Catalog=[],lab40Rows=[],lab40Primary=null,lab40Latest=null,lab40Initialized=false,lab40Working=false;
+let lastMultiLab=null;
 let lab40ServerVersion=-1,lab40ServerAsset='',lab40SyncBusy=false,lab40TrackBusy=false;
 function actualStudies(){
  if(!bridgeLinked||!officeSnapshot)return [];
@@ -204,6 +205,7 @@ function approvedStudies(){return displayedStudies().filter(x=>x.samples>=30&&st
 function studyForName(name){return displayedStudies().find(x=>x.name===name)}
 function formatRate(x){return x.samples?studyRate(x).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—'}
 function refreshPipeline(){
+ if(officeIntegratedMode&&lastMultiLab)return;
  const approved=approvedStudies();$('approvedCount').textContent=approved.length;
  $('labCount').textContent=displayedStudies().length;
  $('signalCount').textContent=bridgeLinked?(officeSnapshot?.trades?.length||0):signalLog.length;
@@ -1401,6 +1403,85 @@ function hubApplyConfig(c){
  $('hubStopWinEnabled').checked=c.stop_win_enabled!==false;
  $('hubStopLossEnabled').checked=c.stop_loss_enabled!==false;
 }
+
+function multiNumberDate(n){
+ if(!Number.isFinite(Number(n))||!n)return 'ainda sem leitura';
+ return new Date(Number(n)*1000).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function renderMultiLab(data,p){
+ if(!data||data.source!=='BULLEX_PRACTICE_HISTORICAL_CANDLES')return;
+ lastMultiLab=data;
+ $('multiAssets').textContent=String(data.asset_count||0);
+ $('multiStudied').textContent=String(data.researched_assets||0);
+ $('multiPeriods').textContent=String(data.ready_by_timeframe?.M1||0)+' / '+String(data.ready_by_timeframe?.M5||0);
+ $('multiCandidatesCount').textContent=String(data.candidates?.length||0);
+ $('multiSignalsCount').textContent=String(data.signals?.length||0);
+ $('multiState').textContent='🔄 '+String(data.status||'AGUARDANDO VELAS')+
+ ' · Mercado atualizado: '+multiNumberDate(data.market_at)+
+ ' · Estudos: '+String(data.studies||0);
+ $('multiLast').textContent='Última vela analisada: '+multiNumberDate(data.updated)+
+ '. Amostra mínima: 30 resultados fora da amostra. Filtro estrito: payout M1 >80%. Um histórico M5 usa grupos completos de cinco velas M1.';
+ const watch=Array.isArray(data.candidates)?data.candidates:[];
+ const root=$('multiCandidatesList');root.replaceChildren();
+ if(!watch.length){const a=document.createElement('small');a.textContent='Nenhuma estratégia atingiu mais de 50% com 30 validações nos ativos já analisados.';root.append(a);}
+ for(const c of watch.slice(0,18)){
+  const row=document.createElement('div');row.className='multiCandidate';
+  const left=document.createElement('span'),right=document.createElement('strong');
+  left.textContent=(c.principal?'🐯 ':'⭐ ')+String(c.name||c.id)+' · '+String(c.asset||'')+' · '+String(c.timeframe||'');
+  const details=document.createElement('small');
+  details.textContent='Payout M1 '+Number(c.payout_m1||0).toFixed(1)+'% · '+String(c.samples||0)+' testes · '+
+    (c.passes_break_even_math?'Acima do equilíbrio teórico M1':'Abaixo do equilíbrio teórico M1')+
+    (c.timeframe==='M5'?' · payout M5 NÃO confirmado':'')+' · CANDIDATA (sem ordem)';
+  left.append(details);right.textContent=Number(c.accuracy||0).toFixed(1)+'%';row.append(left,right);root.append(row);
+ }
+ const signals=$('multiSignalsList');signals.replaceChildren();
+ const arr=Array.isArray(data.signals)?data.signals:[];
+ if(!arr.length){const a=document.createElement('small');a.textContent='Nenhum sinal novo das candidatas com os dados disponíveis.';signals.append(a);}
+ for(const item of arr.slice(0,12)){
+  const el=document.createElement('div');el.className='multiCandidate';
+  const left=document.createElement('span'),right=document.createElement('strong');
+  left.textContent=String(item.asset||'')+' · '+String(item.timeframe||'')+' · '+String(item.direction||'').toUpperCase()+' · '+String(item.name||item.id);
+  const caption=document.createElement('small');
+  caption.textContent='Vela fechada: '+multiNumberDate(item.candle_close)+' · '+Number(item.accuracy||0).toFixed(1)+'% · APENAS SINAL DE ESTUDO';
+  left.append(caption);right.textContent='EM OBSERVAÇÃO';el.append(left,right);signals.append(el);
+ }
+ const ranks=$('multiRanking');ranks.replaceChildren();
+ const primary=watch.filter(c=>c.principal).slice(0,3);
+ $('multiPrimaryStatus').textContent=primary.length?primary.map(c=>
+   c.asset+' / '+c.timeframe+' · '+c.accuracy.toFixed(1)+'% · '+c.samples+' testes (em observação)').join(' | '):
+   'Estratégia principal testada nos ativos com histórico suficiente; aguardando 30+ validações e taxa acima de 50%.';
+ for(const c of watch.slice(0,18)){
+  const row=document.createElement('div');row.className='pipelineItem';
+  const name=document.createElement('span'),pct=document.createElement('span');
+  name.textContent=String(c.name||'')+' · '+String(c.asset||'')+' · '+String(c.timeframe||'')+' · '+String(c.samples||0)+' testes';
+  pct.textContent=Number(c.accuracy||0).toFixed(1)+'%';
+  pct.className=c.passes_break_even_math?'approved':'rejected';
+  row.append(name,pct);ranks.append(row);
+ }
+ const strategies={
+  rejection:'Retorno e Rejeição',repetition:'Repetição M1',resumption:'Retomada de Tendência',
+  retest:'Xtreme Reteste',sniper:'Xtreme Sniper'
+ };
+ const cur=p?.config?.strategy||'desconhecida';
+ $('preservedMotor').textContent='🔒 Motor anterior preservado: '+(strategies[cur]||cur);
+ $('preservedMotorInfo').textContent='Conta '+(p?.connected?'PRACTICE conectada':'desconectada')+
+  ' · '+(p?.running?'robô em operação':'robô parado')+
+  '. O laboratório não muda a estratégia, não envia ordens e não aumenta os limites. M5 simultâneo ainda não é suportado.';
+ const history=$('multiRecentTrades');history.replaceChildren();
+ const past=[...(p?.trades||[])].reverse().slice(0,6);
+ for(const t of past){
+  const item=document.createElement('div');item.className='pipelineItem';
+  const left=document.createElement('span'),right=document.createElement('span');
+  left.textContent=String(t.asset||'')+' '+String(t.direction||'').toUpperCase()+' · '+String(t.strategy||'');
+  right.textContent=String(t.status||'');right.className=t.status==='WIN'?'approved':t.status==='LOSS'?'rejected':'';
+  item.append(left,right);history.append(item);
+ }
+ if(!past.length){const el=document.createElement('small');el.textContent='Nenhuma ordem recente registrada na sessão PRACTICE.';history.append(el);}
+ $('dataStatus').firstElementChild.textContent='📡 Fonte: BULLEX PRACTICE · dados de estudo e execução separados';
+ $('lastOperation').textContent='Laboratório: '+(data.studies||0)+' estudos · '+watch.length+' candidatas · Robô: '+(p?.running?'RODANDO':'PARADO')+'.';
+ charts.filter(c=>c.big&&c.roomView).forEach(drawRoomTV);
+}
+
 function hubLoadLive(p){
  if(!p)return;
  if(p.source!=='XTREME_BULLEX_DEMO_BACKEND'||p.mode!=='PRACTICE')throw Error('Servidor não confirmou modo PRACTICE.');
@@ -1433,6 +1514,7 @@ function hubLoadLive(p){
  $('hubAssets').replaceChildren(...(p.assets||[]).slice(0,200).map(a=>{const op=document.createElement('option');op.value=a;return op}));
  if(!hubLoadedConfig&&!p.running){hubApplyConfig(p.config);hubLoadedConfig=true;}
  officeRefreshUI();hubLockButtons();
+ if(p.multi_lab)renderMultiLab(p.multi_lab,p);
  const receptionTV=charts.find(c=>c.reception);if(receptionTV)drawReceptionTV(receptionTV);
  if(p.lab40)lab40ProcessSummary(p.lab40);
  if(!lab40Initialized)lab40Setup();
