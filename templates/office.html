@@ -8,7 +8,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 #automaticLabRoom,#automaticOpsRoom{min-width:0}
 #automaticLabRoom details{margin:8px 0}
 #automaticLabRoom summary{cursor:pointer;color:#b6eddd;font-weight:600}
-.multiCandidate{display:flex;gap:8px;justify-content:space-between;align-items:start;border-bottom:1px solid #325465;padding:8px 4px}
+.traderRoster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:280px;overflow:auto}.traderSlot{background:#17303e;border:1px solid #355b66;border-radius:7px;padding:7px;font-size:12px;min-width:0}.traderSlot strong{color:#a3f6cc}.traderSlot small{display:block;overflow-wrap:anywhere;margin-top:4px}.dualMotorPanel{margin-top:11px;padding:12px;border:1px solid #508876;background:#102938;border-radius:11px}.dualMotorPanel[hidden]{display:none!important}.dualMotorPanel h3{margin:0 0 9px}.multiCandidate{display:flex;gap:8px;justify-content:space-between;align-items:start;border-bottom:1px solid #325465;padding:8px 4px}
 .multiCandidate small{display:block;font-size:11px;color:#aac5ca;margin-top:4px}
 .multiCandidate strong{color:#7ce8b7}
 .multiCandidate .rate{white-space:nowrap;font-size:14px}
@@ -72,7 +72,13 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
    <div class="rowButtons"><button type="submit" id="hubConnectBtn" class="primary">🔌 Conectar PRACTICE</button></div>
    <p class="formHint">As credenciais vão por HTTPS diretamente ao servidor da sua conta. Não são gravadas neste navegador. Não envie sua senha no chat.</p>
   </form>
-  <div class="rowButtons">
+  <div class="dualMotorPanel" id="dualMotorPanel" hidden>
+  <h3>🐯 Dois motores · somente Bullex PRACTICE</h3>
+  <div class="hubInfo" id="dualMotorStatus">Motor A: Xtreme Sniper + Tendência · Motor B: aguardando aprovação das estratégias.</div>
+  <div class="lab40Help">Motor A permanece prioritário. Motor B só envia sinais M1 comprovados por 30+ validações, payout maior que 80%, expectativa matemática positiva e dentro da janela de 2 segundos. As duas análises funcionam em paralelo, mas a corretora recebe somente uma ordem por vez. M5 segue em estudo.</div>
+  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>🔒 Habilitar Motor B na DEMO</button></div>
+</div>
+<div class="rowButtons">
    <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar robô na DEMO</button>
    <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar robô</button>
    <button type="button" id="hubRefreshBtn">↻ Atualizar status</button>
@@ -132,6 +138,9 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <strong id="preservedMotor">🔒 Robô existente preservado</strong>
 <div class="lab40Help" id="preservedMotorInfo">As ordens PRACTICE continuam sob a estratégia e os controles anteriores, sem alteração.</div>
 <div id="multiRecentTrades" class="favoriteList"></div>
+<div class="favoriteBox"><h4>👥 Traders e suas estratégias · 12 mesas</h4>
+<div class="lab40Help">Cada mesa fica vinculada a uma estratégia. Estratégias excedentes aguardam uma vaga. Quando a Bullex confirma WIN, a mesa responsável recebe confetes.</div>
+<div id="traderRoster" class="traderRoster"><small>Esperando lista de estratégias validadas.</small></div></div>
 </section>
 
 <section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper + Tendência</h3>
@@ -183,6 +192,7 @@ const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],sample
 let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
 let lab40Catalog=[],lab40Rows=[],lab40Primary=null,lab40Latest=null,lab40Initialized=false,lab40Working=false;
 let lastMultiLab=null;
+let labMotorBusy=false;
 let lab40ServerVersion=-1,lab40ServerAsset='',lab40SyncBusy=false,lab40TrackBusy=false;
 function actualStudies(){
  if(!bridgeLinked||!officeSnapshot)return [];
@@ -1409,13 +1419,14 @@ function hubLockButtons(){
  $('hubLogoutBtn').disabled=hubBusy||hubState?.running===true||hubState?.uncertain===true;
  $('hubRefreshBtn').disabled=hubBusy;
  $('hubLoginBtn').disabled=hubBusy;
+ $('toggleLabMotor').disabled=hubBusy||labMotorBusy||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('liveChartRefresh').disabled=hubBusy||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('lab40Run').disabled=hubBusy||lab40Working||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('lab40AutoToggle').disabled=hubBusy||lab40TrackBusy||!hubState?.connected;
 }
 function hubLockData(){
  $('hubControlArea').hidden=true;$('hubLoginForm').hidden=false;
- hubCsrf='';hubState=null;hubLoadedConfig=false;
+ hubCsrf='';hubState=null;hubLoadedConfig=false;$('dualMotorPanel').hidden=true;
  officeSnapshot=null;bridgeLinked=false;hubHaveBaseline=false;hubLastWins.clear();
  $('realBridgePanel').hidden=true;
  $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
@@ -1532,6 +1543,24 @@ function hubLoadLive(p){
   celebrateWin({name:'Equipe Xtreme Tiger',v:Number(trade.profit||0),currency:p.currency||'USD',source:'BULLEX_PRACTICE'});
  }
  hubState=p;hubCsrf=p.csrf||hubCsrf;
+ $('dualMotorPanel').hidden=false;
+ const on=!!p.lab_orders_enabled;
+ $('toggleLabMotor').textContent=on?'🟢 Motor B habilitado na DEMO':'🔒 Habilitar Motor B na DEMO';
+ $('toggleLabMotor').setAttribute('aria-pressed',String(on));
+ $('dualMotorStatus').textContent='Motor A: Xtreme Sniper + Tendência (prioridade). Motor B: '+
+ (on?'HABILITADO · só estratégias M1 validadas · 1 ordem de cada vez.':
+ 'EM ESTUDO · não envia ordens. O motor Xtreme continua funcionando.')+
+ ' · Robô '+(p.running?'RODANDO':'PARADO')+'.';
+ const roster=$('traderRoster');roster.replaceChildren();
+ const assn=Array.isArray(p.trader_roster)?p.trader_roster:[];
+ for(let i=0;i<12;i++){
+  const row=assn.find(x=>x.index===i);
+  const div=document.createElement('div'),name=document.createElement('strong'),st=document.createElement('small');
+  div.className='traderSlot';name.textContent='Mesa '+(i+1)+' · '+names[i];
+  st.textContent=row?String(row.strategy||'Estratégia Xtreme'):
+    'Aguardando estratégia validada';
+  div.append(name,st);roster.append(div);
+ }
  // Live stats have a distinct data source. The local synthetic engine is paused.
  officeSnapshot=p;bridgeLinked=true;
  $('hubLoginForm').hidden=true;$('hubControlArea').hidden=false;
@@ -1604,6 +1633,21 @@ $('hubConfigForm').onsubmit=async e=>{
  c.asset=c.asset.toUpperCase();c.stop_win_enabled=$('hubStopWinEnabled').checked;c.stop_loss_enabled=$('hubStopLossEnabled').checked;
  await hubExecute('config',c,'Configurações aceitas pelo servidor.');
  if(hubState)hubApplyConfig(hubState.config);
+};
+$('toggleLabMotor').onclick=async()=>{
+ if(labMotorBusy||!hubState?.connected||hubState?.running||hubState?.uncertain){
+  hubNote('Para alterar o Motor B, pare o robô e aguarde operações pendentes.',true);return;
+ }
+ const enabled=$('toggleLabMotor').getAttribute('aria-pressed')!=='true';
+ if(enabled&&!confirm('ATIVAR MOTOR B: o robô poderá enviar ORDENS AUTOMÁTICAS M1 na CONTA PRACTICE usando estratégias novas comprovadas. Mesmos stops e limite diário, sem ordens simultâneas. Confirma?'))return;
+ labMotorBusy=true;hubLockButtons();
+ try{
+  const outcome=await hubApi('lab/motor',{enabled});
+  if(outcome.mode!=='PRACTICE'||outcome.serial_execution!==true)throw Error('Servidor não confirmou segurança PRACTICE.');
+  hubNote(enabled?'Motor B habilitado para a PRÓXIMA sessão PRACTICE. O Xtreme continua prioritário.':'Motor B desligado; estratégia Xtreme preservada.');
+  await hubRefresh();
+ }catch(e){hubNote('Não foi possível mudar o Motor B: '+e.message,true);}
+ finally{labMotorBusy=false;hubLockButtons();}
 };
 $('hubStartBtn').onclick=async()=>{
  if(!hubState||hubBusy||!hubState.connected||hubState.running||hubState.uncertain||!hubState.management?.can_trade)return;
