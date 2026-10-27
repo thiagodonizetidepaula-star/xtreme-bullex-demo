@@ -141,6 +141,29 @@ class ResearchLabTests(unittest.TestCase):
         self.assertEqual(snap['ready_by_timeframe']['M1'],1)
         self.assertEqual(snap['ready_by_timeframe']['M5'],1)
         self.assertEqual(snap['mode'],'RESEARCH_ONLY')
+    def test_live_stream_120_candles_is_recorded_even_without_favorites(self):
+        # An analyzed asset is NOT the same as an approved/validated strategy.
+        # A short 120-bar stream must still publish research progress.
+        from multiasset_lab import ResearchRegistry
+        reg=ResearchRegistry()
+        reg.set_market([{'asset':'EURUSD','payout':85.0,'open':True}])
+        self.assertTrue(reg.ingest('EURUSD','M1',sample_bars(120),'STREAMING_M1'))
+        status=reg.snapshot()
+        self.assertEqual(status['studies'],1)
+        self.assertEqual(status['researched_assets'],1)
+        self.assertEqual(status['ready_by_timeframe']['M1'],1)
+        self.assertEqual(status['mode'],'RESEARCH_ONLY')
+        self.assertFalse(status['m5_execution_supported'])
+    def test_contiguous_m5_seed_starts_as_insufficient_not_a_fake_signal(self):
+        from multiasset_lab import ResearchRegistry,aggregate_m5
+        reg=ResearchRegistry()
+        reg.set_market([{'asset':'EURUSD','payout':85,'open':True}])
+        bars=aggregate_m5(sample_bars(120))
+        self.assertTrue(reg.ingest('EURUSD','M5',bars,'STREAMING_M1'))
+        status=reg.snapshot()
+        self.assertEqual(status['studies'],1)
+        self.assertEqual(status['ready_by_timeframe']['M5'],0)
+        self.assertEqual(status['signals'],[])
     def test_short_history_rejected(self):
         with self.assertRaises(ValueError):evaluate(sample_bars(40),'EURUSD')
 if __name__=='__main__':
