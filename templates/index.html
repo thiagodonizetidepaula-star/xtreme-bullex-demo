@@ -35,10 +35,10 @@ function renderRobotControl(){
  let mode='unknown',label='SEM CONFIRMAÇÃO',hint='Servidor indisponível. Aguardando atualização.',disabled=true;
  if(robotFresh&&data){
   if(robotPending){mode='pending';label=robotPending==='start'?'INICIANDO…':'PARANDO…';hint=robotPending==='start'?'Aguardando confirmação do servidor.':'Aguardando encerramento; ordens enviadas continuam sendo acompanhadas.';}
-  else if(data.running===true){mode='active';label='ROBÔ ATIVO';hint='Confirmado pelo servidor · Toque para parar';disabled=false;}
+  else if(data.running===true){mode='active';label='TRADERS ATIVOS';hint='Confirmado pelo servidor · Toque para parar';disabled=false;}
   else if(data.running===false){
    const ready=data.connected===true&&!data.uncertain&&data.management?.can_trade===true;
-   mode=robotSeenRunning?'stopped':ready?'ready':'blocked';label=robotSeenRunning?'ROBÔ PARADO':'INICIAR XTREME';
+   mode=robotSeenRunning?'stopped':ready?'ready':'blocked';label=robotSeenRunning?'ROBÔ PARADO':'INICIAR LABORATÓRIO';
    hint=ready?'Conta demo validada · Toque para iniciar':data.uncertain?'Revise a operação pendente antes de iniciar.':!data.connected?'Conecte e valide sua conta demo.':'Verifique os limites no gerenciamento.';
    disabled=!ready;
   }
@@ -55,7 +55,7 @@ async function toggleRobot(){
   // A POST acknowledgement is not proof that the bot is running or stopped.
   // Invalidate any state request that began before this command.
   robotAppliedSequence=++robotRefreshSequence;
-  await api(operation,{});
+  await api(operation,operation==='start'?{lab_only:true}:{});
  }catch(e){
   // Never replay an ambiguous command; obtain the actual state instead.
   robotPending=null;robotFresh=false;toast(e.message);
