@@ -271,7 +271,13 @@ box(.13,.19,.02,white,.19,1.08,.187,person);
 person.traverse(obj=>{if(obj.isMesh){obj.userData.index=i;clickTargets.push(obj)}});people.push({group:person,head,arms,legs,x,z,phase:i*.7,walk:false,celebrate:0,win:true,blink:i*.48,smile});});
 function updateCharts(){charts.forEach(ch=>{if(ch.big)return;let p=ch.prices;p.push(Math.max(15,Math.min(95,p[p.length-1]+(Math.random()-.5)*12)));p.shift();const c=ch.ctx;c.fillStyle='#081a27';c.fillRect(0,0,192,112);c.strokeStyle='#2b4654';for(let y=12;y<112;y+=22){c.beginPath();c.moveTo(0,y);c.lineTo(192,y);c.stroke()}for(let k=1;k<p.length;k++){const x=k*10,up=p[k]>=p[k-1],a=104-p[k],b=104-p[k-1];c.strokeStyle=up?'#42e3aa':'#f16d85';c.fillStyle=c.strokeStyle;c.beginPath();c.moveTo(x,Math.min(a,b)-5);c.lineTo(x,Math.max(a,b)+5);c.stroke();c.fillRect(x-3,Math.min(a,b),6,Math.max(2,Math.abs(a-b)))}c.fillStyle='#bfe3ec';c.font='10px monospace';const labMonitor=[0,1,2,6,7,8].includes(ch.seed),observed=displayedStudies(),study=labMonitor?(bridgeLinked?observed[ch.seed%Math.max(1,observed.length)]:studyForName(strategies[ch.seed])):null;
  c.fillText(labMonitor?'LAB '+(study?Math.round(studyRate(study))+'%':'—'):bridgeLinked?'OPS · PRACTICE':'OPS · DEMO',5,10);const last=demoLedger.lastByTrader[ch.seed];if(last&&!labMonitor){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=last.win?'#56efb7':'#ff8797';c.font='bold 11px sans-serif';c.fillText((last.win?'WIN ':'LOSS ')+(last.v>=0?'+':'')+'R$ '+last.v.toFixed(2),5,104)}
- if(labMonitor&&study){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=studyRate(study)>60?'#56efb7':'#ff8797';c.font='bold 10px sans-serif';c.fillText(study.name+' · '+formatRate(study),5,104)}ch.tex.needsUpdate=true})}updateCharts();setInterval(()=>{if(!document.hidden)updateCharts()},2000);
+ if(labMonitor&&study&&!bridgeLinked){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=studyRate(study)>60?'#56efb7':'#ff8797';c.font='bold 10px sans-serif';c.fillText(study.name+' · '+formatRate(study),5,104)}
+ if(bridgeLinked&&hubState){
+  const desk=hubState.trader_roster?.find(x=>x.index===ch.seed);
+  c.fillStyle='#081c2b';c.fillRect(0,85,192,27);c.fillStyle=desk?'#78e9b9':'#abc1ce';
+  c.font='bold 10px system-ui';
+  c.fillText(names[ch.seed]+' · '+(desk?String(desk.strategy).slice(0,23):'Aguardando estratégia'),5,99);
+ }ch.tex.needsUpdate=true})}updateCharts();setInterval(()=>{if(!document.hidden)updateCharts()},2000);
 // Luxury high-rise suite: central corridor, distinct left/right offices and sunlit exterior windows.
 const glass=new THREE.MeshPhysicalMaterial({color:0xc8f3ff,transparent:true,opacity:.115,roughness:.13,metalness:0,depthWrite:false,side:THREE.DoubleSide}),trim=mat('#263d4b',.4);
 const brass=new THREE.MeshStandardMaterial({color:'#b89656',metalness:.82,roughness:.33}),
@@ -688,7 +694,10 @@ canvas.addEventListener('pointerup',e=>{
 function showDetail(){
  const role=premiumActive&&team[selected]?team[selected].role:'desk';
  const state=role==='sofa'?'descansando no sofá':role==='coffee'?'fazendo pausa para café':role==='supervisor'?'supervisionando os traders':role==='bathroom'?'no banheiro dos funcionários':'analisando o mercado na mesa';
- $('detail').textContent='👤 '+names[selected]+' · Estratégia: '+strategies[selected]+' · '+state+' · Operações demonstrativas';
+ const assignment=bridgeLinked&&hubState?.trader_roster?.find(x=>x.index===selected);
+ $('detail').textContent='👤 '+names[selected]+' · Estratégia: '+
+ (assignment?assignment.strategy:'Aguardando estratégia validada')+' · '+state+
+ ' · '+(hubState?.running?'Bullex PRACTICE · robô em execução':'Bullex PRACTICE · aguardando operações');
 }
 let total=0,wins=0,losses=0,balance=0,timer=null;const money=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 // This simulation does NOT make real orders, use actual quotes or access Bullex.
@@ -1686,7 +1695,7 @@ $('toggleLabMotor').onclick=async()=>{
 $('hubStartBtn').onclick=async()=>{
  if(!hubState||hubBusy||!hubState.connected||hubState.running||hubState.uncertain||!hubState.management?.can_trade)return;
  const c=hubState.config||{};
- if(!confirm('Iniciar operações automáticas SOMENTE na conta PRACTICE?\nEstratégia: '+String(c.strategy)+'\nValor por ordem: '+String(c.stake)+' '+String(hubState.currency||'USD')+'\nLimite por dia: '+String(c.limit)+'\n\nConfira antes de continuar.'))return;
+ if(!confirm('Iniciar operações SOMENTE na conta PRACTICE?\nMotor A: Xtreme (prioridade)\nMotor B: '+(hubState.lab_orders_enabled?'HABILITADO · estratégias validadas M1':'DESLIGADO')+'\nValor por ordem: '+String(c.stake)+' '+String(hubState.currency||'USD')+'\nLimite diário: '+String(c.limit)+'\n\nOs dois motores compartilham os mesmos limites. Confirma?'))return;
  await hubExecute('start',{},'Início solicitado. Aguarde o status confirmado do servidor.');
 };
 $('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada solicitada. Uma ordem já enviada continuará sendo acompanhada até o resultado.');};
