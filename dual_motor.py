@@ -147,17 +147,15 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
     strict two-second execution window, or changes the Xtreme primary engine.
     """
     stats={'eligible':0,'assigned':0,'fresh_assets':0,'crossings':0,
-           'valid_signals':0,'reason':'SEM_CANDIDATAS'}
+           'valid_signals':0,'reason':'SEM_CANDIDATAS',
+           'without_stream':0,'insufficient_history':0,
+           'invalid_history':0,'payout_rejected':0,'stale_candle':0}
     def finish(value,reason):
         stats['reason']=reason
         if isinstance(diagnostics,dict):diagnostics.update(stats)
         return value
     if not enabled or not isinstance(snapshot,dict):
         return finish(None,'MOTOR_B_DESLIGADO')
-    # Cheap fail-fast outside the broker's strict 2-second M1 entry window:
-    # avoid repeatedly calculating hundreds of historical candle indicators.
-    if not 0<=float(now)%60<=MAX_SIGNAL_AGE_SEC:
-        return finish(None,'SEM_VELAS_M1_NO_PRAZO')
     market_map={str(c['asset']):float(c['payout']) for c in market
          if isinstance(c,dict) and isinstance(c.get('asset'),str)
          and isinstance(c.get('payout'),(int,float))
@@ -172,6 +170,11 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
     assigned={r['strategy_id']:r for r in roster[1:]}
     stats['assigned']=len(assigned)
     if not assigned:return finish(None,'SEM_TRADERS_ATRIBUIDOS')
+    # Count eligible desks even outside the entry window. Do not do any
+    # expensive technical calculations unless the current broker M1 candle
+    # has just closed.
+    if not 0<=float(now)%60<=MAX_SIGNAL_AGE_SEC:
+        return finish(None,'FORA_JANELA_DE_ENTRADA_M1')
     # Current snapshots come directly from the authenticated streaming worker.
     # Process only candidate assets, never another broker request.
     items={str(v['asset']):v.get('candles',[]) for v in (live_items or [])
@@ -182,19 +185,27 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
         if identifier not in assigned or candidate.get('timeframe')!='M1':continue
         asset=str(candidate['asset'])
         payout=market_map.get(asset,0)
-        if payout<=MIN_PAYOUT or payout+0.01<float(candidate['payout_m1']):continue
+        if payout<=MIN_PAYOUT or payout+0.01<float(candidate['payout_m1']):
+            stats['payout_rejected']+=1
+            continue
         raw=items.get(asset) or []
-        if len(raw)<WARMUP+1:continue
+        if not raw:stats['without_stream']+=1;continue
+        if len(raw)<WARMUP+1:stats['insufficient_history']+=1;continue
         try:
             bars=sorted(raw,key=lambda x:int(x['from']))[-150:]
             last=int(bars[-1]['from'])
             if len(bars)<WARMUP+1 or any(
                 int(right['from'])-int(left['from'])!=60
                 for left,right in zip(bars[-(WARMUP+1):],bars[-WARMUP:])):
+                stats['invalid_history']+=1
                 continue
-        except (KeyError,TypeError,ValueError,OverflowError):continue
+        except (KeyError,TypeError,ValueError,OverflowError):
+            stats['invalid_history']+=1
+            continue
         close_time=last+60
-        if not 0<=now-close_time<=MAX_SIGNAL_AGE_SEC:continue
+        if not 0<=now-close_time<=MAX_SIGNAL_AGE_SEC:
+            stats['stale_candle']+=1
+            continue
         stats['fresh_assets']+=1
         spec=study.get(identifier)
         if spec is None:continue
@@ -213,8 +224,11 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
             'accuracy':float(candidate['accuracy']),
             'payout':payout,'timeframe':'M1'})
     if not signals:
-        reason=('SEM_VELAS_M1_NO_PRAZO' if stats['fresh_assets']==0
-                else 'SEM_CRUZAMENTO_VALIDADO_NA_VELA')
+        reason=('STREAM_M1_INDISPONIVEL' if stats['without_stream'] and not stats['fresh_assets'] and not stats['stale_candle'] else
+                'HISTORICO_M1_INSUFICIENTE' if stats['insufficient_history'] and not stats['fresh_assets'] and not stats['stale_candle'] else
+                'HISTORICO_M1_INVALIDO' if stats['invalid_history'] and not stats['fresh_assets'] and not stats['stale_candle'] else
+                'VELA_M1_ATRASADA' if stats['fresh_assets']==0 else
+                'SEM_CRUZAMENTO_VALIDADO_NA_VELA')
         return finish(None,reason)
     signals.sort(key=lambda x:(-x['accuracy'],-x['samples'],x['asset'],x['strategy_id']))
     return finish(signals[0],'SINAL_VALIDADO_M1_ATUAL')

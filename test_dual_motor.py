@@ -65,6 +65,28 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':85}],
                                             now+4,True,
                                             live_items=[{'asset':'EURUSD','candles':bars}]))
+    def test_candidate_counts_are_preserved_outside_order_window(self):
+        c=candidate(payout=86)
+        diag={}
+        result=select_lab_order({'candidates':[c],'signals':[]},
+            [{'asset':'EURUSD','payout':88}],1700000105,True,
+            live_items=[],diagnostics=diag)
+        self.assertIsNone(result)
+        self.assertEqual(diag['reason'],'FORA_JANELA_DE_ENTRADA_M1')
+        self.assertEqual(diag['eligible'],1)
+        self.assertEqual(diag['assigned'],1)
+        self.assertEqual(diag['valid_signals'],0)
+    def test_no_fabricated_order_when_candidate_stream_missing(self):
+        c=candidate(payout=86)
+        # Choose just after the M1 minute boundary.
+        minute=1700000100//60*60
+        diag={}
+        result=select_lab_order({'candidates':[c],'signals':[]},
+            [{'asset':'EURUSD','payout':88}],minute+.5,True,
+            live_items=[],diagnostics=diag)
+        self.assertIsNone(result)
+        self.assertEqual(diag['reason'],'STREAM_M1_INDISPONIVEL')
+        self.assertEqual(diag['without_stream'],1)
     def test_no_order_when_live_candle_has_no_new_cross_or_has_a_gap(self):
         from unittest.mock import patch
         c=candidate(payout=88)
