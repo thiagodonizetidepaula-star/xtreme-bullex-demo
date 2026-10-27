@@ -402,6 +402,8 @@ def loop(c):
                 diag['cached_candle_calcs']=closed_cache.hits
                 diag['fresh_candle_calcs']=closed_cache.misses
                 diag['minutes_seconds']=round(float(batch['now'])%60,2)
+                diag['fresh_closed_assets']=int(batch.get('fresh_closed',0))
+                diag['streaming_assets']=int(batch.get('ready',0))
                 diag['motor_running']=True
                 state['lab_signal_diag']=diag
                 if proposal:
