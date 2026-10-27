@@ -181,6 +181,9 @@ state={'connected':False,'running':False,'message':'Conecte sua demo para verifi
 state['lab_orders_enabled']=False  # Must be explicitly enabled on the authenticated PRACTICE panel.
 state['lab_signal_diag']={'reason':'AGUARDANDO_MOTOR','eligible':0,'assigned':0,
                            'fresh_assets':0,'crossings':0,'valid_signals':0,'checked_at':None}
+state['lab_executions']={'attempted':0,'accepted':0,'refused':0,
+                         'last_status':'AGUARDANDO_SINAL_VALIDADO','last_reason':None,
+                         'last_asset':None,'last_strategy':None,'last_at':None}
 def log(s):
     state['message']=s
     state['logs'].append({'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'text':s})
@@ -399,6 +402,8 @@ def loop(c):
                 diag['cached_candle_calcs']=closed_cache.hits
                 diag['fresh_candle_calcs']=closed_cache.misses
                 diag['minutes_seconds']=round(float(batch['now'])%60,2)
+                diag['fresh_closed_assets']=int(batch.get('fresh_closed',0))
+                diag['streaming_assets']=int(batch.get('ready',0))
                 diag['motor_running']=True
                 state['lab_signal_diag']=diag
                 if proposal:
@@ -463,6 +468,11 @@ def loop(c):
                            'expiration':a['candle']+120}
                     state['trades'].append(trade)
                     state['uncertain']=True
+                if lab_choice:
+                    state['lab_executions']['attempted']+=1
+                    state['lab_executions'].update(last_status='ENVIANDO',
+                        last_reason=None,last_asset=c['asset'],
+                        last_strategy=lab_choice['strategy'],last_at=time.time())
                 order=client.call('order',asset=c['asset'],stake=c['stake'],
                                   # Enforce >80% payout on research trades even though
                                   # the original Sniper accepts >= user minimum.
@@ -471,7 +481,15 @@ def loop(c):
                                   strategy='sniper' if lab_choice else c.get('strategy','rejection'))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;log(order['reason'])
+                    if lab_choice:
+                        state['lab_executions']['refused']+=1
+                        state['lab_executions'].update(last_status='RECUSADA',
+                            last_reason=str(order['reason'])[:180],last_at=time.time())
                 else:
+                    if lab_choice:
+                        state['lab_executions']['accepted']+=1
+                        state['lab_executions'].update(last_status='CONFIRMADA',
+                            last_reason=None,last_at=time.time())
                     trade.update(id=order['id'],status='ABERTA',payout=order['payout'],source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'));
                     if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
                     log('Ordem confirmada na DEMO. Aguardando resultado.')
@@ -747,6 +765,7 @@ def office_overview():
             trader_work=current_work,
             trader_leaderboard=leaderboard(state['trades']),
             lab_signal_diag=state['lab_signal_diag'],
+            lab_executions=dict(state['lab_executions']),
             trades=recent,
             chart={'asset':state.get('chart_asset'),
                    'updated_at':state.get('chart_updated_at'),
