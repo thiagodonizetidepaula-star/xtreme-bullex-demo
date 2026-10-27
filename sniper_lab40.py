@@ -34,7 +34,7 @@ MIN_RATE = 60.0
 WARMUP = 85
 
 
-def _validate(candles):
+def _validate(candles, step=60):
     if not isinstance(candles, list) or len(candles) < WARMUP + 2:
         raise ValueError("Histórico M1 insuficiente (mínimo de 87 velas fechadas).")
     if len(candles) > 1500:
@@ -51,7 +51,7 @@ def _validate(candles):
         if not l <= min(o, c) <= max(o, c) <= h:
             raise ValueError("Máxima, mínima, abertura e fechamento inconsistentes.")
         out.append({"from": t, "open": o, "close": c, "max": h, "min": l})
-    if any(y["from"] - x["from"] != 60 for x, y in zip(out, out[1:])):
+    if any(y["from"] - x["from"] != step for x, y in zip(out, out[1:])):
         raise ValueError("Histórico M1 tem velas duplicadas ou lacunas. Teste cancelado para evitar conclusões falsas.")
     return out
 
@@ -186,11 +186,12 @@ def evaluate_primary(bars, asset):
     }
 
 
-def evaluate(candles, asset):
+def evaluate(candles, asset, timeframe='M1'):
     """Return 40 real-candle hypothetical results; never touch the trade executor."""
     if not isinstance(asset, str) or not 3 <= len(asset) <= 40:
         raise ValueError("Ativo inválido.")
-    bars = _validate(candles)
+    if timeframe not in ('M1','M5'): raise ValueError('Timeframe não suportado')
+    bars = _validate(candles, 60 if timeframe=='M1' else 300)
     # Data from current candle is excluded; caller must use only closed candles.
     close = [b["close"] for b in bars]
     close_sma34 = _sma(close, 34)
@@ -264,7 +265,8 @@ def evaluate(candles, asset):
             "status": "APROVADA EM ESTUDO" if approved else "AMOSTRA INSUFICIENTE" if tested < MIN_OBSERVATIONS else "EM ESTUDO",
         })
     primary=evaluate_primary(bars,asset)
-    return {"primary": primary, "asset": asset, "timeframe": "M1", "bars": len(bars), "from": bars[0]["from"],
+    primary['timeframe']=timeframe
+    return {"primary": primary, "asset": asset, "timeframe": timeframe, "bars": len(bars), "from": bars[0]["from"],
             "to": bars[-1]["from"], "data_source": "BULLEX_PRACTICE_CANDLES",
             "proxy": "Próxima vela fechada (open-close); não representa ordens executadas nem payout.",
             "split": "70% treino / 30% validação fora da amostra, cronológica",
