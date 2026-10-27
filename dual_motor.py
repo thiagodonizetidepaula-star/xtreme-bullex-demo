@@ -1,15 +1,15 @@
-"""Lab-only PRACTICE order routing for traders in the office.
+"""Multi-strategy PRACTICE order routing for the four-trader office.
 
-No Xtreme Sniper / principal strategy is a source of automatic orders.
-Only an independently validated M1 research candidate may generate a current
-closed-candle signal. The broker's final strict safety checks still apply.
-All trader orders are serialized, with no overlapping broker commands.
+Multiple independently validated M1 research candidates compete for the
+best fresh entry. Broker safety gates remain mandatory, and orders are
+serialized. Historical hit rates never guarantee live performance.
 """
 import math
 from datetime import datetime
 
-TRADERS=('Alex','Bia','Caio','Dani','Eva','Fred','Gabi','Hugo','Lia','Leo','Maya','Rafa')
+TRADERS=('Alex','Bia','Caio','Dani')
 MIN_TESTS=30
+MIN_TEST_RATE_EXCLUSIVE=58.0
 MIN_PAYOUT=80.0
 MAX_SIGNAL_AGE_SEC=2.0
 
@@ -25,7 +25,8 @@ def research_eligible(candidate):
         return (candidate.get('timeframe')=='M1'
                 and candidate.get('id')!='XS-PRINCIPAL'
                 and samples>=MIN_TESTS and wins+losses==samples
-                and 100*wins/samples>60 and rate>60 and rate>threshold
+                and 100*wins/samples>MIN_TEST_RATE_EXCLUSIVE
+                and rate>MIN_TEST_RATE_EXCLUSIVE and rate>threshold
                 and payout>MIN_PAYOUT and math.isfinite(rate)
                 and candidate.get('status')=='ESTUDO_CANDIDATO_NAO_EXECUTAVEL'
                 and bool(candidate.get('passes_break_even_math')))
@@ -33,11 +34,11 @@ def research_eligible(candidate):
         return False
 
 def assign_desks(candidates):
-    """Allocate up to 12 PRACTICE desks from independently qualified lab strategies.
+    """Assign the four physical desks to top distinct validated strategies.
 
-    The retired Sniper has no reserved desk or priority. A strategy ID is
-    assigned once; candidates for the same strategy on multiple assets are
-    watched by the same trader.
+    A strategy ID is assigned once; its signals are evaluated across every
+    available approved asset. Remaining traders keep researching instead of
+    displaying fictitious positions.
     """
     roster=[]
     used=set()
