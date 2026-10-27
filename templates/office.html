@@ -1707,6 +1707,12 @@ function renderTraderLeaderboard(p){
   (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
   (diag.stale_candle?' | Velas atrasadas: '+diag.stale_candle:'')+
   '. Uma ordem só é confirmada após aceitação pela Bullex.';
+ const exec=p.lab_executions||{};
+ $('labEntryDiagnostics').textContent+=' | MOTOR B · Ordens tentadas: '+Number(exec.attempted||0)+
+  ' · Aceitas: '+Number(exec.accepted||0)+
+  ' · Recusadas: '+Number(exec.refused||0)+
+  (exec.last_status==='RECUSADA'?' · Última recusa: '+String(exec.last_reason||'não informada'):'')+
+  (exec.last_status==='CONFIRMADA'?' · Última ordem aceita: '+String(exec.last_asset||''):'');
  const tv=charts.find(c=>c.roomView==='ranking');if(tv)drawRoomTV(tv);
 }
 function hubLoadLive(p){
