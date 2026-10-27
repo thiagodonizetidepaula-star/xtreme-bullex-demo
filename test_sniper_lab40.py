@@ -23,12 +23,28 @@ class ResearchLabTests(unittest.TestCase):
     def test_40_results_and_no_unproven_approval(self):
         result=evaluate(sample_bars(),'EURUSD')
         self.assertEqual(len(result['strategies']),40)
+        self.assertEqual(result['primary']['id'],'XS-PRINCIPAL')
+        self.assertEqual(result['primary']['samples'],result['primary']['wins']+result['primary']['losses'])
+        self.assertEqual(result['primary']['train_samples'],result['primary']['train_wins']+result['primary']['train_losses'])
+        self.assertEqual(result['primary']['approved'],
+                         result['primary']['samples']>=30 and result['primary']['rate'] is not None and result['primary']['rate']>60)
+        self.assertIn('TENDENCIA',result['primary']['source'].upper())
+
         self.assertEqual(result['data_source'],'BULLEX_PRACTICE_CANDLES')
         for row in result['strategies']:
             self.assertEqual(row['samples'],row['wins']+row['losses'])
             self.assertEqual(row['train_samples'],row['train_wins']+row['train_losses'])
             self.assertEqual(row['approved'],row['samples']>=MIN_OBSERVATIONS and row['rate'] is not None and row['rate']>60)
             self.assertIn(row['status'],('APROVADA EM ESTUDO','EM ESTUDO','AMOSTRA INSUFICIENTE'))
+    def test_primary_does_not_claim_missing_original_sniper_file(self):
+        result=evaluate(sample_bars(),'EURUSD')
+        self.assertIn('não fornecido',result['primary']['source_note'])
+        self.assertIn('WMA5',result['primary']['base'])
+    def test_favorites_include_main_if_statistically_qualified(self):
+        from lab40_autoupdate import favorite_rows
+        result={'asset':'EURUSD','primary':{'id':'XS-PRINCIPAL','name':'Principal','wins':20,'losses':10},
+                'strategies':[]}
+        self.assertEqual([x['id'] for x in favorite_rows(result)],['XS-PRINCIPAL'])
     def test_gaps_and_doubles_rejected(self):
         candles=sample_bars()
         candles[115]['from']+=60
