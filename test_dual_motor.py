@@ -41,15 +41,48 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':80}],1700000060,True))
         self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':83}],1700000060,True))
     def test_only_current_m1_research_can_reach_existing_single_channel(self):
+        from unittest.mock import patch
         c=candidate(payout=85)
-        book={'candidates':[c],'signals':[{**c,'direction':'put','candle_close':1700000060}]}
-        signal=select_lab_order(book,[{'asset':'EURUSD','payout':85}],1700000061,True)
+        book={'candidates':[c],
+              'signals':[{**c,'direction':'put','candle_close':1700000040}]}  # stale stored hint
+        bars=[{'from':1700000040+i*60,'open':1.1,'close':1.13,'max':1.17,'min':1.08}
+              for i in range(90)]
+        now=bars[-1]['from']+61
+        metrics={}
+        with patch('multiasset_lab.latest_direction',return_value='call') as latest:
+            signal=select_lab_order(book,[{'asset':'EURUSD','payout':85}],now,True,
+                                    live_items=[{'asset':'EURUSD','candles':bars}],
+                                    diagnostics=metrics)
         self.assertIsNotNone(signal)
         self.assertEqual(signal['timeframe'],'M1')
-        self.assertEqual(signal['candle'],1700000000)
+        self.assertEqual(signal['candle'],bars[-1]['from'])
         self.assertGreaterEqual(signal['trader_index'],1)
         self.assertEqual(signal['strategy_id'],'XS-04')
-        self.assertEqual(signal['direction'],'put')
+        self.assertEqual(signal['direction'],'call')  # live candle, not stale stored PUT
+        self.assertEqual(metrics['reason'],'SINAL_VALIDADO_M1_ATUAL')
+        self.assertEqual(metrics['valid_signals'],1)
+        latest.assert_called_once()
+        self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':85}],
+                                            now+4,True,
+                                            live_items=[{'asset':'EURUSD','candles':bars}]))
+    def test_no_order_when_live_candle_has_no_new_cross_or_has_a_gap(self):
+        from unittest.mock import patch
+        c=candidate(payout=88)
+        book={'candidates':[c],'signals':[]}
+        bars=[{'from':1700000040+i*60,'open':1.1,'close':1.13,
+               'max':1.17,'min':1.08} for i in range(90)]
+        now=bars[-1]['from']+60
+        diagnostics={}
+        with patch('multiasset_lab.latest_direction',return_value=None):
+            self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':89}],
+                now,True,live_items=[{'asset':'EURUSD','candles':bars}],
+                diagnostics=diagnostics))
+        self.assertEqual(diagnostics['reason'],'SEM_CRUZAMENTO_VALIDADO_NA_VELA')
+        bars[-10]['from']+=120  # stale/gapped history must be rejected
+        with patch('multiasset_lab.latest_direction',return_value='call') as f:
+            self.assertIsNone(select_lab_order(book,[{'asset':'EURUSD','payout':89}],
+                now,True,live_items=[{'asset':'EURUSD','candles':bars}]))
+            f.assert_not_called()
     def test_automatic_desk_work_per_approved_strategy(self):
         c1=candidate('XS-18',win=20,loss=10,asset='AUDUSD-OTC')
         c2=candidate('XS-18',win=21,loss=9,asset='EURUSD-OTC')
