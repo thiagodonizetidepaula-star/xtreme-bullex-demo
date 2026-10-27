@@ -3,6 +3,7 @@ from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template,make_response,send_file
 from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
+from lab40_autoupdate import merge_closed_bars,favorite_rows
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -15,7 +16,25 @@ OFFICE_ORIGIN='https://trader-office-3d.onrender.com'
 office_pair_code=None # sha256 + 5 minute TTL, one-time use
 office_read_token=None # sha256 + 2 hour TTL
 office_bad_attempts={} # per-client brute-force throttle
-lab40_cache={} # Ephemeral study results only; not the live trading engine.
+lab40_cache={} # Ephemeral study results; no exposure to order executor.
+lab40_history={} # Closed M1 candle history, retained in memory for up to 6 assets.
+lab40_jobs=queue.Queue(maxsize=2)
+lab40_fetch_busy=False
+lab40_tracking={'asset':'EURUSD','enabled':True,'status':'AGUARDANDO_CONEXAO',
+                'last_error':None,'last_candle':None,'updated_at':None,
+                'last_attempt_minute':-1,'last_enqueued':0,'version':0,
+                'generation':0,'next_fetch_after':time.time()+60}
+def lab40_summary():
+    target=lab40_tracking['asset']
+    cached=lab40_cache.get(target)
+    favs=favorite_rows(cached)
+    return {'asset':target,'enabled':lab40_tracking['enabled'],'status':lab40_tracking['status'],
+            'last_error':lab40_tracking['last_error'],'last_candle':lab40_tracking['last_candle'],
+            'updated_at':lab40_tracking['updated_at'],'version':lab40_tracking['version'],
+            'running':bool(state['running']),'research_only':True,'min_validation':30,
+            'minimum_rate_exclusive':60,'favorites':favs,'favorites_count':len(favs),
+            'total_strategies':40,'data_source':'BULLEX_PRACTICE_CLOSED_CANDLES'}
+
 def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
 def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
 def office_error(message,status):return jsonify(error=message),status
@@ -49,6 +68,115 @@ class Client:
     def close(self):
         if self.p.poll() is None:self.p.terminate()
 
+
+def lab40_store(asset, raw_bars, generation, source):
+    """Compute outside state lock; publish only after an actual new closed candle."""
+    with lock:
+        older=list(lab40_history.get(asset, []))
+        last_done=lab40_tracking['last_candle'] if lab40_tracking['asset']==asset else None
+    combined=merge_closed_bars(older,raw_bars)
+    newest=combined[-1]['from'] if combined else None
+    if newest is None:return
+    if last_done is not None and newest <= last_done:return
+    if len(combined)<87:
+        result=None
+        reason=f'Histórico insuficiente: {len(combined)}/87 velas M1 consecutivas. Sem favoritos aprovadas.'
+    else:
+        result=evaluate_lab40(combined,asset)
+        result['created_at']=datetime.now(timezone.utc).isoformat(timespec='seconds')
+        result['source']='HISTORICO_BULLEX_PRACTICE'
+        result['execution']='SOMENTE_ESTUDO_SEM_ORDENS'
+        result['update_kind']=source
+        reason='ATUALIZADA_COM_VELA_M1_FECHADA'
+    with lock:
+        if generation!=lab40_tracking['generation'] or asset!=lab40_tracking['asset'] or not lab40_tracking['enabled']:
+            return
+        lab40_history[asset]=combined
+        if result is not None:lab40_cache[asset]=result
+        else:lab40_cache.pop(asset,None)
+        lab40_tracking.update(last_candle=newest,updated_at=time.time(),
+                              status=reason,last_error=None,
+                              version=lab40_tracking['version']+1)
+        if len(lab40_history)>6:
+            for stale in list(lab40_history):
+                if stale!=asset:
+                    lab40_history.pop(stale,None);lab40_cache.pop(stale,None)
+                    if len(lab40_history)<=6:break
+
+def lab40_offer_stream(batch):
+    """Called in the trading loop: lightweight enqueue, never broker requests or backtests."""
+    target=lab40_tracking['asset']
+    if not lab40_tracking['enabled']:return
+    item=next((i for i in batch.get('items',[]) if i.get('asset')==target),None)
+    if item is None:return
+    bars=item.get('candles') or []
+    if not bars:return
+    now=batch.get('now',time.time())
+    valid=[b for b in bars if isinstance(b,dict) and isinstance(b.get('from'),(int,float))
+           and b['from']+60<=now]
+    if not valid:return
+    last=int(valid[-1]['from'])
+    with lock:
+        if (not lab40_tracking['enabled'] or lab40_tracking['asset']!=target
+            or last<=lab40_tracking['last_enqueued']):return
+        try:
+            lab40_jobs.put_nowait((target,valid,lab40_tracking['generation']))
+        except queue.Full:
+            # Protect order execution; retain latest completed candle for next snapshot.
+            return
+        lab40_tracking['last_enqueued']=last
+
+def lab40_auto_worker():
+    """Updates lab every completed minute; paused fetches only, live from existing streams.
+
+    The trading engine never waits for analysis, never executes lab favorites.
+    """
+    global lab40_fetch_busy
+    while True:
+        try:job=lab40_jobs.get(timeout=1.5)
+        except queue.Empty:job=None
+        if job is not None:
+            asset,bars,generation=job
+            try:lab40_store(asset,bars,generation,'STREAMING_M1')
+            except (ValueError,KeyError,TypeError) as e:
+                with lock:
+                    if lab40_tracking['asset']==asset and lab40_tracking['generation']==generation:
+                        lab40_tracking.update(status='HISTORICO_INVALIDO',last_error=str(e)[:180])
+            except Exception as e:
+                with lock:
+                    if lab40_tracking['asset']==asset and lab40_tracking['generation']==generation:
+                        lab40_tracking.update(status='ERRO_AVALIACAO',last_error=str(e)[:180])
+            finally:lab40_jobs.task_done()
+            continue
+        now=time.time()
+        with lock:
+            minute=int(now//60)
+            target=lab40_tracking['asset']
+            may_fetch=(lab40_tracking['enabled'] and now>=lab40_tracking['next_fetch_after']
+                 and now%60>=6 and lab40_tracking['last_attempt_minute']<minute
+                 and state['connected'] and not state['running']
+                 and not state['uncertain'] and not (bot and bot.is_alive())
+                 and client is not None and not lab40_fetch_busy and target in state['assets'])
+            if not may_fetch:
+                if not state['connected'] and lab40_tracking['enabled']:
+                    lab40_tracking['status']='AGUARDANDO_CONEXAO'
+                continue
+            lab40_fetch_busy=True
+            lab40_tracking['last_attempt_minute']=minute
+            generation=lab40_tracking['generation']
+            source_client=client
+            lab40_tracking['status']='LENDO_HISTORICO_M1'
+        try:
+            data=source_client.call('lab_candles',timeout=28,asset=target)
+            if data.get('source')!='PRACTICE':raise ValueError('Histórico não confirmado como PRACTICE.')
+            lab40_store(target,data['candles'],generation,'PESQUISA_M1')
+        except Exception as e:
+            with lock:
+                if generation==lab40_tracking['generation']:
+                    lab40_tracking.update(status='AGUARDANDO_DADOS_M1',last_error=str(e)[:180])
+        finally:
+            with lock:lab40_fetch_busy=False
+
 def day():return datetime.now(timezone(timedelta(hours=-3))).date().isoformat()
 def management():
     ts=[t for t in state['trades'] if t['day']==day() and t['status']!='IGNORADA']
@@ -80,6 +208,7 @@ def loop(c):
             if not candidates:
                 stop.wait(2);continue
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
+            lab40_offer_stream(batch)
             for error in batch.get('errors',[]):log(error)
             selected=None
             for item in batch['items']:
@@ -351,6 +480,7 @@ def connect():
     with lock:
         if state['running']:return jsonify(error='Pare o robô antes de reconectar.'),409
         if state['uncertain'] and data.get('reviewed') is not True:return jsonify(error='Confira as ordens na corretora e marque a revisão antes de reconectar.'),409
+        if lab40_fetch_busy:return jsonify(error='Laboratório está consultando velas. Aguarde antes de reconectar.'),409
         if client:client.close()
         state['connected']=False
         if not data.get('email') or not data.get('password'):return jsonify(error='Informe email e senha dentro do app.'),400
@@ -373,6 +503,7 @@ def start():
     with lock:
         if state['running']:return jsonify(ok=True)
         if bot and bot.is_alive():return jsonify(error='Aguarde o encerramento da operação anterior.'),409
+        if lab40_fetch_busy:return jsonify(error='Laboratório está lendo velas PRACTICE. Aguarde a leitura terminar antes de iniciar.'),409
         if not state['connected'] or state['uncertain']:return jsonify(error='Conecte e valide a demo primeiro.'),409
         c=dict(state['config'])
         if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
@@ -389,7 +520,9 @@ def logout():
     with lock:
         office_pair_code=None;office_read_token=None
         if state['running'] or state['uncertain']:return jsonify(error='Pare e aguarde ou revise a operação antes de sair.'),409
+        if lab40_fetch_busy:return jsonify(error='Leitura de velas em andamento; aguarde antes de sair.'),409
         if client:client.close()
         state['connected']=False;session.clear()
     return jsonify(ok=True)
+threading.Thread(target=lab40_auto_worker,daemon=True,name='XtremeLabM1').start()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
