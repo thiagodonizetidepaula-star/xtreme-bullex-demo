@@ -179,7 +179,11 @@ class ResearchRegistry:
         if not merged:
             return False
         t=merged[-1]['from']
-        if last is not None and t<=last:
+        # A full PRACTICE history can arrive after the short live stream
+        # for the exact same closed candle. Enrich its OOS study once;
+        # repeated or older snapshots still cannot create duplicate signals.
+        if last is not None and (t<last or
+              (t==last and len(merged)<=len(self.last_bars.get(key,[])))):
             return False
         step=60 if timeframe=='M1' else 300
         # Strict validation and honest "insufficient sample" states.
