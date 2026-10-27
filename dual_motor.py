@@ -25,7 +25,7 @@ def research_eligible(candidate):
         return (candidate.get('timeframe')=='M1'
                 and candidate.get('id')!='XS-PRINCIPAL'
                 and samples>=MIN_TESTS and wins+losses==samples
-                and 100*wins/samples>50 and rate>threshold
+                and 100*wins/samples>60 and rate>60 and rate>threshold
                 and payout>MIN_PAYOUT and math.isfinite(rate)
                 and candidate.get('status')=='ESTUDO_CANDIDATO_NAO_EXECUTAVEL'
                 and bool(candidate.get('passes_break_even_math')))
@@ -192,9 +192,15 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
         if not raw:stats['without_stream']+=1;continue
         if len(raw)<WARMUP+1:stats['insufficient_history']+=1;continue
         try:
-            bars=sorted(raw,key=lambda x:int(x['from']))[-150:]
+            # Always ignore the still-forming M1 candle if a new tick arrived.
+            # Broker time, not tick arrival, defines candle closure.
+            bars=sorted((b for b in raw if int(b['from'])+60<=float(now)),
+                        key=lambda x:int(x['from']))[-150:]
+            if len(bars)<WARMUP+1:
+                stats['insufficient_history']+=1
+                continue
             last=int(bars[-1]['from'])
-            if len(bars)<WARMUP+1 or any(
+            if any(
                 int(right['from'])-int(left['from'])!=60
                 for left,right in zip(bars[-(WARMUP+1):],bars[-WARMUP:])):
                 stats['invalid_history']+=1
