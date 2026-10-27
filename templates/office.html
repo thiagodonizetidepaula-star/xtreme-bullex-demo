@@ -77,14 +77,17 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
    <p class="formHint">As credenciais vão por HTTPS diretamente ao servidor da sua conta. Não são gravadas neste navegador. Não envie sua senha no chat.</p>
   </form>
   <div class="dualMotorPanel" id="dualMotorPanel" hidden>
-  <h3>🐯 Dois motores · somente Bullex PRACTICE</h3>
-  <div class="hubInfo" id="dualMotorStatus">Motor A: Xtreme Sniper + Tendência · Motor B: aguardando aprovação das estratégias.</div>
-  <div class="lab40Help">Motor A permanece prioritário. Motor B só envia sinais M1 comprovados por 30+ validações, payout maior que 80%, expectativa matemática positiva e dentro da janela de 2 segundos. As duas análises funcionam em paralelo, mas a corretora recebe somente uma ordem por vez. M5 segue em estudo.</div>
-  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>▶ Dar trabalho aos traders na DEMO</button></div>
+  <h3>🐯 Escritório automático · Bullex PRACTICE</h3>
+  <div class="hubInfo" id="dualMotorStatus">Aguardando conexão. Um único botão inicia os dois motores.</div>
+  <div class="lab40Help">
+    🧠 <strong>Laboratório:</strong> pesquisa todos os ativos elegíveis, M1 e M5, e envia estratégias historicamente validadas para os traders.
+    📈 <strong>Operações:</strong> o Xtreme Sniper + Tendência tem prioridade permanente; as estratégias M1 aprovadas recebem entradas somente quando surgir um sinal novo e elegível.
+    As ordens PRACTICE são sequenciais e compartilham os mesmos limites. M5 permanece em estudo.
+  </div>
 </div>
 <div class="rowButtons">
-   <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar robô na DEMO</button>
-   <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar robô</button>
+   <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar escritório · 2 motores DEMO</button>
+   <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar os 2 motores</button>
    <button type="button" id="hubRefreshBtn">↻ Atualizar status</button>
    <button type="button" id="hubLogoutBtn">🔒 Sair</button>
   </div>
@@ -94,8 +97,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
     <div class="hubFormGrid">
      <label>Estratégia
       <select id="hubStrategy">
-       <option value="rejection">Retorno e Rejeição</option><option value="repetition">Repetição M1</option>
-       <option value="resumption">Retomada de Tendência</option><option value="retest">Xtreme Reteste</option><option value="sniper">Xtreme Sniper</option>
+       <option value="sniper">Xtreme Sniper + Tendência (principal fixa)</option>
       </select>
      </label>
      <label>Ativo inicial<input id="hubAsset" list="hubAssets" value="EURUSD" required><datalist id="hubAssets"></datalist></label>
@@ -201,7 +203,7 @@ let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=f
 let lab40Catalog=[],lab40Rows=[],lab40Primary=null,lab40Latest=null,lab40Initialized=false,lab40Working=false;
 let lastMultiLab=null;
 let latestTraderRanking=null;
-let labMotorBusy=false;
+
 let lab40ServerVersion=-1,lab40ServerAsset='',lab40SyncBusy=false,lab40TrackBusy=false;
 function actualStudies(){
  if(!bridgeLinked||!officeSnapshot)return [];
@@ -1521,7 +1523,6 @@ function hubLockButtons(){
  $('hubLogoutBtn').disabled=hubBusy||hubState?.running===true||hubState?.uncertain===true;
  $('hubRefreshBtn').disabled=hubBusy;
  $('hubLoginBtn').disabled=hubBusy;
- $('toggleLabMotor').disabled=hubBusy||labMotorBusy||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('liveChartRefresh').disabled=hubBusy||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('lab40Run').disabled=hubBusy||lab40Working||!hubState?.connected||hubState?.running||hubState?.uncertain;
  $('lab40AutoToggle').disabled=hubBusy||lab40TrackBusy||!hubState?.connected;
@@ -1544,6 +1545,7 @@ function hubLockData(){
 function hubApplyConfig(c){
  if(!c)return;
  for(const [name,id] of Object.entries(hubIds))if(c[name]!==undefined&&c[name]!==null)$(id).value=String(c[name]);
+ $('hubStrategy').value='sniper'; // One-button office always uses primary Xtreme Sniper.
  $('hubStopWinEnabled').checked=c.stop_win_enabled!==false;
  $('hubStopLossEnabled').checked=c.stop_loss_enabled!==false;
 }
@@ -1726,12 +1728,15 @@ function hubLoadLive(p){
  hubState=p;hubCsrf=p.csrf||hubCsrf;
  $('dualMotorPanel').hidden=false;
  const on=!!p.lab_orders_enabled;
- $('toggleLabMotor').textContent=on?'🟢 Traders trabalhando · Motor B ligado':'▶ Dar trabalho aos traders na DEMO';
- $('toggleLabMotor').setAttribute('aria-pressed',String(on));
- $('dualMotorStatus').textContent='Motor A: Xtreme Sniper + Tendência (prioridade). Motor B: '+
- (on?'HABILITADO · só estratégias M1 validadas · 1 ordem de cada vez.':
- 'EM ESTUDO · distribui estratégias, mas não envia ordens. Toque em Dar trabalho para autorizar novas operações DEMO.')+
- ' · Robô '+(p.running?'RODANDO':'PARADO')+'.';
+ const labStudies=Number(p.multi_lab?.studies||0);
+ const approved=Number(p.multi_lab?.candidates?.length||0);
+ const running=!!p.running;
+ $('dualMotorStatus').textContent=running?
+  '🟢 ESCRITÓRIO RODANDO · Motor A: Xtreme Sniper + Tendência procurando entradas · '+
+  'Motor B: '+(on?'ATIVO, recebendo estratégias aprovadas e aguardando sinais M1.':'FINALIZANDO operações.')+
+  ' · Estudos '+labStudies+' · Candidatas '+approved+' · Ordens sequenciais.':
+  '🟡 ESCRITÓRIO PARADO · Laboratório permanece em pesquisa somente leitura enquanto conectado. '+
+  'Últimos estudos '+labStudies+' · Candidatas '+approved+'. Toque em Iniciar escritório para ativar automaticamente os dois motores.';
  const roster=$('traderRoster');roster.replaceChildren();
  const work=Array.isArray(p.trader_work)?p.trader_work:[];
  for(let i=0;i<12;i++){
@@ -1836,28 +1841,21 @@ $('hubConfigForm').onsubmit=async e=>{
  await hubExecute('config',c,'Configurações aceitas pelo servidor.');
  if(hubState)hubApplyConfig(hubState.config);
 };
-$('toggleLabMotor').onclick=async()=>{
- if(labMotorBusy||!hubState?.connected||hubState?.running||hubState?.uncertain){
-  hubNote('Para alterar o Motor B, pare o robô e aguarde operações pendentes.',true);return;
- }
- const enabled=$('toggleLabMotor').getAttribute('aria-pressed')!=='true';
- if(enabled&&!confirm('ATIVAR MOTOR B: o robô poderá enviar ORDENS AUTOMÁTICAS M1 na CONTA PRACTICE usando estratégias novas comprovadas. Mesmos stops e limite diário, sem ordens simultâneas. Confirma?'))return;
- labMotorBusy=true;hubLockButtons();
- try{
-  const outcome=await hubApi('lab/motor',{enabled});
-  if(outcome.mode!=='PRACTICE'||outcome.serial_execution!==true)throw Error('Servidor não confirmou segurança PRACTICE.');
-  hubNote(enabled?'Motor B habilitado para a PRÓXIMA sessão PRACTICE. O Xtreme continua prioritário.':'Motor B desligado; estratégia Xtreme preservada.');
-  await hubRefresh();
- }catch(e){hubNote('Não foi possível mudar o Motor B: '+e.message,true);}
- finally{labMotorBusy=false;hubLockButtons();}
-};
 $('hubStartBtn').onclick=async()=>{
  if(!hubState||hubBusy||!hubState.connected||hubState.running||hubState.uncertain||!hubState.management?.can_trade)return;
  const c=hubState.config||{};
- if(!confirm('Iniciar operações SOMENTE na conta PRACTICE?\nMotor A: Xtreme (prioridade)\nMotor B: '+(hubState.lab_orders_enabled?'HABILITADO · estratégias validadas M1':'DESLIGADO')+'\nValor por ordem: '+String(c.stake)+' '+String(hubState.currency||'USD')+'\nLimite diário: '+String(c.limit)+'\n\nOs dois motores compartilham os mesmos limites. Confirma?'))return;
- await hubExecute('start',{},'Início solicitado. Aguarde o status confirmado do servidor.');
+ if(!confirm('INICIAR ESCRITÓRIO · APENAS BULLEX PRACTICE\n\n'+
+  'MOTOR A: Xtreme Sniper + Tendência continuará sendo a estratégia principal.\n'+
+  'MOTOR B: Laboratório pesquisará e encaminhará sinais M1 validados para operações automáticas DEMO.\n'+
+  'Payout Motor B: acima de 80%, amostras e filtros de risco obrigatórios.\n'+
+  'Ordens dos dois motores: UMA POR VEZ; M5 somente estudo.\n\n'+
+  'Valor por operação: '+String(c.stake)+' '+String(hubState.currency||'USD')+
+  '\nLimite diário compartilhado: '+String(c.limit)+
+  '\nStops compartilhados conforme suas configurações.\n\nCONFIRMAR E INICIAR OS DOIS?'))return;
+ await hubExecute('start',{both_motors:true},
+  'Escritório iniciando: Xtreme Sniper principal e Motor B em pesquisa/operação PRACTICE.');
 };
-$('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada solicitada. Uma ordem já enviada continuará sendo acompanhada até o resultado.');};
+$('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada dos dois motores solicitada. Ordens já enviadas continuarão acompanhadas até o resultado.');};
 $('hubRefreshBtn').onclick=hubRefresh;
 $('hubLogoutBtn').onclick=async()=>{
  if(hubBusy||hubState?.running||hubState?.uncertain)return;

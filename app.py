@@ -487,6 +487,7 @@ def loop(c):
             state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
     finally:
         state['running']=False
+        state['lab_orders_enabled']=False
         state['lab_signal_diag']={**state['lab_signal_diag'],'reason':'MOTOR_PARADO','motor_running':False,'checked_at':time.time()}
 
 @app.before_request
@@ -737,6 +738,11 @@ def office_overview():
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
             lab_orders_enabled=bool(state['lab_orders_enabled']),
+            office_mode='AMBOS_ATIVOS' if state['running'] and state['lab_orders_enabled'] else
+                        'PARANDO' if stop.is_set() and state['running'] else
+                        'AGUARDANDO_INICIO',
+            dual_start_available=bool(state['connected'] and not state['running'] and
+                                       not state['uncertain'] and not (bot and bot.is_alive())),
             trader_roster=trader_roster,
             trader_work=current_work,
             trader_leaderboard=leaderboard(state['trades']),
@@ -798,38 +804,66 @@ def config():
         if state['running']:return jsonify(error='Pare o robô para editar.'),409
         try:state['config']=validate_config(request.get_json());return jsonify(ok=True)
         except Exception as e:return jsonify(error=str(e)),400
-@app.post('/api/lab/motor')
-def set_lab_motor():
-    # Opt-in required; only PRACTICE, no running-order config mutation.
-    data=request.get_json(silent=True) or {}
-    value=data.get('enabled')
-    if not isinstance(value,bool):return jsonify(error='Escolha ativar ou desativar.'),400
-    with lock:
-        if state['running'] or state['uncertain'] or (bot and bot.is_alive()):
-            return jsonify(error='Para alterar a execução do laboratório, pare o motor e aguarde todas as ordens.'),409
-        if not state['connected']:return jsonify(error='Conecte a conta PRACTICE primeiro.'),409
-        state['lab_orders_enabled']=value
-        log('Motor de execução do laboratório: '+('habilitado apenas na DEMO M1.' if value else 'desativado.'))
-        return jsonify(ok=True,enabled=value,mode='PRACTICE',serial_execution=True,
-                       independent_engines=True,m5_execution=False)
-
 @app.post('/api/start')
 def start():
+    """One confirmed PRACTICE start turns on both engines atomically.
+
+    Lab research is always on while connected. The Xtreme Sniper remains the
+    priority trading motor; the lab motor may forward only qualified current M1
+    signals via the SAME serialized order path and shared risk limits.
+    """
     global bot
+    data=request.get_json(silent=True) or {}
+    if data.get('both_motors') is not True:
+        return jsonify(error='Confirme iniciar os dois motores na conta PRACTICE.'),400
     with lock:
-        if state['running']:return jsonify(ok=True)
-        if bot and bot.is_alive():return jsonify(error='Aguarde o encerramento da operação anterior.'),409
-        if lab40_fetch_busy:return jsonify(error='Laboratório está lendo velas PRACTICE. Aguarde a leitura terminar antes de iniciar.'),409
-        if not state['connected'] or state['uncertain']:return jsonify(error='Conecte e valide a demo primeiro.'),409
+        if state['running']:
+            return jsonify(ok=True,already_running=True,
+                           both_motors=bool(state['lab_orders_enabled']))
+        if bot and bot.is_alive():
+            return jsonify(error='Aguarde o encerramento da operação anterior.'),409
+        if lab40_fetch_busy:
+            return jsonify(error='Laboratório está lendo velas PRACTICE. Aguarde a leitura terminar antes de iniciar.'),409
+        if not state['connected'] or state['uncertain']:
+            return jsonify(error='Conecte e valide a DEMO antes de iniciar.'),409
         c=dict(state['config'])
-        if c['asset'] not in state['assets']:return jsonify(error='Ativo não reconhecido pela corretora.'),400
-        if not limits(c):return jsonify(error='Limites do dia atingidos.'),409
-        stop.clear();state['running']=True;bot=threading.Thread(target=loop,args=(c,),daemon=True);bot.start()
-        return jsonify(ok=True)
+        # The Xtreme Sniper + Tendência NEVER gets replaced by lab studies.
+        c['strategy']='sniper'
+        if c['asset'] not in state['assets']:
+            return jsonify(error='Ativo não reconhecido pela corretora.'),400
+        if not limits(c):
+            return jsonify(error='Limites do dia atingidos.'),409
+        state['config']['strategy']='sniper'
+        state['lab_orders_enabled']=True
+        state['lab_signal_diag']={**state['lab_signal_diag'],
+                                 'reason':'AGUARDANDO_SINAL_M1',
+                                 'eligible':0,'assigned':0,'fresh_assets':0,
+                                 'crossings':0,'valid_signals':0,
+                                 'checked_at':time.time(),'motor_running':True}
+        log('Escritório PRACTICE iniciado: Xtreme Sniper + Tendência prioritário; laboratório analisando continuamente e Motor B pronto para sinais M1 validados.')
+        stop.clear()
+        state['running']=True
+        try:
+            bot=threading.Thread(target=loop,args=(c,),daemon=True,name='XtremeDualPractice')
+            bot.start()
+        except Exception:
+            stop.set()
+            state['running']=False
+            state['lab_orders_enabled']=False
+            raise
+        return jsonify(ok=True,mode='PRACTICE',both_motors=True,
+                       primary='Xtreme Sniper + Tendência',
+                       secondary='Estratégias M1 validadas',
+                       shared_order_channel=True,m5_execution=False)
 @app.post('/api/stop')
 def halt():
-    with lock:stop.set();log('Parada solicitada. Uma ordem já enviada será acompanhada até o resultado.')
-    return jsonify(ok=True)
+    with lock:
+        stop.set()
+        state['lab_orders_enabled']=False
+        state['lab_signal_diag']={**state['lab_signal_diag'],
+            'reason':'PARADA_SOLICITADA','motor_running':False,'checked_at':time.time()}
+        log('Parada dos dois motores solicitada. Ordens já enviadas continuarão acompanhadas até o resultado; pesquisa histórica permanece somente leitura.')
+    return jsonify(ok=True,both_motors_stopping=True)
 @app.post('/api/logout')
 def logout():
     global client,office_pair_code,office_read_token
