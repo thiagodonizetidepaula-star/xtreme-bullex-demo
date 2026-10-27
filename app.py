@@ -5,7 +5,7 @@ from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
-from dual_motor import assign_desks,select_lab_order
+from dual_motor import assign_desks,select_lab_order,desk_work
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -667,6 +667,13 @@ def office_chart_refresh():
 @app.get('/api/office/overview')
 def office_overview():
     with lock:
+        research_snapshot=multi_research.snapshot()
+        trader_roster=assign_desks(research_snapshot.get('candidates') or [])
+        current_work=desk_work(trader_roster,
+            research_snapshot.get('candidates') or [],
+            research_snapshot.get('signals') or [],
+            state['trades'][-100:],bool(state['running']),
+            bool(state['lab_orders_enabled']))
         recent=[]
         for t in state['trades'][-45:]:
             recent.append({k:t[k] for k in ('id','time','asset','direction','strategy','strategy_key','engine','trader_index','trader_name',
@@ -678,7 +685,8 @@ def office_overview():
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
             lab_orders_enabled=bool(state['lab_orders_enabled']),
-            trader_roster=assign_desks(multi_research.snapshot().get('candidates') or []),
+            trader_roster=trader_roster,
+            trader_work=current_work,
             trades=recent,
             chart={'asset':state.get('chart_asset'),
                    'updated_at':state.get('chart_updated_at'),
@@ -686,7 +694,7 @@ def office_overview():
                    'source':'BULLEX_PRACTICE_M1_CLOSED',
                    'mode':'CLOSED_CANDLES_NOT_TICKS'},
             lab40=lab40_summary(),multi_lab={
-                **multi_research.snapshot(),
+                **research_snapshot,
                 'diagnostics':{
                     **multi_diag,
                     'pending_queue':multi_queue.qsize(),
