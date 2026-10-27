@@ -79,7 +79,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
   <h3>🐯 Dois motores · somente Bullex PRACTICE</h3>
   <div class="hubInfo" id="dualMotorStatus">Motor A: Xtreme Sniper + Tendência · Motor B: aguardando aprovação das estratégias.</div>
   <div class="lab40Help">Motor A permanece prioritário. Motor B só envia sinais M1 comprovados por 30+ validações, payout maior que 80%, expectativa matemática positiva e dentro da janela de 2 segundos. As duas análises funcionam em paralelo, mas a corretora recebe somente uma ordem por vez. M5 segue em estudo.</div>
-  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>🔒 Habilitar Motor B na DEMO</button></div>
+  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>▶ Dar trabalho aos traders na DEMO</button></div>
 </div>
 <div class="rowButtons">
    <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar robô na DEMO</button>
@@ -1621,11 +1621,11 @@ function hubLoadLive(p){
  hubState=p;hubCsrf=p.csrf||hubCsrf;
  $('dualMotorPanel').hidden=false;
  const on=!!p.lab_orders_enabled;
- $('toggleLabMotor').textContent=on?'🟢 Motor B habilitado na DEMO':'🔒 Habilitar Motor B na DEMO';
+ $('toggleLabMotor').textContent=on?'🟢 Traders trabalhando · Motor B ligado':'▶ Dar trabalho aos traders na DEMO';
  $('toggleLabMotor').setAttribute('aria-pressed',String(on));
  $('dualMotorStatus').textContent='Motor A: Xtreme Sniper + Tendência (prioridade). Motor B: '+
  (on?'HABILITADO · só estratégias M1 validadas · 1 ordem de cada vez.':
- 'EM ESTUDO · não envia ordens. O motor Xtreme continua funcionando.')+
+ 'EM ESTUDO · distribui estratégias, mas não envia ordens. Toque em Dar trabalho para autorizar novas operações DEMO.')+
  ' · Robô '+(p.running?'RODANDO':'PARADO')+'.';
  const roster=$('traderRoster');roster.replaceChildren();
  const work=Array.isArray(p.trader_work)?p.trader_work:[];
