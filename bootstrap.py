@@ -36,6 +36,8 @@ sys.path.insert(0,str(ROOT))
 py_compile.compile(str(ROOT/'sniper_lab40.py'),doraise=True)
 py_compile.compile(str(ROOT/'app.py'),doraise=True)
 py_compile.compile(str(ROOT/'worker.py'),doraise=True)
+py_compile.compile(str(ROOT/'multiasset_lab.py'),doraise=True)
+py_compile.compile(str(ROOT/'lab40_autoupdate.py'),doraise=True)
 suite=unittest.defaultTestLoader.discover(str(ROOT),pattern='test_sniper_lab40.py')
 result=unittest.TextTestRunner(verbosity=1).run(suite)
 if not result.wasSuccessful():

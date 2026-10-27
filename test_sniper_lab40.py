@@ -94,6 +94,53 @@ class ResearchLabTests(unittest.TestCase):
         invalid[30]['open']=-1
         with self.assertRaises(ValueError):
             merge_closed_bars([],invalid)
+    def test_research_scanner_strict_payout_above_80(self):
+        from multiasset_lab import ResearchRegistry
+        reg=ResearchRegistry()
+        reg.set_market([
+            {'asset':'EURUSD','payout':80,'open':True},
+            {'asset':'EURUSD-OTC','payout':80.1,'open':True},
+            {'asset':'GBPUSD','payout':84,'open':False}
+        ])
+        snap=reg.snapshot()
+        self.assertEqual(snap['asset_count'],1)
+        self.assertEqual(snap['catalog'][0]['asset'],'EURUSD-OTC')
+        self.assertFalse(snap['parallel_orders_supported'])
+        self.assertFalse(snap['m5_execution_supported'])
+    def test_derive_only_completed_m5_from_real_contiguous_m1(self):
+        from multiasset_lab import aggregate_m5
+        bars=sample_bars(620)
+        m5=aggregate_m5(bars)
+        self.assertGreater(len(m5),87)
+        self.assertTrue(all(int(n['from'])-int(m['from'])==300 for m,n in zip(m5,m5[1:])))
+        result=evaluate(m5,'EURUSD',timeframe='M5')
+        self.assertEqual(result['timeframe'],'M5')
+        self.assertEqual(len(result['strategies']),40)
+        self.assertEqual(result['primary']['timeframe'],'M5')
+        for x in result['strategies']:
+            self.assertEqual(x['approved'],x['samples']>=30 and x['rate'] is not None and x['rate']>60)
+    def test_50_percent_is_research_watchlist_only_not_a_trade(self):
+        from multiasset_lab import shortlist
+        artificial={'asset':'EURUSD','timeframe':'M1','to':1700000640,
+          'primary':{'id':'XS-PRINCIPAL','name':'Sniper Principal','wins':16,'losses':14,'samples':30,'principal':True},
+          'strategies':[]}
+        watch=shortlist(artificial,81)
+        self.assertEqual(len(watch),1)
+        self.assertFalse(watch[0]['passes_break_even_math'])
+        self.assertEqual(watch[0]['status'],'ESTUDO_CANDIDATO_NAO_EXECUTAVEL')
+        self.assertEqual(shortlist(artificial,80),[])
+        self.assertEqual(shortlist(artificial,79),[])
+    def test_scanner_tracks_two_timeframes_without_ordering(self):
+        from multiasset_lab import ResearchRegistry,aggregate_m5
+        reg=ResearchRegistry();reg.set_market([{'asset':'EURUSD','open':True,'payout':82}])
+        bars=sample_bars(620)
+        self.assertTrue(reg.ingest('EURUSD','M1',bars,'test'))
+        self.assertTrue(reg.ingest('EURUSD','M5',aggregate_m5(bars),'test'))
+        snap=reg.snapshot()
+        self.assertEqual(snap['studies'],2)
+        self.assertEqual(snap['ready_by_timeframe']['M1'],1)
+        self.assertEqual(snap['ready_by_timeframe']['M5'],1)
+        self.assertEqual(snap['mode'],'RESEARCH_ONLY')
     def test_short_history_rejected(self):
         with self.assertRaises(ValueError):evaluate(sample_bars(40),'EURUSD')
 if __name__=='__main__':
