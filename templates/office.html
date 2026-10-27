@@ -8,7 +8,10 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 #automaticLabRoom,#automaticOpsRoom{min-width:0}
 #automaticLabRoom details{margin:8px 0}
 #automaticLabRoom summary{cursor:pointer;color:#b6eddd;font-weight:600}
-.traderRoster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:280px;overflow:auto}.traderSlot{background:#17303e;border:1px solid #355b66;border-radius:7px;padding:7px;font-size:12px;min-width:0}.traderSlot strong{color:#a3f6cc}.traderSlot small{display:block;overflow-wrap:anywhere;margin-top:4px}.dualMotorPanel{margin-top:11px;padding:12px;border:1px solid #508876;background:#102938;border-radius:11px}.dualMotorPanel[hidden]{display:none!important}.dualMotorPanel h3{margin:0 0 9px}.multiCandidate{display:flex;gap:8px;justify-content:space-between;align-items:start;border-bottom:1px solid #325465;padding:8px 4px}
+.traderRoster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:280px;overflow:auto}.traderSlot{background:#17303e;border:1px solid #355b66;border-radius:7px;padding:7px;font-size:12px;min-width:0}.traderSlot.in-session{border-color:#5aa99a}.traderSlot.open-trade{border-color:#edc472;box-shadow:inset 0 0 0 1px #806b39}.traderSlot.win-trade{border-color:#53b988}.traderSlot.loss-trade{border-color:#d47783}
+.traderSlot .deskStatus{display:block;font-size:11px;font-weight:750;color:#9ad9dc;letter-spacing:.02em;margin:6px 0 4px}
+.traderSlot .deskScore{margin-top:7px;font-size:11px;color:#d5e4eb}
+.traderSlot strong{color:#a3f6cc}.traderSlot small{display:block;overflow-wrap:anywhere;margin-top:4px}.dualMotorPanel{margin-top:11px;padding:12px;border:1px solid #508876;background:#102938;border-radius:11px}.dualMotorPanel[hidden]{display:none!important}.dualMotorPanel h3{margin:0 0 9px}.multiCandidate{display:flex;gap:8px;justify-content:space-between;align-items:start;border-bottom:1px solid #325465;padding:8px 4px}
 .multiCandidate small{display:block;font-size:11px;color:#aac5ca;margin-top:4px}
 .multiCandidate strong{color:#7ce8b7}
 .multiCandidate .rate{white-space:nowrap;font-size:14px}
@@ -76,7 +79,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
   <h3>🐯 Dois motores · somente Bullex PRACTICE</h3>
   <div class="hubInfo" id="dualMotorStatus">Motor A: Xtreme Sniper + Tendência · Motor B: aguardando aprovação das estratégias.</div>
   <div class="lab40Help">Motor A permanece prioritário. Motor B só envia sinais M1 comprovados por 30+ validações, payout maior que 80%, expectativa matemática positiva e dentro da janela de 2 segundos. As duas análises funcionam em paralelo, mas a corretora recebe somente uma ordem por vez. M5 segue em estudo.</div>
-  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>🔒 Habilitar Motor B na DEMO</button></div>
+  <div class="rowButtons"><button type="button" id="toggleLabMotor" disabled>▶ Dar trabalho aos traders na DEMO</button></div>
 </div>
 <div class="rowButtons">
    <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar robô na DEMO</button>
@@ -139,7 +142,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div class="lab40Help" id="preservedMotorInfo">As ordens PRACTICE continuam sob a estratégia e os controles anteriores, sem alteração.</div>
 <div id="multiRecentTrades" class="favoriteList"></div>
 <div class="favoriteBox"><h4>👥 Traders e suas estratégias · 12 mesas</h4>
-<div class="lab40Help">Cada mesa fica vinculada a uma estratégia. Estratégias excedentes aguardam uma vaga. Quando a Bullex confirma WIN, a mesa responsável recebe confetes.</div>
+<div class="lab40Help">Distribuição automática: uma estratégia validada por trader. Cada mesa acompanha seus ativos, sinais e WIN/LOSS confirmados. Os sinais não são ordens até a Bullex aceitar a entrada. As ordens compartilham o mesmo limite e são enviadas uma por vez.</div>
 <div id="traderRoster" class="traderRoster"><small>Esperando lista de estratégias validadas.</small></div></div>
 </section>
 
@@ -269,7 +272,29 @@ if(i%3===1){const skirt=new THREE.Mesh(new THREE.CylinderGeometry(.29,.36,.3,10)
 // ID card
 box(.13,.19,.02,white,.19,1.08,.187,person);
 person.traverse(obj=>{if(obj.isMesh){obj.userData.index=i;clickTargets.push(obj)}});people.push({group:person,head,arms,legs,x,z,phase:i*.7,walk:false,celebrate:0,win:true,blink:i*.48,smile});});
-function updateCharts(){charts.forEach(ch=>{if(ch.big)return;let p=ch.prices;p.push(Math.max(15,Math.min(95,p[p.length-1]+(Math.random()-.5)*12)));p.shift();const c=ch.ctx;c.fillStyle='#081a27';c.fillRect(0,0,192,112);c.strokeStyle='#2b4654';for(let y=12;y<112;y+=22){c.beginPath();c.moveTo(0,y);c.lineTo(192,y);c.stroke()}for(let k=1;k<p.length;k++){const x=k*10,up=p[k]>=p[k-1],a=104-p[k],b=104-p[k-1];c.strokeStyle=up?'#42e3aa':'#f16d85';c.fillStyle=c.strokeStyle;c.beginPath();c.moveTo(x,Math.min(a,b)-5);c.lineTo(x,Math.max(a,b)+5);c.stroke();c.fillRect(x-3,Math.min(a,b),6,Math.max(2,Math.abs(a-b)))}c.fillStyle='#bfe3ec';c.font='10px monospace';const labMonitor=[0,1,2,6,7,8].includes(ch.seed),observed=displayedStudies(),study=labMonitor?(bridgeLinked?observed[ch.seed%Math.max(1,observed.length)]:studyForName(strategies[ch.seed])):null;
+function updateCharts(){charts.forEach(ch=>{
+ if(ch.big)return;
+ // Live mode: a trader's monitor displays verified PRACTICE work instead
+ // of the synthetic candles used by the offline showroom.
+ if(bridgeLinked&&hubState){
+  const ctx=ch.ctx,work=hubState.trader_work?.find(x=>x.index===ch.seed);
+  ctx.fillStyle='#071b26';ctx.fillRect(0,0,192,112);
+  ctx.fillStyle='#63e4bd';ctx.font='bold 12px system-ui';
+  ctx.fillText('BULLEX PRACTICE',6,16);
+  ctx.fillStyle='#e7f5ed';ctx.font='bold 11px system-ui';
+  ctx.fillText(names[ch.seed]+' · MESA '+(ch.seed+1),6,33);
+  ctx.fillStyle='#b5d5dc';ctx.font='10px system-ui';
+  ctx.fillText((work?.strategy||'Aguardando estratégia').slice(0,32),6,48);
+  ctx.fillStyle=work?.active_order?'#f6c779':work?'#7aeea7':'#abc1cd';
+  ctx.fillText(String(work?.status||'SEM ESTRATÉGIA').slice(0,31),6,67);
+  ctx.fillStyle='#afcddd';
+  ctx.fillText('WIN '+Number(work?.wins||0)+' / LOSS '+Number(work?.losses||0),6,85);
+  const assets=Array.isArray(work?.watched_assets)?work.watched_assets.join(', '):'';
+  ctx.fillText((work?.active_order?.asset||assets||'Sem ativo atribuído').slice(0,29),6,104);
+  ch.tex.needsUpdate=true;
+  return;
+ }
+ let p=ch.prices;p.push(Math.max(15,Math.min(95,p[p.length-1]+(Math.random()-.5)*12)));p.shift();const c=ch.ctx;c.fillStyle='#081a27';c.fillRect(0,0,192,112);c.strokeStyle='#2b4654';for(let y=12;y<112;y+=22){c.beginPath();c.moveTo(0,y);c.lineTo(192,y);c.stroke()}for(let k=1;k<p.length;k++){const x=k*10,up=p[k]>=p[k-1],a=104-p[k],b=104-p[k-1];c.strokeStyle=up?'#42e3aa':'#f16d85';c.fillStyle=c.strokeStyle;c.beginPath();c.moveTo(x,Math.min(a,b)-5);c.lineTo(x,Math.max(a,b)+5);c.stroke();c.fillRect(x-3,Math.min(a,b),6,Math.max(2,Math.abs(a-b)))}c.fillStyle='#bfe3ec';c.font='10px monospace';const labMonitor=[0,1,2,6,7,8].includes(ch.seed),observed=displayedStudies(),study=labMonitor?(bridgeLinked?observed[ch.seed%Math.max(1,observed.length)]:studyForName(strategies[ch.seed])):null;
  c.fillText(labMonitor?'LAB '+(study?Math.round(studyRate(study))+'%':'—'):bridgeLinked?'OPS · PRACTICE':'OPS · DEMO',5,10);const last=demoLedger.lastByTrader[ch.seed];if(last&&!labMonitor){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=last.win?'#56efb7':'#ff8797';c.font='bold 11px sans-serif';c.fillText((last.win?'WIN ':'LOSS ')+(last.v>=0?'+':'')+'R$ '+last.v.toFixed(2),5,104)}
  if(labMonitor&&study&&!bridgeLinked){c.fillStyle='#071b27';c.fillRect(0,89,192,23);c.fillStyle=studyRate(study)>60?'#56efb7':'#ff8797';c.font='bold 10px sans-serif';c.fillText(study.name+' · '+formatRate(study),5,104)}
  if(bridgeLinked&&hubState){
@@ -1596,21 +1621,41 @@ function hubLoadLive(p){
  hubState=p;hubCsrf=p.csrf||hubCsrf;
  $('dualMotorPanel').hidden=false;
  const on=!!p.lab_orders_enabled;
- $('toggleLabMotor').textContent=on?'🟢 Motor B habilitado na DEMO':'🔒 Habilitar Motor B na DEMO';
+ $('toggleLabMotor').textContent=on?'🟢 Traders trabalhando · Motor B ligado':'▶ Dar trabalho aos traders na DEMO';
  $('toggleLabMotor').setAttribute('aria-pressed',String(on));
  $('dualMotorStatus').textContent='Motor A: Xtreme Sniper + Tendência (prioridade). Motor B: '+
  (on?'HABILITADO · só estratégias M1 validadas · 1 ordem de cada vez.':
- 'EM ESTUDO · não envia ordens. O motor Xtreme continua funcionando.')+
+ 'EM ESTUDO · distribui estratégias, mas não envia ordens. Toque em Dar trabalho para autorizar novas operações DEMO.')+
  ' · Robô '+(p.running?'RODANDO':'PARADO')+'.';
  const roster=$('traderRoster');roster.replaceChildren();
- const assn=Array.isArray(p.trader_roster)?p.trader_roster:[];
+ const work=Array.isArray(p.trader_work)?p.trader_work:[];
  for(let i=0;i<12;i++){
-  const row=assn.find(x=>x.index===i);
-  const div=document.createElement('div'),name=document.createElement('strong'),st=document.createElement('small');
-  div.className='traderSlot';name.textContent='Mesa '+(i+1)+' · '+names[i];
-  st.textContent=row?String(row.strategy||'Estratégia Xtreme'):
-    'Aguardando estratégia validada';
-  div.append(name,st);roster.append(div);
+  const job=work.find(x=>x.index===i);
+  const div=document.createElement('div'),name=document.createElement('strong'),
+        stateLabel=document.createElement('span'),st=document.createElement('small'),
+        assets=document.createElement('small'),score=document.createElement('div');
+  const ongoing=job?.active_order;
+  const result=job?.last_operation?.status;
+  div.className='traderSlot'+(ongoing?' open-trade':result==='WIN'?' win-trade':result==='LOSS'?' loss-trade':job?' in-session':'');
+  name.textContent='Mesa '+(i+1)+' · '+names[i];
+  stateLabel.className='deskStatus';
+  stateLabel.textContent=job?'● '+String(job.status||'AGUARDANDO'):'○ AGUARDANDO ESTRATÉGIA';
+  st.textContent=job?String(job.strategy||'Estratégia Xtreme'):'Nenhuma estratégia aprovada atribuída';
+  if(job&&i>0){
+   const cells=Array.isArray(job.watched_assets)?job.watched_assets.slice(0,3):[];
+   assets.textContent='M1 · '+(cells.length?cells.join(', '):job.asset||'Aguardando ativo')+
+    (Number.isFinite(job.accuracy)?' · '+Number(job.accuracy).toFixed(1)+'% no estudo':'');
+  }else if(job){assets.textContent='Motor A · Xtreme principal · prioridade nas entradas';}
+  if(job?.recent_signal&&!ongoing){
+   const direction=String(job.recent_signal.direction||'').toUpperCase();
+   assets.textContent+=' · Sinal de estudo: '+direction+' '+String(job.recent_signal.asset||'');
+  }
+  if(ongoing){assets.textContent+=' · Ordem '+String(ongoing.id||'em envio')+' · '+String(ongoing.asset||'');}
+  score.className='deskScore';
+  score.textContent=job?'Operações '+Number(job.executed||0)+' · WIN '+Number(job.wins||0)+
+   ' · LOSS '+Number(job.losses||0)+
+   (result?' · Último: '+String(result):''):'Sem operações PRACTICE';
+  div.append(name,stateLabel,st,assets,score);roster.append(div);
  }
  // Live stats have a distinct data source. The local synthetic engine is paused.
  officeSnapshot=p;bridgeLinked=true;
