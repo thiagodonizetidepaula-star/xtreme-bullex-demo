@@ -245,6 +245,21 @@ def lab40_store(asset, raw_bars, generation, source):
                 if stale!=asset:
                     lab40_history.pop(stale,None);lab40_cache.pop(stale,None)
                     if len(lab40_history)<=6:break
+    # Bridge an already-validated, closed PRACTICE research history to the
+    # multi-trader laboratory. No new broker call; never create a trade here.
+    # The multiasset worker must still independently validate 30 OOS outcomes.
+    if result is not None:
+        with multi_research.lock:
+            known_asset=asset in multi_research.market
+        if known_asset:
+            with multi_pending_lock:
+                if asset not in multi_pending:
+                    try:
+                        multi_queue.put_nowait((asset,combined,'LAB40_HISTORICO_PRACTICE'))
+                        multi_pending.add(asset)
+                        multi_diag['history_reuse_queued']=multi_diag.get('history_reuse_queued',0)+1
+                    except queue.Full:
+                        multi_diag['queue_full']+=1
 
 def lab40_offer_stream(batch):
     """Called in the trading loop: lightweight enqueue, never broker requests or backtests."""
@@ -408,8 +423,10 @@ def loop(c):
                 state['lab_signal_diag']=diag
                 if proposal:
                     matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
-                    if matched and matched.get('candles') and int(max(
-                        int(b.get('from',0)) for b in matched['candles']))==proposal['candle']:
+                    if matched and matched.get('candles') and any(
+                        int(bar.get('from',-1))==proposal['candle']
+                        and int(bar.get('from',-1))+60<=float(batch['now'])
+                        for bar in matched['candles']):
                         lab_choice=proposal
                         item=matched
                         a={'direction':proposal['direction'],'candle':proposal['candle'],
