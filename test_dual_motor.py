@@ -177,7 +177,7 @@ class DualMotorSafetyTests(unittest.TestCase):
                 live_items=[{'asset':'EURUSD','candles':bars},
                             {'asset':'USDJPY-OTC','candles':bars}])
         self.assertEqual(order['strategy_id'],'XS-08')
-        self.assertEqual(order['trader_name'],'Bia')
+        self.assertEqual(order['trader_name'],'Alex')
         self.assertEqual(len(assign_desks(book['candidates'])),2)
 
     def test_m5_never_execute_even_above_58(self):
