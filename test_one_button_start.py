@@ -48,7 +48,6 @@ class SingleButtonSessionTests(unittest.TestCase):
         self.assertIn("select_lab_order(",loop)
         self.assertIn("client.call('order'",loop)
         self.assertIn("risk_ok(c",self.api)
-        self.assertIn("account PRACTICE",self.office.upper().replace("BULLEX","account")) if False else None
 
 if __name__=='__main__':
     unittest.main()
