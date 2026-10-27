@@ -132,6 +132,56 @@ def _pattern(pattern, bars, i, direction, fast_ma):
     return False
 
 
+def evaluate_primary(bars, asset):
+    """Research baseline: the existing site's Sniper + provided Xtreme Tendência.
+
+    IMPORTANT: Xtreme Tendência is based on the user's original Lua script
+    (ATR Wilder RMA 18 x 2, default high_low=False); the Sniper code uploaded
+    was only a placeholder. This Sniper uses the already-running code in
+    strategy.sniper_buffers, not a claimed transcription of the missing original.
+    """
+    from strategy import sniper_buffers
+    fast, slow = sniper_buffers(bars, 'hl2')
+    pos = _trail(bars)  # Close-based Wilder ATR 18 x 2, same as user script defaults.
+    cutoff = WARMUP + int((len(bars) - WARMUP - 1) * .70)
+    win=loss=train_win=train_loss=ties=0
+    last=-100
+    for i in range(WARMUP, len(bars)-1):
+        if i-last<2:continue
+        idx=i-37 # sniper_buffers trims the first 33 SMA + 4 WMA warmup bars
+        if idx<1 or idx>=len(fast) or idx>=len(slow):continue
+        # Same strict crossing conditions as the existing live sniper() strategy.
+        direction=(1 if fast[idx]>slow[idx] and fast[idx-1]<slow[idx-1]
+                   else -1 if fast[idx]<slow[idx] and fast[idx-1]>slow[idx-1] else 0)
+        if not direction or pos[i]!=direction:continue
+        last=i
+        next_bar=bars[i+1]
+        movement=direction*(next_bar['close']-next_bar['open'])
+        if movement>0:
+            if i<cutoff:train_win+=1
+            else:win+=1
+        elif movement<0:
+            if i<cutoff:train_loss+=1
+            else:loss+=1
+        else:ties+=1
+    n=win+loss
+    train_n=train_win+train_loss
+    rate=round(win/n*100,2) if n else None
+    return {
+        'id':'XS-PRINCIPAL','name':'PRINCIPAL · Xtreme Sniper + Xtreme Tendência',
+        'source':'CODIGO_SNIPER_ATUAL_DO_BOT_E_TENDENCIA_ORIGINAL_ENVIADA',
+        'source_note':'Sniper original não fornecido: implementação já usada pelo bot; Tendência ATR18×2 conferida pelo arquivo original.',
+        'base':'SMA1/34 com WMA5, cruzamento confirmado por Tendência ATR18 × 2 (High/Low desativado)',
+        'principal':True,'pattern':'cross','timeframe':'M1','asset':asset,
+        'wins':win,'losses':loss,'ties':ties,'samples':n,
+        'train_wins':train_win,'train_losses':train_loss,
+        'train_samples':train_n,'train_rate':round(train_win/train_n*100,2) if train_n else None,
+        'rate':rate,'approved':n>=MIN_OBSERVATIONS and rate is not None and rate>MIN_RATE,
+        'status':'APROVADA EM ESTUDO' if n>=MIN_OBSERVATIONS and rate is not None and rate>MIN_RATE
+                 else 'AMOSTRA INSUFICIENTE' if n<MIN_OBSERVATIONS else 'EM ESTUDO'
+    }
+
+
 def evaluate(candles, asset):
     """Return 40 real-candle hypothetical results; never touch the trade executor."""
     if not isinstance(asset, str) or not 3 <= len(asset) <= 40:
@@ -209,10 +259,11 @@ def evaluate(candles, asset):
             "rate": rate, "approved": approved,
             "status": "APROVADA EM ESTUDO" if approved else "AMOSTRA INSUFICIENTE" if tested < MIN_OBSERVATIONS else "EM ESTUDO",
         })
-    return {"asset": asset, "timeframe": "M1", "bars": len(bars), "from": bars[0]["from"],
+    primary=evaluate_primary(bars,asset)
+    return {"primary": primary, "asset": asset, "timeframe": "M1", "bars": len(bars), "from": bars[0]["from"],
             "to": bars[-1]["from"], "data_source": "BULLEX_PRACTICE_CANDLES",
             "proxy": "Próxima vela fechada (open-close); não representa ordens executadas nem payout.",
             "split": "70% treino / 30% validação fora da amostra, cronológica",
             "approval_rule": "Taxa > 60% com pelo menos 30 resultados WIN/LOSS na validação",
-            "approved": sum(r["approved"] for r in rows),
+            "approved": sum(r["approved"] for r in rows) + int(primary["approved"]),
             "strategies": rows}
