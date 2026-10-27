@@ -100,15 +100,18 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
  <p id="hubFeedback" role="status" aria-live="polite" class="formHint">Aguardando login no servidor protegido.</p>
 </section>
 <div class="rooms">
-<section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper · 40 estratégias</h3>
-<div class="roomdesc" id="labRoomDesc">40 combinações experimentais de velas M1, SMA1/SMA34, WMA5 e filtros de tendência. São estudos, não ordens.</div>
+<section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper + Tendência</h3>
+<div class="roomdesc" id="labRoomDesc">1 estratégia PRINCIPAL (Sniper atual + Tendência original ATR18×2) e 40 variações experimentais. Resultados apenas do estudo, não de ordens.</div>
 <div class="lab40Controls"><label>Ativo M1 para estudo<input id="lab40Asset" list="hubAssets" value="EURUSD" autocomplete="off" spellcheck="false"></label>
 <button id="lab40Run" class="primary" disabled>🧪 Testar 40 estratégias</button><button id="lab40AutoToggle" disabled>🔄 Auto M1: aguardando</button></div><div id="lab40TrackStatus" class="autoLabMeta" aria-live="polite">Atualização: aguardando conexão PRACTICE.</div>
 <div id="lab40Status" class="lab40Help" aria-live="polite">Entre no escritório e conecte sua conta PRACTICE para consultar velas reais. Pare o robô antes de iniciar o teste.</div>
-<div class="roomStats"><span>Aprovadas em estudo: <b id="approvedCount">0</b></span><span>Estratégias: <b id="labCount">40</b></span></div>
+<div class="roomStats"><span>Aprovadas em estudo: <b id="approvedCount">0</b></span><span>Estratégias avaliadas: <b id="labCount">41</b></span></div>
 <div class="lab40Help">Critério: <strong>mais de 60%</strong> em pelo menos <strong>30 resultados fora da amostra</strong>. Divisão cronológica 70% treino / 30% validação. Resultado = direção da próxima vela fechada; não considera payout, execução ou corretagem. Amostras insuficientes ficam sem aprovação.</div>
+<div class="favoriteBox" id="principalLabPanel"><h4>🐯 ESTRATÉGIA PRINCIPAL · Xtreme Sniper + Xtreme Tendência</h4><div class="lab40Help">Xtreme Tendência: código original fornecido (ATR Wilder 18 × 2, high/low desligado). Sniper: implementação do bot (SMA1/34 + WMA5); aguardando o arquivo original completo para confirmar equivalência.</div>
+<strong id="principalStats">Aguardando velas M1 para calcular o resultado principal.</strong></div>
+<strong>40 estratégias experimentais</strong>
 <div id="labStrategies" class="lab40List"></div></section>
-<section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais aprovados pelo laboratório. Envio e resultados apenas na <strong>simulação local</strong>; sem ordens na corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div class="favoriteBox"><h4>⭐ Favoritas enviadas pelo Laboratório <span id="favoriteCount">0</span>/40</h4>
+<section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais aprovados pelo laboratório. Envio e resultados apenas na <strong>simulação local</strong>; sem ordens na corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div class="favoriteBox"><h4>⭐ Favoritas enviadas pelo Laboratório <span id="favoriteCount">0</span>/41</h4>
 <div class="lab40Help">Filtro: mais de 60% de acertos em pelo menos 30 validações fora da amostra. Esta é uma classificação para acompanhamento, <strong>não uma autorização de entrada automática</strong>.</div>
 <div id="favoriteUpdate" class="autoLabMeta">Aguardando o laboratório atualizar.</div>
 <div id="favoriteList" class="favoriteList"><small>Nenhuma estratégia aprovada até agora.</small></div></div>
@@ -144,7 +147,7 @@ const demoLedger={total:0,wins:0,losses:0,balance:0,last:null,recent:[],lastByTr
 const studyWinSeeds=[22,17,19,15,23,16,18,21,17,20,14,24];
 const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],samples:30,source:'SINTÉTICO'}));
 let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
-let lab40Catalog=[],lab40Rows=[],lab40Latest=null,lab40Initialized=false,lab40Working=false;
+let lab40Catalog=[],lab40Rows=[],lab40Primary=null,lab40Latest=null,lab40Initialized=false,lab40Working=false;
 let lab40ServerVersion=-1,lab40ServerAsset='',lab40SyncBusy=false,lab40TrackBusy=false;
 function actualStudies(){
  if(!bridgeLinked||!officeSnapshot)return [];
@@ -155,7 +158,8 @@ function actualStudies(){
 }
 function displayedStudies(){
  if(officeIntegratedMode&&lab40Catalog.length){
-  return lab40Rows.length?lab40Rows:lab40Catalog.map(x=>({...x,wins:0,samples:0,rate:null,train_samples:0,train_rate:null,source:'AGUARDANDO'}));
+  const xs=lab40Rows.length?lab40Rows:lab40Catalog.map(x=>({...x,wins:0,samples:0,rate:null,train_samples:0,train_rate:null,source:'AGUARDANDO'}));
+  return [lab40Primary||{id:'XS-PRINCIPAL',principal:true,name:'PRINCIPAL · Xtreme Sniper + Xtreme Tendência',wins:0,samples:0,train_samples:0,status:'AGUARDANDO'},...xs];
  }
  return bridgeLinked?actualStudies():labStudies
 }
@@ -171,7 +175,7 @@ function refreshPipeline(){
  $('signalCount').textContent=bridgeLinked?(officeSnapshot?.trades?.length||0):signalLog.length;
  $('pendingCount').textContent=bridgeLinked?(officeSnapshot?.trades||[]).filter(x=>['ENVIANDO','ABERTA','INCERTA'].includes(x.status)).length:signalQueue.filter(x=>x.status==='AGUARDANDO').length;
  const labHost=$('labStrategies');labHost.replaceChildren();
- for(const study of [...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a))){
+ for(const study of [...displayedStudies()].filter(x=>!x.principal).sort((a,b)=>studyRate(b)-studyRate(a))){
   const el=document.createElement('div');el.className='pipelineItem';
   const a=document.createElement('span'),b=document.createElement('span');
   if(officeIntegratedMode&&lab40Catalog.length){
@@ -1535,7 +1539,7 @@ async function lab40SyncFromServer(asset){
    lab40Use(result.latest,false);
    try{localStorage.setItem(LAB40_CACHE_KEY,JSON.stringify(result.latest));}catch(e){}
   }else{
-   lab40Rows=[];lab40Latest=null;refreshPipeline();
+   lab40Rows=[];lab40Primary=null;lab40Latest=null;$('principalStats').textContent='Aguardando velas M1.';refreshPipeline();
   }
  }catch(e){
   lab40ServerVersion=-1;
@@ -1561,7 +1565,11 @@ $('lab40AutoToggle').onclick=async()=>{
 function lab40Message(message){$('lab40Status').textContent=message;}
 function lab40Use(result,fromCache=false){
  if(!result||!Array.isArray(result.strategies)||result.strategies.length!==40)return;
- lab40Latest=result;lab40Rows=result.strategies;
+ lab40Latest=result;lab40Rows=result.strategies;lab40Primary=result.primary||null;
+ if(lab40Primary){
+  $('principalStats').textContent='Validação: '+lab40Primary.samples+' resultados · '+formatRate(lab40Primary)+
+   ' · treino: '+(lab40Primary.train_samples||0)+' · '+(lab40Primary.approved?'⭐ APROVADA EM ESTUDO':'Em estudo / amostra insuficiente');
+ }else $('principalStats').textContent='Aguardando novo cálculo da estratégia principal.';
  $('lab40Asset').value=result.asset||$('lab40Asset').value;
  const date=result.created_at?new Date(result.created_at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}):'sem horário';
  lab40Message((fromCache?'💾 Histórico salvo neste navegador. Refaça o teste para atualizar. ':'✅ Estudo finalizado. ')+
