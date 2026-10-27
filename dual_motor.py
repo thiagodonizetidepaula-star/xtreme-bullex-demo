@@ -185,7 +185,15 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
         if identifier not in assigned or candidate.get('timeframe')!='M1':continue
         asset=str(candidate['asset'])
         payout=market_map.get(asset,0)
-        if payout<=MIN_PAYOUT or payout+0.01<float(candidate['payout_m1']):
+        # A previous study payout is not the CURRENT broker payout.
+        # Recompute break-even against the freshly verified payout instead of
+        # rejecting any decrease (e.g., study 91%, live 86%). Still require
+        # strictly >80%, positive theoretical OOS return and current eligibility.
+        sample_n=int(candidate['samples'])
+        win_count=int(candidate['wins'])
+        live_win_rate=win_count/sample_n if sample_n>0 else 0
+        live_theoretical_ev=live_win_rate*(1+payout/100)-1
+        if not math.isfinite(payout) or payout<=MIN_PAYOUT or live_theoretical_ev<=0:
             stats['payout_rejected']+=1
             continue
         raw=items.get(asset) or []
@@ -222,7 +230,8 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
             'trader_name':assigned[identifier]['name'],
             'samples':int(candidate['samples']),
             'accuracy':float(candidate['accuracy']),
-            'payout':payout,'timeframe':'M1'})
+            'payout':payout,'timeframe':'M1',
+            'live_theoretical_ev':round(live_theoretical_ev,5)})
     if not signals:
         reason=('STREAM_M1_INDISPONIVEL' if stats['without_stream'] and not stats['fresh_assets'] and not stats['stale_candle'] else
                 'HISTORICO_M1_INSUFICIENTE' if stats['insufficient_history'] and not stats['fresh_assets'] and not stats['stale_candle'] else
