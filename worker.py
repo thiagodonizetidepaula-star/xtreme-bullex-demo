@@ -2,6 +2,7 @@ import sys,pathlib,json,logging,time,contextlib,math,signal
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent/'vendor'))
 logging.disable(logging.CRITICAL)
 from bullexapi.stable_api import Bullex
+from stream_closed import completed_m1_from_stream
 # A biblioteca retorna o último timeSync recebido, não um relógio contínuo.
 # Registrar a recepção para extrapolar apenas enquanto a amostra é recente.
 from bullexapi.ws.objects.timesync import TimeSync
@@ -110,16 +111,22 @@ def dispatch(c):
                 api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],60)
                 stream_assets.add(asset)
             except (RuntimeError,ValueError,KeyError):errors.append(asset+': streaming ainda indisponível; sem operação.')
-        now=broker_now();items=[]
+        now=broker_now();items=[];fresh=0
+        minute=int(now//60)*60
         for asset in wanted:
             if asset not in stream_assets:continue
-            # Copiar: o receptor websocket atualiza o dicionário em outra thread.
-            snapshot=list(api.api.real_time_candles[asset][60].copy().values())
-            current=int(now//60)*60
-            if not any(b.get('from')==current for b in snapshot):continue
-            closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
+            # Snapshot is owned by the live WebSocket receiver; copy before reading.
+            try:snapshot=list(api.api.real_time_candles[asset][60].copy().values())
+            except (KeyError,TypeError):continue
+            closed=completed_m1_from_stream(snapshot,now)
+            if not closed:continue
+            # The previous candle is usable as soon as broker time closes it.
+            # Waiting for a new-minute tick loses the 2-second entry window.
+            # Old candles remain visible for research, but cannot trigger orders.
+            if int(closed[-1]['from'])+60==minute:fresh+=1
             items.append({'asset':asset,'candles':closed})
-        return {'now':now,'items':items,'ready':len(items),'total':len(wanted),'errors':errors}
+        return {'now':now,'items':items,'ready':len(items),'fresh_closed':fresh,
+                'total':len(wanted),'errors':errors}
     if op=='lab_candles':
         # Historical study is read-only. App blocks this while the trading
         # thread is active to avoid delaying real-time PRACTICE execution.
