@@ -172,7 +172,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div id="operationsFeed"><small>Aguardando ordens registradas pelo bot.</small></div></section></div>
 <div class="panel" id="dataStatus" aria-live="polite"><strong>📡 Origem: DEMONSTRAÇÃO · Sem corretora conectada</strong><div id="lastOperation">Inicie a demonstração para ver os resultados das operações simuladas nas telas do escritório.</div></div>
 <div class="stats" id="localStats"><div class="stat"><span>Operações fictícias</span><b id="total">0</b></div><div class="stat"><span>Vitórias</span><b class="win" id="wins">0</b></div><div class="stat"><span>Derrotas</span><b class="loss" id="losses">0</b></div><div class="stat"><span>Saldo simulado</span><b id="balance">R$ 0,00</b></div><div class="stat"><span>Assertividade demo</span><b id="winRate">0,0%</b></div></div>
-<div class="panel" id="detail">👥 Selecione um dos 12 traders para visualizar sua estratégia.</div>
+<div class="panel" id="detail">👥 Selecione um dos 4 traders para visualizar sua estratégia.</div>
 <h3 id="simHistoryTitle">Histórico das operações simuladas localmente</h3><section id="simHistory"><table><thead><tr><th>Trader</th><th>Ativo</th><th>Estratégia</th><th>Resultado</th><th>Valor</th></tr></thead><tbody id="history"></tbody></table></section>
 <p class="hint">Esta versão usa geometria 3D original, produzida por código. A equipe Tiger tem 6 homens e 6 mulheres diferentes, com ternos e emblema original de tigre. Nove trabalham sentados, um descansa no sofá, outro toma café e um supervisiona. As pausas se alternam gradualmente a cada 80 segundos, com estados de trabalho, caminhada, descanso, supervisão e visitas ao banheiro com porta. Os lugares do sofá e do café são reservados até ficarem livres. O supervisor visita as mesas e quem termina a pausa retorna à própria estação. São avatares 3D estilizados originais, não modelos The Sims nem GLB importados. Os pacotes gratuitos de móveis Kenney/reodesuxz e animações Mixamo ainda não foram incorporados. Os gráficos de candles são ilustrativos. As telas mostram os resultados efetivamente registrados pela simulação, mas não são ordens reais, cotações reais ou saldo de corretora. Para mostrar resultados reais, é necessária uma integração autenticada com a corretora. Personagens estilizados fazem movimentos simples, não são modelos do The Sims.</p></main>
 <script type="module">
@@ -1809,7 +1809,7 @@ function renderTraderLeaderboard(p){
  const rank=Array.isArray(data.ranking)?data.ranking:[];
  if(!rank.length){
   const empty=document.createElement('small');
-  empty.textContent='Aguardando operações WIN/LOSS confirmadas. Os 12 traders permanecem nas mesas.';
+  empty.textContent='Aguardando operações WIN/LOSS confirmadas. Os 4 traders permanecem nas mesas.';
   host.append(empty);
  }
  for(const t of rank.slice(0,12)){
