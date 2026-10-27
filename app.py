@@ -6,6 +6,7 @@ from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
 from dual_motor import assign_desks,select_lab_order,desk_work
+from closed_m1_cache import ClosedM1Cache
 from trader_leaderboard import leaderboard
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
@@ -337,6 +338,7 @@ def limits(c):
 def loop(c):
     last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
     candidates=[];cursor=0;catalog_at=0;seen=set()
+    closed_cache=ClosedM1Cache()
     try:
         while not stop.is_set():
             if not limits(c):log('Limite diário atingido. Robô parado.');break
@@ -357,7 +359,10 @@ def loop(c):
             selected=None
             for item in batch['items']:
                 try:
-                    analysis=analyze_selected(item['candles'],batch['now'],c.get('strategy','rejection'),c.get('sniper_source','hl2'))
+                    analysis,_cache_hit=closed_cache.analyze(
+                        item['asset'],item['candles'],batch['now'],
+                        c.get('strategy','rejection'),c.get('sniper_source','hl2'),
+                        analyze_selected)
                 except (ValueError,KeyError,TypeError) as e:
                     invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
                     if invalid_key not in seen:
@@ -391,6 +396,8 @@ def loop(c):
                 diag['checked_at']=time.time()
                 diag['snapshot_ms']=snapshot_duration_ms
                 diag['xtreme_scan_ms']=scan_duration_ms
+                diag['cached_candle_calcs']=closed_cache.hits
+                diag['fresh_candle_calcs']=closed_cache.misses
                 diag['minutes_seconds']=round(float(batch['now'])%60,2)
                 diag['motor_running']=True
                 state['lab_signal_diag']=diag
@@ -413,6 +420,8 @@ def loop(c):
                     'assigned':0,'fresh_assets':0,'crossings':0,
                     'valid_signals':0,'checked_at':time.time(),
                     'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
+                    'cached_candle_calcs':closed_cache.hits,
+                    'fresh_candle_calcs':closed_cache.misses,
                     'motor_running':True}
             elif a.get('direction'):
                 # Motor A won the current one-order channel. This is by design,
@@ -421,6 +430,8 @@ def loop(c):
                     **state['lab_signal_diag'],'reason':'XTREME_PRINCIPAL_TEM_PRIORIDADE',
                     'checked_at':time.time(),
                     'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
+                    'cached_candle_calcs':closed_cache.hits,
+                    'fresh_candle_calcs':closed_cache.misses,
                     'motor_running':True}
             c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
