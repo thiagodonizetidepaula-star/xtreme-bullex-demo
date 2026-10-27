@@ -154,6 +154,10 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
         return value
     if not enabled or not isinstance(snapshot,dict):
         return finish(None,'MOTOR_B_DESLIGADO')
+    # Cheap fail-fast outside the broker's strict 2-second M1 entry window:
+    # avoid repeatedly calculating hundreds of historical candle indicators.
+    if not 0<=float(now)%60<=MAX_SIGNAL_AGE_SEC:
+        return finish(None,'SEM_VELAS_M1_NO_PRAZO')
     market_map={str(c['asset']):float(c['payout']) for c in market
          if isinstance(c,dict) and isinstance(c.get('asset'),str)
          and isinstance(c.get('payout'),(int,float))
