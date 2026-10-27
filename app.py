@@ -127,10 +127,13 @@ def multi_worker():
         time.sleep(.07)
 
 def multi_paused_scanner():
-    """Round-robin open assets, max 1 historical request every 25 seconds.
+    """Backfill real, read-only M1 research history for a candidate-free office.
 
-    Shared worker and free Render cannot promise all assets every minute.
-    While the live bot is running only its existing streaming data are used.
+    A short streaming buffer cannot satisfy the laboratory's 30-result
+    out-of-sample validation rule. Until the first strategy qualifies,
+    the active DEMO office may request full history away from the M1 close.
+    Never place orders here, bypass validation, or compete with a trader
+    once a qualified candidate exists.
     """
     global lab40_fetch_busy
     while True:
@@ -138,7 +141,8 @@ def multi_paused_scanner():
         now=time.time()
         with lock:
             idle=state['connected'] and not state['running'] and not state['uncertain'] and not (bot and bot.is_alive()) and client is not None and not lab40_fetch_busy
-            if not idle:continue
+            bootstrap=state['connected'] and state['running'] and state['lab_orders_enabled'] and not state['uncertain'] and client is not None and not lab40_fetch_busy and not assign_desks(multi_research.snapshot().get('candidates') or [])
+            if not idle and not (bootstrap and 5<=now%60<=12):continue
             source_client=client
             refresh_catalog=now-multi_scan_state['catalog_at']>75
             if not refresh_catalog and now<multi_scan_state['next_asset_at']:continue
@@ -146,8 +150,17 @@ def multi_paused_scanner():
             multi_scan_state['busy']=True
         try:
             if refresh_catalog:
-                results=source_client.call('market',timeout=16,payout=80,strategy='sniper')
-                multi_research.set_market(results.get('assets') or [])
+                if idle:
+                    results=source_client.call('market',timeout=16,payout=80.01,strategy='lab_m1')
+                    multi_research.set_market(results.get('assets') or [])
+                else:
+                    # The live loop already maintains the market catalog.
+                    # Do not block M1 streaming with another broker market call.
+                    with multi_research.lock:
+                        has_catalog=bool(multi_research.market)
+                    if not has_catalog:
+                        multi_scan_state['last_error']='Aguardando catálogo PRACTICE do motor.'
+                        continue
                 multi_scan_state['catalog_at']=time.time()
             with multi_research.lock:assets=list(multi_research.market)
             if not assets:
