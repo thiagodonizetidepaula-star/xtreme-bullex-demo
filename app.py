@@ -355,10 +355,23 @@ def loop(c):
             snapshot_started=time.monotonic()
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
             snapshot_duration_ms=round((time.monotonic()-snapshot_started)*1000)
+            broker_snapshot_received_at=time.monotonic()
             scan_started=time.monotonic()
             lab40_offer_stream(batch)
             multi_enqueue(batch)
             for error in batch.get('errors',[]):log(error)
+            # Prepare the laboratory's validated M1 signal BEFORE scanning
+            # every market with Xtreme indicators. A long Xtreme scan can
+            # otherwise consume the broker's entire two-second entry window.
+            # This only prepares a candidate; Xtreme still gets FIRST CHOICE.
+            lab_proposal=None
+            lab_prepared_diag={}
+            lab_probe_started=time.monotonic()
+            if state['lab_orders_enabled']:
+                lab_proposal=select_lab_order(
+                    multi_research.snapshot(),candidates,batch['now'],True,
+                    live_items=batch['items'],diagnostics=lab_prepared_diag)
+            lab_probe_ms=round((time.monotonic()-lab_probe_started)*1000)
             selected=None
             for item in batch['items']:
                 try:
@@ -389,37 +402,43 @@ def loop(c):
             item,a=selected
             lab_choice=None
             if not a.get('direction') and state['lab_orders_enabled']:
-                # Do not wait for research worker to publish its historical signals
-                # after the M1 entry deadline. Evaluate already-qualified
-                # strategies against the CURRENT broker-confirmed closed bars.
-                diag={}
-                proposal=select_lab_order(
-                    multi_research.snapshot(),candidates,batch['now'],True,
-                    live_items=batch['items'],diagnostics=diag)
+                diag=dict(lab_prepared_diag)
+                proposal=lab_proposal
                 diag['checked_at']=time.time()
                 diag['snapshot_ms']=snapshot_duration_ms
                 diag['xtreme_scan_ms']=scan_duration_ms
+                diag['lab_probe_ms']=lab_probe_ms
                 diag['cached_candle_calcs']=closed_cache.hits
                 diag['fresh_candle_calcs']=closed_cache.misses
                 diag['minutes_seconds']=round(float(batch['now'])%60,2)
                 diag['fresh_closed_assets']=int(batch.get('fresh_closed',0))
                 diag['streaming_assets']=int(batch.get('ready',0))
                 diag['motor_running']=True
-                state['lab_signal_diag']=diag
                 if proposal:
-                    matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
-                    if matched and matched.get('candles') and int(max(
-                        int(b.get('from',0)) for b in matched['candles']))==proposal['candle']:
-                        lab_choice=proposal
-                        item=matched
-                        a={'direction':proposal['direction'],'candle':proposal['candle'],
-                           'signal':proposal['direction'],
-                           'reason':'Motor B, trader '+proposal['trader_name']+
-                            ' · sinal M1 validado no streaming atual · '+proposal['strategy'],
-                           'checks':{'validação':str(proposal['samples'])+' resultados',
-                                     'assertividade':str(proposal['accuracy'])+'%'}}
+                    # Snapshot broker time advances while CPU processes many
+                    # markets. Never attempt a signal that would already be
+                    # late by the time it reaches the order worker.
+                    estimated_broker_now=float(batch['now'])+(
+                        time.monotonic()-broker_snapshot_received_at)
+                    age=estimated_broker_now-float(proposal['candle_close'])
+                    diag['signal_age_before_order_ms']=round(age*1000)
+                    if not 0<=age<=2:
+                        diag['reason']='SINAL_VENCEU_DURANTE_ANALISE_XTREME'
                     else:
-                        state['lab_signal_diag']['reason']='ATIVO_SEM_VELA_FECHADA_COMPATIVEL'
+                        matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
+                        if matched and matched.get('candles') and int(max(
+                            int(b.get('from',0)) for b in matched['candles']))==proposal['candle']:
+                            lab_choice=proposal
+                            item=matched
+                            a={'direction':proposal['direction'],'candle':proposal['candle'],
+                               'signal':proposal['direction'],
+                               'reason':'Motor B, trader '+proposal['trader_name']+
+                                ' · sinal M1 validado na vela atual · '+proposal['strategy'],
+                               'checks':{'validação':str(proposal['samples'])+' resultados',
+                                         'assertividade':str(proposal['accuracy'])+'%'}}
+                        else:
+                            diag['reason']='ATIVO_SEM_VELA_FECHADA_COMPATIVEL'
+                state['lab_signal_diag']=diag
             elif not state['lab_orders_enabled']:
                 state['lab_signal_diag']={'reason':'MOTOR_B_DESLIGADO','eligible':0,
                     'assigned':0,'fresh_assets':0,'crossings':0,

@@ -31,6 +31,37 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertFalse(research_eligible(candidate(win=8,loss=6,payout=90)))
         self.assertFalse(research_eligible(candidate(tf='M5')))
         self.assertTrue(research_eligible(candidate(win=20,loss=10,payout=81)))
+    def test_live_payout_drop_that_remains_profitable_can_still_signal(self):
+        from unittest.mock import patch
+        c=candidate(payout=94,win=20,loss=10)
+        book={'candidates':[c],'signals':[]}
+        bars=[{'from':1700000040+i*60,'open':1.10,'close':1.11,
+               'max':1.12,'min':1.09} for i in range(90)]
+        now=bars[-1]['from']+60.5
+        with patch('multiasset_lab.latest_direction',return_value='put'):
+            x=select_lab_order(book,[{'asset':'EURUSD','payout':82}],now,True,
+                live_items=[{'asset':'EURUSD','candles':bars}])
+        self.assertIsNotNone(x)
+        self.assertEqual(x['payout'],82)
+        self.assertEqual(x['direction'],'put')
+        self.assertGreater(x['live_theoretical_ev'],0)
+
+    def test_current_payout_below_breakeven_is_not_eligible_for_order(self):
+        from unittest.mock import patch
+        # Win rate 60%, but 60% * 1.60 - 1 < 0 at payout 60%.
+        c=candidate(payout=90,win=18,loss=12)
+        book={'candidates':[c],'signals':[]}
+        bars=[{'from':1700000040+i*60,'open':1.10,'close':1.11,
+               'max':1.12,'min':1.09} for i in range(90)]
+        now=bars[-1]['from']+60.5
+        with patch('multiasset_lab.latest_direction',return_value='call') as check:
+            diag={}
+            x=select_lab_order(book,[{'asset':'EURUSD','payout':79}],now,True,
+                live_items=[{'asset':'EURUSD','candles':bars}],diagnostics=diag)
+        self.assertIsNone(x)
+        self.assertEqual(diag['payout_rejected'],1)
+        check.assert_not_called()
+
     def test_no_signal_when_disabled_or_stale_or_not_exact_market(self):
         c=candidate(payout=85)
         signal={**c,'direction':'call','candle_close':1700000060}
