@@ -25,6 +25,14 @@ class LastClosedM1Tests(unittest.TestCase):
         self.assertEqual(len(out),1)
         self.assertEqual(out[-1]['from'],minute-60)
 
+    def test_worker_does_not_wait_for_current_minute_first_tick(self):
+        from pathlib import Path
+        source=(Path(__file__).resolve().parent/'worker.py').read_text(encoding='utf-8')
+        snapshot=source.split("if op=='snapshot':",1)[1].split("if op=='lab_candles':",1)[0]
+        self.assertIn('completed_m1_from_stream(snapshot,now)',snapshot)
+        self.assertNotIn("if not any(b.get('from')==current for b in snapshot)",snapshot)
+        self.assertIn("'fresh_closed':fresh",snapshot)
+
     def test_not_yet_closed_is_not_a_signal(self):
         minute=1700000040//60*60
         out=completed_m1_from_stream([bar(minute)],minute+1)
