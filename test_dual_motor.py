@@ -112,7 +112,7 @@ class DualMotorSafetyTests(unittest.TestCase):
         c2=candidate('XS-18',win=21,loss=9,asset='EURUSD-OTC')
         c3=candidate('XS-17',win=19,loss=11,asset='XAGUSD-OTC')
         roster=assign_desks([c1,c2,c3])
-        self.assertEqual(len(roster),3)
+        self.assertEqual(len(roster),2)
         self.assertEqual([r['strategy_id'] for r in roster],['XS-18','XS-17'])
         signal={**c1,'signal_status':'SINAL_PARA_ACOMPANHAMENTO',
                 'direction':'call','candle_close':int(time.time())-10}
