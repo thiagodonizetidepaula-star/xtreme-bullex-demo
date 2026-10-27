@@ -1691,6 +1691,7 @@ function renderTraderLeaderboard(p){
   HISTORICO_M1_INSUFICIENTE:'Ativo candidato ainda não tem histórico contínuo suficiente.',
   HISTORICO_M1_INVALIDO:'Velas do ativo com lacunas ou valores inválidos.',
   VELA_M1_ATRASADA:'As velas do ativo chegaram após a janela de 2 segundos.',
+  SINAL_VENCEU_DURANTE_ANALISE_XTREME:'Sinal validado pelo laboratório, mas a varredura do Xtreme consumiu a janela segura de envio.',
   XTREME_PRINCIPAL_TEM_PRIORIDADE:'O Xtreme principal teve um sinal e recebeu prioridade neste ciclo.'
  };
  const reason=!p.running?'Motor PARADO. O laboratório continua estudando, mas nenhum trader pode executar ordens.':
@@ -1702,6 +1703,8 @@ function renderTraderLeaderboard(p){
   ' | Sinais novos: '+Number(diag.valid_signals||0)+
   (Number.isFinite(Number(diag.snapshot_ms))?' | Recepção de dados: '+Number(diag.snapshot_ms)+' ms':'')+
   (Number.isFinite(Number(diag.xtreme_scan_ms))?' | Análise Xtreme: '+Number(diag.xtreme_scan_ms)+' ms':'')+
+  (Number.isFinite(Number(diag.lab_probe_ms))?' | Seleção Motor B: '+Number(diag.lab_probe_ms)+' ms':'')+
+  (Number.isFinite(Number(diag.signal_age_before_order_ms))?' | Idade do sinal: '+Number(diag.signal_age_before_order_ms)+' ms':'')+
   (Number.isFinite(Number(diag.cached_candle_calcs))?' | Reanálises evitadas: '+Number(diag.cached_candle_calcs):'')+
   (diag.payout_rejected?' | Payout insuficiente: '+diag.payout_rejected:'')+
   (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
