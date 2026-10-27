@@ -1530,6 +1530,11 @@ function hubLockData(){
  $('hubControlArea').hidden=true;$('hubLoginForm').hidden=false;
  hubCsrf='';hubState=null;hubLoadedConfig=false;$('dualMotorPanel').hidden=true;
  officeSnapshot=null;bridgeLinked=false;hubHaveBaseline=false;hubLastWins.clear();
+ latestTraderRanking=null;
+ $('leaderboardRows').replaceChildren();
+ $('leaderboardUpdated').textContent='Entre no servidor protegido para consultar o ranking da sessão PRACTICE.';
+ $('labEntryDiagnostics').textContent='Motor B: aguardando sessão autenticada.';
+ const mural=charts.find(c=>c.roomView==='ranking');if(mural)drawRoomTV(mural);
  $('realBridgePanel').hidden=true;
  $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
  hubNote('Entre com a chave do painel para acessar os controles de sua conta.',false);
