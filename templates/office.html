@@ -78,16 +78,16 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
   </form>
   <div class="dualMotorPanel" id="dualMotorPanel" hidden>
   <h3>🐯 Escritório automático · Bullex PRACTICE</h3>
-  <div class="hubInfo" id="dualMotorStatus">Aguardando conexão. Um único botão inicia os dois motores.</div>
+  <div class="hubInfo" id="dualMotorStatus">Aguardando conexão. Um botão ativa análise e traders.</div>
   <div class="lab40Help">
     🧠 <strong>Laboratório:</strong> pesquisa todos os ativos elegíveis, M1 e M5, e envia estratégias historicamente validadas para os traders.
-    📈 <strong>Operações:</strong> o Xtreme Sniper + Tendência tem prioridade permanente; as estratégias M1 aprovadas recebem entradas somente quando surgir um sinal novo e elegível.
+    📈 <strong>Operações:</strong> somente estratégias M1 aprovadas pelo laboratório geram sinais aos traders. Xtreme Sniper automático desativado.
     As ordens PRACTICE são sequenciais e compartilham os mesmos limites. M5 permanece em estudo.
   </div>
 </div>
 <div class="rowButtons">
-   <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar escritório · 2 motores DEMO</button>
-   <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar os 2 motores</button>
+   <button type="button" id="hubStartBtn" class="primary" disabled>▶ Iniciar laboratório + traders · DEMO</button>
+   <button type="button" id="hubStopBtn" class="danger" disabled>⏹ Parar laboratório e traders</button>
    <button type="button" id="hubRefreshBtn">↻ Atualizar status</button>
    <button type="button" id="hubLogoutBtn">🔒 Sair</button>
   </div>
@@ -97,11 +97,11 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
     <div class="hubFormGrid">
      <label>Estratégia
       <select id="hubStrategy">
-       <option value="sniper">Xtreme Sniper + Tendência (principal fixa)</option>
+       <option value="lab_m1">Sinais M1 aprovados pelo laboratório</option>
       </select>
      </label>
      <label>Ativo inicial<input id="hubAsset" list="hubAssets" value="EURUSD" required><datalist id="hubAssets"></datalist></label>
-     <label>Fonte de preço do Sniper<select id="hubSniperSource">
+     <label hidden>Fonte histórica do Sniper<select id="hubSniperSource">
       <option value="hl2">HL2</option><option value="close">Fechamento</option><option value="open">Abertura</option>
       <option value="high">Máxima</option><option value="low">Mínima</option><option value="hlc3">HLC3</option><option value="ohlc4">OHLC4</option>
      </select></label>
@@ -113,7 +113,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
     </div>
     <label><input id="hubStopWinEnabled" type="checkbox" checked>Ativar stop win</label>
     <label><input id="hubStopLossEnabled" type="checkbox" checked>Ativar stop loss</label>
-    <p class="formHint">O bot varre ativos elegíveis, inclusive OTC, segundo sua estratégia existente. O filtro visual de 60% no escritório ainda não decide ordens automaticamente.</p>
+    <p class="formHint">O Motor A estuda o mercado; o Motor B executa apenas sinais M1 com validação superior a 60% em 30 resultados, payout acima de 80% e filtros da conta DEMO.</p>
     <div class="rowButtons"><button type="submit" id="hubSaveBtn">💾 Salvar configurações</button></div>
    </form>
   </details>
@@ -123,26 +123,26 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div class="rooms">
 <section class="room" id="automaticLabRoom">
 <h3>🧠 Sala esquerda · Análise automática</h3>
-<div class="roomdesc">Xtreme Sniper + Tendência (principal) e 40 variações · M1 e M5 · <strong>payout M1 acima de 80%</strong>. A pesquisa inicia automaticamente ao conectar a PRACTICE; não precisa ativar o Motor B.</div>
+<div class="roomdesc">Análise automática de estratégias M1 e M5 · <strong>payout M1 acima de 80%</strong>. Xtreme Sniper não envia mais ordens. M5 é somente estudo.</div>
 <div class="roomStats"><span>Ativos elegíveis: <b id="multiAssets">0</b></span><span>Analisados: <b id="multiStudied">0</b></span><span>M1 / M5: <b id="multiPeriods">0 / 0</b></span></div>
 <div id="multiState" class="autoLabMeta">Aguardando conexão PRACTICE e velas reais.</div>
 <div id="multiLast" class="lab40Help">O laboratório recebe velas fechadas. Nenhuma estratégia é aprovada sem no mínimo 30 resultados fora da amostra.</div>
-<div class="favoriteBox"><h4>🐯 Xtreme Sniper + Xtreme Tendência</h4>
-<div class="lab40Help">Estratégia principal preservada; SMA1/SMA34, WMA5 e ATR18 × 2. Fonte HL2 atual mantida. Os testes usam velas fechadas, sem antecipar sinais.</div>
-<div id="multiPrimaryStatus" class="autoLabMeta">Aguardando histórico M1/M5 do mercado.</div></div>
+<div class="favoriteBox"><h4>🧠 Estratégias do laboratório</h4>
+<div class="lab40Help">Somente estratégias M1 historicamente validadas podem gerar ordens DEMO. O Xtreme Sniper foi removido da execução automática.</div>
+<div id="multiPrimaryStatus" hidden class="autoLabMeta">Aguardando histórico M1/M5 do mercado.</div></div>
 <details><summary>📋 Ver ranking dos estudos (maiores assertividades)</summary>
 <div id="multiRanking" class="lab40List"></div></details>
 </section>
 <section class="room" id="automaticOpsRoom">
 <h3>📈 Sala direita · Recebimento de oportunidades</h3>
-<div class="roomdesc">Recebe candidatos com <strong>mais de 50% e mínimo de 30 validações</strong>. Isso não significa lucro nem autoriza ordens. A estratégia vencedora do robô continua intacta.</div>
+<div class="roomdesc">Mostra estudos acima de 50%. Para uma ordem DEMO, o sinal precisa ser M1, validado acima de 60% em 30 resultados e payout superior a 80%.</div>
 <div class="roomStats"><span>Candidatas: <b id="multiCandidatesCount">0</b></span><span>Sinais de estudo: <b id="multiSignalsCount">0</b></span></div>
 <div class="favoriteBox"><h4>⭐ Favoritas em observação · M1 / M5</h4><div class="lab40Help">Exibe payout M1 conferido, taxa, amostra e se supera o ponto de equilíbrio estimado. M5 ainda não tem payout de execução verificado.</div>
 <div id="multiCandidatesList" class="favoriteList"><small>Nenhuma candidata com amostra suficiente.</small></div></div>
 <div class="favoriteBox"><h4>📡 Sinais produzidos pelo laboratório</h4>
 <div id="multiSignalsList" class="favoriteList"><small>Aguardando velas fechadas.</small></div></div>
-<strong id="preservedMotor">🔒 Robô existente preservado</strong>
-<div class="lab40Help" id="preservedMotorInfo">As ordens PRACTICE continuam sob a estratégia e os controles anteriores, sem alteração.</div>
+<strong id="preservedMotor">📡 Fonte exclusiva de ordens: Laboratório M1</strong>
+<div class="lab40Help" id="preservedMotorInfo">Somente sinais M1 aprovados pelo laboratório chegam aos traders na PRACTICE.</div>
 <div id="multiRecentTrades" class="favoriteList"></div>
 <div class="favoriteBox"><h4>👥 Traders e suas estratégias · 12 mesas</h4>
 <div class="lab40Help">Distribuição automática: uma estratégia validada por trader. Cada mesa acompanha seus ativos, sinais e WIN/LOSS confirmados. Os sinais não são ordens até a Bullex aceitar a entrada. As ordens compartilham o mesmo limite e são enviadas uma por vez.</div>
@@ -150,7 +150,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div class="favoriteBox"><h4>🏆 Mural dos melhores traders · Bullex PRACTICE</h4>
 <div class="leaderBoardSub" id="leaderboardUpdated">O mural usa somente WIN/LOSS de ordens confirmadas na sessão atual. Não usa acertos de backtest.</div>
 <div id="leaderboardRows" class="leaderBoardRows"><small>Sem operações confirmadas até agora.</small></div></div>
-<div class="hubInfo" id="labEntryDiagnostics" aria-live="polite">Motor B: aguardando ativação e velas válidas.</div>
+<div class="hubInfo" id="labEntryDiagnostics" aria-live="polite">Traders: aguardando ativação e velas válidas.</div>
 </section>
 
 <section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper + Tendência</h3>
@@ -160,12 +160,12 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div id="lab40Status" class="lab40Help" aria-live="polite">Entre no escritório e conecte sua conta PRACTICE para consultar velas reais. Pare o robô antes de iniciar o teste.</div>
 <div class="roomStats"><span>Aprovadas em estudo: <b id="approvedCount">0</b></span><span>Estratégias avaliadas: <b id="labCount">41</b></span></div>
 <div class="lab40Help">Critério: <strong>mais de 60%</strong> em pelo menos <strong>30 resultados fora da amostra</strong>. Divisão cronológica 70% treino / 30% validação. Resultado = direção da próxima vela fechada; não considera payout, execução ou corretagem. Amostras insuficientes ficam sem aprovação.</div>
-<div class="favoriteBox" id="principalLabPanel"><h4>🐯 ESTRATÉGIA PRINCIPAL · Xtreme Sniper + Xtreme Tendência</h4><div class="lab40Help">Xtreme Tendência: código original fornecido (ATR Wilder 18 × 2, high/low desligado). Sniper ORIGINAL conferido: SMA1 − SMA34, WMA5 e cruzamento estrito. A fonte MaValue=5 depende da lista da plataforma (inputs.titles); o laboratório usa HL2 provisoriamente. O deslocamento −1 da seta é visual, não uma entrada antecipada.</div>
+<div class="favoriteBox" id="principalLabPanel" hidden><h4>🐯 Estudo histórico · Xtreme Sniper + Xtreme Tendência</h4><div class="lab40Help">Xtreme Tendência: código original fornecido (ATR Wilder 18 × 2, high/low desligado). Sniper ORIGINAL conferido: SMA1 − SMA34, WMA5 e cruzamento estrito. A fonte MaValue=5 depende da lista da plataforma (inputs.titles); o laboratório usa HL2 provisoriamente. O deslocamento −1 da seta é visual, não uma entrada antecipada.</div>
 <strong id="principalStats">Aguardando velas M1 para calcular o resultado principal.</strong></div>
 <strong>40 estratégias experimentais</strong>
 <div id="labStrategies" class="lab40List"></div></section>
-<section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais aprovados pelo laboratório. Envio e resultados apenas na <strong>simulação local</strong>; sem ordens na corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div class="favoriteBox"><h4>⭐ Favoritas enviadas pelo Laboratório <span id="favoriteCount">0</span>/41</h4>
-<div class="lab40Help">Filtro: mais de 60% de acertos em pelo menos 30 validações fora da amostra. Esta é uma classificação para acompanhamento, <strong>não uma autorização de entrada automática</strong>.</div>
+<section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe exclusivamente sinais M1 validados do laboratório. Ordens apenas na <strong>Bullex PRACTICE</strong>, mediante confirmação da corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div class="favoriteBox"><h4>⭐ Favoritas enviadas pelo Laboratório <span id="favoriteCount">0</span>/41</h4>
+<div class="lab40Help">Filtro: mais de 60% de acertos em pelo menos 30 validações fora da amostra. O envio também depende do sinal atual e dos filtros da Bullex.</div>
 <div id="favoriteUpdate" class="autoLabMeta">Aguardando o laboratório atualizar.</div>
 <div id="favoriteList" class="favoriteList"><small>Nenhuma estratégia aprovada até agora.</small></div></div>
 <strong style="display:block;margin:9px 0">Operações PRACTICE do robô existente</strong>
@@ -866,7 +866,7 @@ function officeRefreshUI(){
  $('brokerMessage').textContent=officeIntegratedMode?'Controles integrados da conta PRACTICE no escritório.':'Visualização autenticada, somente leitura. Atualização ~5s. Comandos do bot permanecem no painel Bullex DEMO.';
  $('realBridgePanel').hidden=false;
  $('localStats').hidden=true;$('simHistory').hidden=true;$('simHistoryTitle').hidden=true;
- $('labRoomDesc').textContent='40 variações Xtreme Sniper M1 testadas em velas históricas PRACTICE, com validação cronológica. Os resultados não controlam nem ativam o motor de operações.';
+ $('labRoomDesc').textContent='Estratégias analisadas em velas históricas PRACTICE, com validação cronológica. Apenas sinais M1 qualificados podem chegar ao motor de operações.';
  $('opsRoomDesc').textContent='Ordens e sinais da conta PRACTICE. Use os botões Iniciar, Parar e Configurações da Central de Controle acima.';
  const m=s.management||{},trades=[...(s.trades||[])].reverse();
  const metrics=[['Saldo PRACTICE',officeMoney(s.balance,s.currency||'USD')],['WIN / LOSS hoje',(m.wins||0)+' / '+(m.losses||0)],['Resultado hoje',officeMoney(m.profit||0,s.currency||'USD')],['Ordens registradas',trades.length],['Ativos analisados',Number(s.analyzed_count||0)],['Status',s.uncertain?'⚠️ INCERTO':s.running?'RODANDO':s.connected?'PARADO':'DESCONECTADO']];
@@ -1545,7 +1545,7 @@ function hubLockData(){
 function hubApplyConfig(c){
  if(!c)return;
  for(const [name,id] of Object.entries(hubIds))if(c[name]!==undefined&&c[name]!==null)$(id).value=String(c[name]);
- $('hubStrategy').value='sniper'; // One-button office always uses primary Xtreme Sniper.
+ $('hubStrategy').value='lab_m1'; // Lab-only executor, no fixed primary strategy.
  $('hubStopWinEnabled').checked=c.stop_win_enabled!==false;
  $('hubStopLossEnabled').checked=c.stop_loss_enabled!==false;
 }
@@ -1626,7 +1626,7 @@ function renderMultiLab(data,p){
  }
  const strategies={
   rejection:'Retorno e Rejeição',repetition:'Repetição M1',resumption:'Retomada de Tendência',
-  retest:'Xtreme Reteste',sniper:'Xtreme Sniper'
+  retest:'Xtreme Reteste',sniper:'Xtreme Sniper',lab_m1:'Laboratório M1 · Traders'
  };
  const cur=p?.config?.strategy||'desconhecida';
  $('preservedMotor').textContent='🔒 Motor anterior preservado: '+(strategies[cur]||cur);
@@ -1681,7 +1681,7 @@ function renderTraderLeaderboard(p){
   SEM_CANDIDATAS_VALIDADAS:'Ainda não há estratégias com validação e filtro de payout aprovados.',
   SEM_TRADERS_ATRIBUIDOS:'Nenhuma estratégia aprovada foi atribuída a uma mesa.',
   SEM_VELAS_M1_NO_PRAZO:'As velas candidatas não chegaram dentro dos 2 segundos aceitos pela corretora.',
-  SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou cruzamento novo.',
+  SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou sinal novo.',
   ATIVO_SEM_VELA_FECHADA_COMPATIVEL:'O sinal não corresponde à vela fechada mais recente da Bullex.',
   SINAL_VALIDADO_M1_ATUAL:'Sinal M1 validado na vela atual; ainda sujeito às verificações finais da Bullex.',
   AGUARDANDO_MOTOR:'Aguardando inicialização do motor.',
@@ -1695,20 +1695,20 @@ function renderTraderLeaderboard(p){
  };
  const reason=!p.running?'Motor PARADO. O laboratório continua estudando, mas nenhum trader pode executar ordens.':
    descriptions[diag.reason]||'Aguardando nova vela M1 e verificação de execução.';
- $('labEntryDiagnostics').textContent='🧪 Motor B · '+reason+
+ $('labEntryDiagnostics').textContent='🧪 Traders · '+reason+
   ' | Estratégias elegíveis: '+Number(diag.eligible||0)+
   ' | Traders atribuídos: '+Number(diag.assigned||0)+
   ' | Velas dentro do prazo: '+Number(diag.fresh_assets||0)+
   ' | Sinais novos: '+Number(diag.valid_signals||0)+
   (Number.isFinite(Number(diag.snapshot_ms))?' | Recepção de dados: '+Number(diag.snapshot_ms)+' ms':'')+
-  (Number.isFinite(Number(diag.xtreme_scan_ms))?' | Análise Xtreme: '+Number(diag.xtreme_scan_ms)+' ms':'')+
+  (Number.isFinite(Number(diag.lab_scan_ms))?' | Seleção LAB: '+Number(diag.lab_scan_ms)+' ms':'')+
   (Number.isFinite(Number(diag.cached_candle_calcs))?' | Reanálises evitadas: '+Number(diag.cached_candle_calcs):'')+
   (diag.payout_rejected?' | Payout insuficiente: '+diag.payout_rejected:'')+
   (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
   (diag.stale_candle?' | Velas atrasadas: '+diag.stale_candle:'')+
   '. Uma ordem só é confirmada após aceitação pela Bullex.';
  const exec=p.lab_executions||{};
- $('labEntryDiagnostics').textContent+=' | MOTOR B · Ordens tentadas: '+Number(exec.attempted||0)+
+ $('labEntryDiagnostics').textContent+=' | TRADERS · Ordens tentadas: '+Number(exec.attempted||0)+
   ' · Aceitas: '+Number(exec.accepted||0)+
   ' · Recusadas: '+Number(exec.refused||0)+
   (exec.last_status==='RECUSADA'?' · Última recusa: '+String(exec.last_reason||'não informada'):'')+
@@ -1727,7 +1727,7 @@ function hubLoadLive(p){
   celebrateWin({
    name:trade.trader_name||'Alex',
    traderIndex:Number.isInteger(trade.trader_index)?trade.trader_index:0,
-   strategy:String(trade.strategy||'Xtreme Sniper + Tendência'),
+   strategy:String(trade.strategy||'Estratégia do laboratório'),
    v:Number(trade.profit||0),currency:p.currency||'USD',source:'BULLEX_PRACTICE'
   });
  }
@@ -1757,11 +1757,11 @@ function hubLoadLive(p){
   stateLabel.className='deskStatus';
   stateLabel.textContent=job?'● '+String(job.status||'AGUARDANDO'):'○ AGUARDANDO ESTRATÉGIA';
   st.textContent=job?String(job.strategy||'Estratégia Xtreme'):'Nenhuma estratégia aprovada atribuída';
-  if(job&&i>0){
+  if(job){
    const cells=Array.isArray(job.watched_assets)?job.watched_assets.slice(0,3):[];
    assets.textContent='M1 · '+(cells.length?cells.join(', '):job.asset||'Aguardando ativo')+
     (Number.isFinite(job.accuracy)?' · '+Number(job.accuracy).toFixed(1)+'% no estudo':'');
-  }else if(job){assets.textContent='Motor A · Xtreme principal · prioridade nas entradas';}
+  }
   if(job?.recent_signal&&!ongoing){
    const direction=String(job.recent_signal.direction||'').toUpperCase();
    assets.textContent+=' · Sinal de estudo: '+direction+' '+String(job.recent_signal.asset||'');
