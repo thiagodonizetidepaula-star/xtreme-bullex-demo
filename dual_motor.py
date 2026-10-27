@@ -33,13 +33,18 @@ def research_eligible(candidate):
         return False
 
 def assign_desks(candidates):
-    # Each trader has exactly ONE strategy; unassigned strategies wait.
+    """One research strategy per available desk; Xtreme owns desk zero.
+
+    Rankings can change as candles arrive, so a strategy is associated by its
+    immutable ID. Historical trades also store their original desk index.
+    """
     roster=[{'index':0,'name':TRADERS[0],'strategy_id':'sniper',
              'strategy':'Xtreme Sniper + Tendência','motor':'XTREME_PRINCIPAL',
-             'mode':'PRACTICE'}]
+             'mode':'PRACTICE','asset':'VARIOS','timeframe':'M1',
+             'accuracy':None,'samples':None,'payout_m1':None}]
     used={'sniper','XS-PRINCIPAL'}
     qualified=sorted((c for c in candidates if research_eligible(c)),
-                     key=lambda c:(-float(c['accuracy']),-int(c['samples']),str(c['id'])))
+                     key=lambda c:(-float(c['accuracy']),-int(c['samples']),str(c['id']),str(c.get('asset',''))))
     for c in qualified:
         identifier=str(c['id'])
         if identifier in used:continue
@@ -48,8 +53,86 @@ def assign_desks(candidates):
         if index>=len(TRADERS):break
         roster.append({'index':index,'name':TRADERS[index],
                        'strategy_id':identifier,'strategy':str(c['name'])[:80],
-                       'motor':'LAB_M1','mode':'PRACTICE'})
+                       'motor':'LAB_M1','mode':'PRACTICE',
+                       'asset':str(c.get('asset','')),'timeframe':'M1',
+                       'accuracy':round(float(c['accuracy']),2),
+                       'samples':int(c['samples']),
+                       'payout_m1':round(float(c['payout_m1']),1)})
     return roster
+
+
+def desk_work(roster, candidates, signals, trades, motor_running=False,
+              lab_orders_enabled=False):
+    """Derive each desk's work from REAL lab signals and broker-confirmed orders.
+
+    An approved research strategy is not a trade. Work is only recorded as
+    'OPERAÇÃO ABERTA' after a broker-confirmed ID, never from the chart proxy.
+    """
+    if not isinstance(roster,list):return []
+    signals=signals if isinstance(signals,list) else []
+    trades=trades if isinstance(trades,list) else []
+    candidates=candidates if isinstance(candidates,list) else []
+    ready={(str(c.get('id')),str(c.get('asset'))) for c in candidates
+           if research_eligible(c)}
+    now=datetime.now().timestamp()
+    output=[]
+    for desk in roster:
+        ident=str(desk['strategy_id'])
+        if desk['index']==0:
+            owned=[t for t in trades if t.get('engine')=='XTREME_PRINCIPAL' or
+                   (t.get('engine') is None and t.get('strategy_key')=='sniper')]
+        else:
+            owned=[t for t in trades if t.get('engine')=='LAB_M1' and
+                   t.get('strategy_key')=='lab:'+ident]
+        # One operation at a time in the current PRACTICE execution channel.
+        latest=owned[-1] if owned else None
+        open_order=next((t for t in reversed(owned)
+                         if t.get('status') in ('ABERTA','ENVIANDO','INCERTA')),None)
+        evidence=[c for c in candidates if str(c.get('id'))==ident and
+                  c.get('timeframe')=='M1' and research_eligible(c)]
+        watch=sorted(evidence,key=lambda c:(-float(c['accuracy']),-int(c['samples'])))[:6]
+        valid_signals=[sig for sig in signals
+                       if str(sig.get('id'))==ident
+                       and sig.get('timeframe')=='M1'
+                       and (ident,str(sig.get('asset'))) in ready
+                       and sig.get('signal_status')=='SINAL_PARA_ACOMPANHAMENTO']
+        signal=valid_signals[0] if valid_signals else None
+        if open_order:
+            status='ORDEM CONFIRMADA' if open_order.get('id') is not None else 'ENVIO PENDENTE'
+        elif latest and latest.get('status') in ('WIN','LOSS','EMPATE'):
+            status='ÚLTIMO '+latest['status']
+        elif desk['index']==0:
+            status='PROCURANDO ENTRADAS' if motor_running else 'AGUARDANDO MOTOR'
+        elif not lab_orders_enabled:
+            status='SÓ ACOMPANHANDO' if evidence else 'SEM ESTRATÉGIA'
+        elif signal:
+            status='SINAL EM ACOMPANHAMENTO'
+        else:
+            status='ANALISANDO GRÁFICOS' if motor_running else 'AGUARDANDO MOTOR'
+        completed=[t for t in owned if t.get('status') in ('WIN','LOSS','EMPATE')]
+        output.append({
+            **desk,'status':status,'auto_order_enabled':bool(lab_orders_enabled) if desk['index'] else bool(motor_running),
+            'watched_assets':[str(c.get('asset')) for c in watch],
+            'active_order':({
+                'id':open_order.get('id'),'asset':open_order.get('asset'),
+                'direction':open_order.get('direction'),'status':open_order.get('status')
+            } if open_order else None),
+            'recent_signal':({
+                'asset':signal.get('asset'),'direction':signal.get('direction'),
+                'candle_close':signal.get('candle_close'),
+                'timeframe':'M1'
+            } if signal else None),
+            'last_operation':({
+                'asset':latest.get('asset'),'status':latest.get('status'),
+                'profit':latest.get('profit'),'direction':latest.get('direction'),
+                'strategy':latest.get('strategy'),'id':latest.get('id')
+            } if latest else None),
+            'wins':sum(t.get('status')=='WIN' for t in completed),
+            'losses':sum(t.get('status')=='LOSS' for t in completed),
+            'executed':len(completed),
+        })
+    return output
+
 
 def select_lab_order(snapshot, market, now, enabled):
     """Select one fresh candidate; broker order needs additional live checks."""
