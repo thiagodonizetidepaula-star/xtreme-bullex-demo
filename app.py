@@ -39,34 +39,51 @@ def lab40_summary():
 multi_research=ResearchRegistry()
 multi_queue=queue.Queue(maxsize=100)
 multi_last_queued={}
+multi_diag={'snapshots':0,'received_items':0,'queued':0,'queue_full':0,'processed':0,'processed_m1':0,'processed_m5':0,'last_asset':None,'last_bars_count':0,'last_error':None,'last_processed':0}
 multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
 
 def multi_enqueue(batch):
-    """Only copies already received closed bars. Does not query or trade."""
+    """Queue closed candles for research, never wait on the trading thread."""
     now=batch.get('now',time.time())
-    for item in batch.get('items',[]):
+    multi_diag['snapshots']+=1
+    items=batch.get('items') or []
+    multi_diag['received_items']+=len(items)
+    for item in items:
         asset=item.get('asset')
         bars=is_closed_m1(item.get('candles') or [],now)
         if not bars or not asset:continue
-        newest=bars[-1].get('from',0)
+        bars.sort(key=lambda x:x.get('from',0))
+        newest=int(bars[-1]['from'])
         if newest<=multi_last_queued.get(asset,0):continue
         try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
-        except queue.Full:break
+        except queue.Full:
+            multi_diag['queue_full']+=1
+            break
         multi_last_queued[asset]=newest
+        multi_diag['queued']+=1
+        multi_diag['last_asset']=asset
+        multi_diag['last_bars_count']=len(bars)
 
 def multi_worker():
-    """Separate CPU research; the live trading loop never waits for analysis."""
+    """Independent worker. Preserve analysis errors until next successful result."""
     while True:
         try:asset,bars,source=multi_queue.get(timeout=1)
         except queue.Empty:continue
         try:
-            multi_research.ingest(asset,'M1',bars,source)
-            m5=aggregate_m5(bars)
-            if m5:multi_research.ingest(asset,'M5',m5,source)
+            m1=multi_research.ingest(asset,'M1',bars,source)
+            m5bars=aggregate_m5(bars)
+            m5=bool(m5bars) and multi_research.ingest(asset,'M5',m5bars,source)
+            multi_diag['processed']+=1
+            if m1:multi_diag['processed_m1']+=1
+            if m5:multi_diag['processed_m5']+=1
+            multi_diag['last_processed']=time.time()
+            if m1 or m5:multi_diag['last_error']=None
         except Exception as error:
-            with multi_research.lock:multi_research.error='Dados de estudo pendentes: '+str(error)[:135]
-        finally:
-            multi_queue.task_done()
+            multi_diag['last_error']=str(asset)+': '+str(error)[:165]
+            multi_diag['last_processed']=time.time()
+            with multi_research.lock:multi_research.error='Leitura rejeitada: '+multi_diag['last_error']
+            print('XTREME LAB ERROR: '+multi_diag['last_error'],flush=True)
+        finally:multi_queue.task_done()
         time.sleep(.07)
 
 def multi_paused_scanner():
@@ -588,7 +605,17 @@ def office_overview():
                    'bars':state.get('candles',[])[-45:],
                    'source':'BULLEX_PRACTICE_M1_CLOSED',
                    'mode':'CLOSED_CANDLES_NOT_TICKS'},
-            lab40=lab40_summary(),multi_lab=multi_research.snapshot(),
+            lab40=lab40_summary(),multi_lab={
+                **multi_research.snapshot(),
+                'diagnostics':{
+                    **multi_diag,
+                    'pending_queue':multi_queue.qsize(),
+                    'scanner_busy':multi_scan_state['busy'],
+                    'scanner_last_error':multi_scan_state['last_error'],
+                    'live_bars_ready':state.get('stream_ready',0),
+                    'bot_running':bool(state['running'])
+                }
+            },
             stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
             analyzed_count=state.get('analyzed_count',0),server_now=time.time())
 

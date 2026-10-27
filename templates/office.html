@@ -1445,8 +1445,20 @@ function renderMultiLab(data,p){
  $('multiState').textContent='🔄 '+String(data.status||'AGUARDANDO VELAS')+
  ' · Mercado atualizado: '+multiNumberDate(data.market_at)+
  ' · Estudos: '+String(data.studies||0);
+ const diag=data.diagnostics||{};
+ const processed=Number(diag.processed||0),queued=Number(diag.queued||0),seen=Number(diag.received_items||0);
+ const message=diag.last_error||diag.scanner_last_error||
+   (seen===0?'Ainda sem velas recebidas pelo motor.':
+   queued===0?'Velas recebidas, mas ainda não entraram na fila; conferindo horário de fechamento.':
+   processed===0?'Velas aguardando o processador de estudos.':
+   data.studies===0?'Velas processadas, mas nenhum estudo válido concluído; confira histórico contínuo.':
+   'Acompanhamento em andamento.');
+ $('multiState').textContent+=' · '+message;
  $('multiLast').textContent='Última vela analisada: '+multiNumberDate(data.updated)+
- '. Amostra mínima: 30 resultados fora da amostra. Filtro estrito: payout M1 >80%. Um histórico M5 usa grupos completos de cinco velas M1.';
+  ' · Diagnóstico: '+seen+' lotes de ativos recebidos, '+queued+' enfileirados, '+processed+
+  ' processados, '+Number(diag.pending_queue||0)+' pendentes, '+Number(diag.queue_full||0)+' filas cheias.'+
+  ' Para resultados confiáveis são necessárias velas M1/M5 completas e validação fora da amostra.';
+
  const watch=Array.isArray(data.candidates)?data.candidates:[];
  const root=$('multiCandidatesList');root.replaceChildren();
  if(!watch.length){const a=document.createElement('small');a.textContent='Nenhuma estratégia atingiu mais de 50% com 30 validações nos ativos já analisados.';root.append(a);}
