@@ -39,6 +39,7 @@ def lab40_summary():
 multi_research=ResearchRegistry()
 multi_queue=queue.Queue(maxsize=100)
 multi_last_queued={}
+multi_diag={'snapshots':0,'received_items':0,'queued':0,'queue_full':0,'processed':0,'processed_m1':0,'processed_m5':0,'last_asset':None,'last_bars_count':0,'last_error':None,'last_processed':0}
 multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
 
 def multi_enqueue(batch):
