@@ -36,10 +36,26 @@ class ResearchLabTests(unittest.TestCase):
             self.assertEqual(row['train_samples'],row['train_wins']+row['train_losses'])
             self.assertEqual(row['approved'],row['samples']>=MIN_OBSERVATIONS and row['rate'] is not None and row['rate']>60)
             self.assertIn(row['status'],('APROVADA EM ESTUDO','EM ESTUDO','AMOSTRA INSUFICIENTE'))
-    def test_primary_does_not_claim_missing_original_sniper_file(self):
+    def test_primary_matches_original_formula_and_flags_price_source(self):
         result=evaluate(sample_bars(),'EURUSD')
-        self.assertIn('não fornecido',result['primary']['source_note'])
-        self.assertIn('WMA5',result['primary']['base'])
+        main=result['primary']
+        self.assertIn('original conferido',main['source_note'].lower())
+        self.assertIn('WMA(5)',main['base'])
+        self.assertEqual(main['price_source_assumption'],'hl2')
+        self.assertIn('INDICE_5',main['price_source_confirmation'])
+        self.assertIn('visual',main['plot_offset'])
+    def test_sma1_sma34_wma5_reproduces_supplied_original(self):
+        from strategy import sniper_buffers
+        bars=sample_bars(125)
+        fast,slow=sniper_buffers(bars,'hl2')
+        values=[(b['max']+b['min'])/2 for b in bars]
+        buffer=[values[i]-sum(values[i-33:i+1])/34 for i in range(33,len(values))]
+        smooth=[sum((j+1)*z for j,z in enumerate(buffer[i-4:i+1]))/15 for i in range(4,len(buffer))]
+        self.assertEqual(len(fast),len(buffer[4:]))
+        for actual,expected in zip(fast,buffer[4:]):
+            self.assertAlmostEqual(actual,expected,places=11)
+        for actual,expected in zip(slow,smooth):
+            self.assertAlmostEqual(actual,expected,places=11)
     def test_favorites_include_main_if_statistically_qualified(self):
         from lab40_autoupdate import favorite_rows
         result={'asset':'EURUSD','primary':{'id':'XS-PRINCIPAL','name':'Principal','wins':20,'losses':10},
