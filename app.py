@@ -347,7 +347,10 @@ def loop(c):
                 log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
             if not candidates:
                 stop.wait(2);continue
+            snapshot_started=time.monotonic()
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
+            snapshot_duration_ms=round((time.monotonic()-snapshot_started)*1000)
+            scan_started=time.monotonic()
             lab40_offer_stream(batch)
             multi_enqueue(batch)
             for error in batch.get('errors',[]):log(error)
@@ -366,6 +369,7 @@ def loop(c):
                     log(item['asset']+' · '+analysis['reason'])
                 if selected is None or (analysis.get('direction') and not selected[1].get('direction')):
                     selected=(item,analysis)
+            scan_duration_ms=round((time.monotonic()-scan_started)*1000)
             state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
             if selected is None:
                 state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
@@ -385,6 +389,10 @@ def loop(c):
                     multi_research.snapshot(),candidates,batch['now'],True,
                     live_items=batch['items'],diagnostics=diag)
                 diag['checked_at']=time.time()
+                diag['snapshot_ms']=snapshot_duration_ms
+                diag['xtreme_scan_ms']=scan_duration_ms
+                diag['minutes_seconds']=round(float(batch['now'])%60,2)
+                diag['motor_running']=True
                 state['lab_signal_diag']=diag
                 if proposal:
                     matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
@@ -403,7 +411,17 @@ def loop(c):
             elif not state['lab_orders_enabled']:
                 state['lab_signal_diag']={'reason':'MOTOR_B_DESLIGADO','eligible':0,
                     'assigned':0,'fresh_assets':0,'crossings':0,
-                    'valid_signals':0,'checked_at':time.time()}
+                    'valid_signals':0,'checked_at':time.time(),
+                    'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
+                    'motor_running':True}
+            elif a.get('direction'):
+                # Motor A won the current one-order channel. This is by design,
+                # not evidence that the laboratory has lost its candidates.
+                state['lab_signal_diag']={
+                    **state['lab_signal_diag'],'reason':'XTREME_PRINCIPAL_TEM_PRIORIDADE',
+                    'checked_at':time.time(),
+                    'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
+                    'motor_running':True}
             c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
@@ -456,7 +474,9 @@ def loop(c):
         if client:client.close()
         if state['uncertain']:
             state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
-    finally:state['running']=False
+    finally:
+        state['running']=False
+        state['lab_signal_diag']={**state['lab_signal_diag'],'reason':'MOTOR_PARADO','motor_running':False,'checked_at':time.time()}
 
 @app.before_request
 def auth():
