@@ -1,0 +1,1 @@
+-- Código original enviado pelo usuário; aguardando transcrição fiel dos parâmetros.
