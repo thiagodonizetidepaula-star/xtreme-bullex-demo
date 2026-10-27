@@ -1496,17 +1496,23 @@ function renderMultiLab(data,p){
  ' · Estudos: '+String(data.studies||0);
  const diag=data.diagnostics||{};
  const processed=Number(diag.processed||0),queued=Number(diag.queued||0),seen=Number(diag.received_items||0);
- const message=diag.last_error||diag.scanner_last_error||
-   (seen===0?'Ainda sem velas recebidas pelo motor.':
-   queued===0?'Velas recebidas, mas ainda não entraram na fila; conferindo horário de fechamento.':
-   processed===0?'Velas aguardando o processador de estudos.':
-   data.studies===0?'Velas processadas, mas nenhum estudo válido concluído; confira histórico contínuo.':
-   'Acompanhamento em andamento.');
+ const workerStopped=diag.worker_alive===false;
+ const busySeconds=Number(diag.active_seconds||0);
+ const message=workerStopped?'⚠️ Processador do laboratório não está ativo. Não usar o Motor B.':
+  (diag.last_error||diag.scanner_last_error)||
+  (busySeconds>20?'⚠️ Estudo do ativo '+String(diag.active_asset||'')+' está levando '+busySeconds+' segundos; processamento limitado.':
+   seen===0?'Ainda sem velas recebidas pelo motor.':
+   queued===0?'Velas recebidas; aguardando a próxima vela fechada para colocar na fila.':
+   processed===0?'Laboratório lendo '+String(diag.active_asset||'primeiro ativo')+'; cálculo ainda não terminou.':
+   data.studies===0?'Processamento iniciado; aguardando histórico M1/M5 suficiente.':
+   'Laboratório processando os ativos elegíveis em rodízio.');
  $('multiState').textContent+=' · '+message;
  $('multiLast').textContent='Última vela analisada: '+multiNumberDate(data.updated)+
   ' · Diagnóstico: '+seen+' lotes de ativos recebidos, '+queued+' enfileirados, '+processed+
-  ' processados, '+Number(diag.pending_queue||0)+' pendentes, '+Number(diag.queue_full||0)+' filas cheias.'+
-  ' Para resultados confiáveis são necessárias velas M1/M5 completas e validação fora da amostra.';
+  ' processados, '+Number(diag.pending_queue||0)+' pendentes (limite '+Number(diag.research_queue_capacity||3)+').'+
+  (diag.active_asset?' Estudando '+diag.active_asset+' há '+Number(diag.active_seconds||0)+' s.':'')+
+  (Number(diag.last_duration_seconds||0)>0?' Último estudo: '+Number(diag.last_duration_seconds).toFixed(1)+' s.':'')+
+  ' Para validação são necessárias pelo menos 30 entradas concluídas fora da amostra em cada estratégia. As demais continuam em estudo.';
 
  const watch=Array.isArray(data.candidates)?data.candidates:[];
  const root=$('multiCandidatesList');root.replaceChildren();
