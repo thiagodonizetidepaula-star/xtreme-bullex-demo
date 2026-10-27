@@ -1476,6 +1476,88 @@ $('liveChartRefresh').onclick=async()=>{
  finally{hubBusy=false;hubLockButtons();}
 };
 const LAB40_CACHE_KEY='xtreme-tiger-lab40-validated-v1';
+
+const lab40StatusDescriptions={
+ AGUARDANDO_CONEXAO:'Esperando conexão PRACTICE',
+ AGUARDANDO_VELA_M1:'Aguardando próxima vela M1 fechada',
+ ATUALIZACAO_PAUSADA:'Atualização automática pausada',
+ LENDO_HISTORICO_M1:'Consultando histórico M1 na Bullex',
+ ATUALIZADA_COM_VELA_M1_FECHADA:'Recalculado com vela M1 real fechada',
+ HISTORICO_INVALIDO:'Histórico inválido (sem novas aprovações)',
+ AGUARDANDO_DADOS_M1:'Aguardando velas M1 disponíveis',
+ ERRO_AVALIACAO:'Erro no cálculo do laboratório'
+};
+function lab40HumanDate(seconds){
+ if(!Number.isFinite(Number(seconds))||!seconds)return 'sem atualização';
+ return new Date(Number(seconds)*1000).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function lab40ProcessSummary(brief){
+ if(!brief||brief.data_source!=='BULLEX_PRACTICE_CLOSED_CANDLES')return;
+ const asset=brief.asset||'—';
+ $('lab40AutoToggle').textContent=brief.enabled?'🟢 Auto M1 ligado':'⚪ Auto M1 desligado';
+ $('lab40AutoToggle').setAttribute('aria-pressed',String(!!brief.enabled));
+ const label=lab40StatusDescriptions[brief.status]||String(brief.status||'aguardando');
+ const last=lab40HumanDate(brief.updated_at);
+ const err=brief.last_error?' · '+String(brief.last_error).slice(0,130):'';
+ $('lab40TrackStatus').textContent='Ativo '+asset+' · '+label+' · Último cálculo: '+last+err;
+ if(document.activeElement!==$('lab40Asset'))$('lab40Asset').value=asset;
+ $('favoriteCount').textContent=String(brief.favorites_count||0);
+ $('favoriteUpdate').textContent='Fonte: velas M1 PRACTICE | Ativo: '+asset+' | Última validação: '+last+
+ (brief.enabled?' | Auto por vela fechada (somente se houver dados)':' | Atualização pausada');
+ const host=$('favoriteList');host.replaceChildren();
+ const favs=Array.isArray(brief.favorites)?brief.favorites:[];
+ if(!favs.length){
+  const el=document.createElement('small');
+  el.textContent=brief.status==='HISTORICO_INVALIDO'?'Histórico inválido. Nenhuma favorita liberada.':
+   'Nenhuma estratégia atingiu 60%+ com pelo menos 30 validações. O bot continua com suas estratégias atuais.';
+  host.append(el);
+ }
+ for(const f of favs.slice(0,20)){
+  const box=document.createElement('div');box.className='favoriteEntry';
+  const title=document.createElement('strong'),details=document.createElement('small');
+  title.textContent='⭐ '+String(f.name||f.id||'Estratégia')+' · '+Number(f.rate||0).toFixed(1)+'%';
+  details.textContent=String(f.samples||0)+' validações · '+String(f.wins||0)+' WIN / '+String(f.losses||0)+
+   ' LOSS · '+String(f.asset||asset)+' · SÓ ESTUDO';
+  box.append(title,details);host.append(box);
+ }
+ // Full historical study is fetched once per newly calculated closed M1 candle.
+ if((brief.version!==lab40ServerVersion||asset!==lab40ServerAsset)&&!lab40SyncBusy){
+  lab40ServerVersion=brief.version;lab40ServerAsset=asset;
+  lab40SyncFromServer(asset);
+ }
+}
+async function lab40SyncFromServer(asset){
+ if(lab40SyncBusy)return;lab40SyncBusy=true;
+ try{
+  const result=await hubApi('lab40?asset='+encodeURIComponent(asset));
+  if(lab40ServerAsset!==asset)return;
+  if(result.latest&&Array.isArray(result.latest.strategies)&&result.latest.strategies.length===40){
+   lab40Use(result.latest,false);
+   try{localStorage.setItem(LAB40_CACHE_KEY,JSON.stringify(result.latest));}catch(e){}
+  }else{
+   lab40Rows=[];lab40Latest=null;refreshPipeline();
+  }
+ }catch(e){
+  lab40ServerVersion=-1;
+  lab40Message('Não foi possível sincronizar ranking: '+e.message);
+ }finally{lab40SyncBusy=false;}
+}
+$('lab40AutoToggle').onclick=async()=>{
+ if(lab40TrackBusy||!hubState?.connected)return;
+ const enabled=$('lab40AutoToggle').getAttribute('aria-pressed')!=='true';
+ const asset=$('lab40Asset').value.trim().toUpperCase();
+ if(!/^[A-Z0-9_-]{3,40}$/.test(asset)){lab40Message('Informe ativo M1 válido para acompanhar.');return;}
+ lab40TrackBusy=true;hubLockButtons();
+ try{
+  const r=await hubApi('lab40/track',{asset,enabled});
+  if(!r.ok)throw Error('O servidor não confirmou a mudança.');
+  lab40ProcessSummary(r.tracking);
+  lab40Message(enabled?'🟢 Auto ativado. O laboratório vai recalcular com cada nova vela M1 fechada disponível.':
+    '⚪ Auto pausado. Favoritas salvas continuam sendo resultados históricos, não ordens.');
+ }catch(e){lab40Message('Erro ao configurar acompanhamento: '+e.message);}
+ finally{lab40TrackBusy=false;hubLockButtons();}
+};
+
 function lab40Message(message){$('lab40Status').textContent=message;}
 function lab40Use(result,fromCache=false){
  if(!result||!Array.isArray(result.strategies)||result.strategies.length!==40)return;
