@@ -64,7 +64,7 @@ def analyze(candles, now):
     if age>5:result.update(direction=None,reason='Aguardando fechamento da próxima vela M1. '+('Sinal após a janela: bloqueado.' if direction else reason))
     return result
 
-STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência','retest':'Xtreme Reteste M1'}
+STRATEGIES={'rejection':'Retorno e Rejeição v1','repetition':'Repetição M1','resumption':'Retomada de Tendência M1','sniper':'Xtreme Sniper + Tendência','retest':'Xtreme Reteste M1','lab_m1':'Laboratório M1 · Traders'}
 
 def repetition(candles, now):
     bars=sorted([b for b in candles if b['from']+60<=now],key=lambda b:b['from'])
