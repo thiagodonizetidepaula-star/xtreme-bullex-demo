@@ -34,6 +34,9 @@ def favorite_rows(result):
     """Visual-only promotion, based solely on evaluated OOS evidence."""
     if not isinstance(result,dict): return []
     rows=result.get("strategies",[])
+    primary=result.get("primary")
+    if isinstance(primary,dict):
+        rows=[primary]+rows
     if not isinstance(rows,list): return []
     selected=[]
     for row in rows:
