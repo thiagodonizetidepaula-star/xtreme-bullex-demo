@@ -141,7 +141,7 @@ class ResearchRegistry:
             for key in list(self.records):
                 if key[0] not in self.market:
                     self.records.pop(key,None)
-            self.error=None
+            # Keep recent parsing errors visible while waiting for valid candles.
 
     @staticmethod
     def _merge(prior, newer, timeframe):
@@ -209,6 +209,7 @@ class ResearchRegistry:
                                'updated':time.time(),'status':'ANALISADO' if outcome else 'AMOSTRA_INSUFICIENTE',
                                'results':outcome,'shortlist':candidate_rows}
             self.updated=time.time()
+            self.error=None
             self.published+=1
             for one in signal:
                 unique=(one['asset'],one['timeframe'],one['id'],one['candle_close'])
