@@ -381,48 +381,92 @@ def access():
 @app.get('/api/lab40')
 def lab40_catalog():
     with lock:
-        asset=request.args.get('asset','').strip().upper()
-        previous=lab40_cache.get(asset) if asset else None
+        asset=request.args.get('asset','').strip().upper() or lab40_tracking['asset']
         return jsonify(count=len(CANDIDATES),strategies=list(CANDIDATES),
                        min_observations=MIN_OBSERVATIONS,threshold=60,
-                       latest=previous,connected=bool(state['connected']),
-                       running=bool(state['running']),source='BULLEX_PRACTICE_HISTORICAL_ONLY')
+                       latest=lab40_cache.get(asset),tracking=lab40_summary(),
+                       connected=bool(state['connected']),running=bool(state['running']),
+                       source='BULLEX_PRACTICE_HISTORICAL_M1_RESEARCH_ONLY')
+
+@app.post('/api/lab40/track')
+def lab40_track():
+    import re
+    data=request.get_json(silent=True) or {}
+    asset=data.get('asset','')
+    enabled=data.get('enabled')
+    if not isinstance(asset,str) or not re.fullmatch(r'[A-Za-z0-9_-]{3,40}',asset):
+        return jsonify(error='Informe ativo M1 válido.'),400
+    if not isinstance(enabled,bool):
+        return jsonify(error='Selecione ativar ou pausar atualização automática.'),400
+    asset=asset.upper()
+    with lock:
+        if enabled and (not state['connected'] or asset not in state['assets']):
+            return jsonify(error='Conecte a conta PRACTICE e selecione ativo reconhecido.'),409
+        changed=asset!=lab40_tracking['asset']
+        lab40_tracking['asset']=asset
+        lab40_tracking['enabled']=enabled
+        lab40_tracking['generation']+=1
+        lab40_tracking['last_enqueued']=0
+        lab40_tracking['last_candle']=(lab40_history[asset][-1]['from']
+            if asset in lab40_history and lab40_history[asset] else None)
+        lab40_tracking['status']='AGUARDANDO_VELA_M1' if enabled else 'ATUALIZACAO_PAUSADA'
+        lab40_tracking['last_error']=None
+        lab40_tracking['next_fetch_after']=time.time()+20
+        if changed:lab40_tracking['updated_at']=None
+        return jsonify(ok=True,tracking=lab40_summary())
 
 @app.post('/api/lab40/run')
 def lab40_run():
-    # This research endpoint cannot create or modify broker orders. To avoid
-    # blocking the broker worker's critical path, never fetch during execution.
+    # Manual historical load is guarded to never collide with active trading.
+    global lab40_fetch_busy
     import re
+    data=request.get_json(silent=True) or {}
+    asset=data.get('asset','')
+    if not isinstance(asset,str) or not re.fullmatch(r'[A-Za-z0-9_-]{3,40}',asset):
+        return jsonify(error='Informe um ativo M1 válido.'),400
+    asset=asset.upper()
     with lock:
-        data=request.get_json(silent=True) or {}
-        asset=data.get('asset','')
-        if not isinstance(asset,str) or not re.fullmatch(r'[A-Za-z0-9_-]{3,40}',asset):
-            return jsonify(error='Informe um ativo M1 válido.'),400
-        asset=asset.upper()
         if state['running'] or (bot and bot.is_alive()):
-            return jsonify(error='Pare o robô e aguarde a conclusão da ordem atual antes de rodar a pesquisa de velas. Não interrompemos operações para fazer backtest.'),409
+            return jsonify(error='Pare o robô e aguarde a conclusão de toda ordem para baixar histórico M1. Durante operações usamos apenas streaming já recebido.'),409
         if state['uncertain']:
-            return jsonify(error='Existe ordem pendente/incerta. Confira a Bullex antes do laboratório.'),409
+            return jsonify(error='Existe ordem pendente/incerta. Confira na Bullex antes do laboratório.'),409
         if not state['connected'] or client is None:
-            return jsonify(error='Conecte a conta PRACTICE no escritório para acessar velas reais.'),409
+            return jsonify(error='Conecte a conta PRACTICE primeiro.'),409
         if asset not in state['assets']:
             return jsonify(error='Ativo não reconhecido na conexão PRACTICE.'),400
-        try:
-            candle_data=client.call('lab_candles',timeout=28,asset=asset)
-            if candle_data.get('source')!='PRACTICE':
-                return jsonify(error='Resposta não autenticada como conta PRACTICE.'),502
-            outcome=evaluate_lab40(candle_data['candles'],asset)
-            outcome['created_at']=datetime.now(timezone.utc).isoformat(timespec='seconds')
-            outcome['source']='HISTORICO_BULLEX_PRACTICE'
-            outcome['execution']='SOMENTE_ESTUDO_SEM_ORDENS'
-            lab40_cache[asset]=outcome
-            if len(lab40_cache)>6:
-                del lab40_cache[next(iter(lab40_cache))]
-            return jsonify(result=outcome)
-        except (ValueError,KeyError,TypeError) as e:
-            return jsonify(error=str(e)),400
-        except Exception as e:
-            return jsonify(error='Não foi possível obter/analisar histórico da Bullex: '+str(e)[:190]),502
+        if lab40_fetch_busy:
+            return jsonify(error='Já existe leitura de histórico em andamento. Aguarde.'),409
+        lab40_fetch_busy=True
+        if asset!=lab40_tracking['asset']:
+            lab40_tracking['asset']=asset
+            lab40_tracking['last_candle']=None
+            lab40_tracking['last_enqueued']=0
+        lab40_tracking['enabled']=True
+        lab40_tracking['generation']+=1
+        lab40_tracking['status']='LENDO_HISTORICO_M1'
+        lab40_tracking['last_error']=None
+        lab40_tracking['next_fetch_after']=time.time()+65
+        generation=lab40_tracking['generation']
+        source_client=client
+    try:
+        data=source_client.call('lab_candles',timeout=28,asset=asset)
+        if data.get('source')!='PRACTICE':
+            return jsonify(error='Histórico não autenticado como conta PRACTICE.'),502
+        lab40_store(asset,data['candles'],generation,'PESQUISA_MANUAL_M1')
+        with lock:
+            result=lab40_cache.get(asset)
+            tracking=lab40_summary()
+        if result is None:
+            return jsonify(error='Velas M1 válidas insuficientes para testar. Aguarde novas velas fechadas.'),409
+        return jsonify(result=result,tracking=tracking)
+    except (ValueError,KeyError,TypeError) as e:
+        with lock:lab40_tracking.update(status='HISTORICO_INVALIDO',last_error=str(e)[:180])
+        return jsonify(error=str(e)),400
+    except Exception as e:
+        with lock:lab40_tracking.update(status='AGUARDANDO_DADOS_M1',last_error=str(e)[:180])
+        return jsonify(error='Não foi possível obter/analisar histórico da Bullex: '+str(e)[:190]),502
+    finally:
+        with lock:lab40_fetch_busy=False
 
 @app.post('/api/office/chart/refresh')
 def office_chart_refresh():
@@ -467,6 +511,7 @@ def office_overview():
                    'bars':state.get('candles',[])[-45:],
                    'source':'BULLEX_PRACTICE_M1_CLOSED',
                    'mode':'CLOSED_CANDLES_NOT_TICKS'},
+            lab40=lab40_summary(),
             stream_ready=state.get('stream_ready',0),stream_total=state.get('stream_total',0),
             analyzed_count=state.get('analyzed_count',0),server_now=time.time())
 
