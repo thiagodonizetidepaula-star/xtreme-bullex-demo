@@ -1,6 +1,6 @@
 """No-network regression tests for the two PRACTICE motor safety gates."""
 import unittest
-from dual_motor import assign_desks,research_eligible,select_lab_order
+from dual_motor import assign_desks,research_eligible,select_lab_order,desk_work
 
 def candidate(identifier='XS-04',rate=65,payout=85,win=20,loss=10,asset='EURUSD',tf='M1'):
     return {
@@ -49,6 +49,57 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertGreaterEqual(signal['trader_index'],1)
         self.assertEqual(signal['strategy_id'],'XS-04')
         self.assertEqual(signal['direction'],'put')
+    def test_automatic_desk_work_per_approved_strategy(self):
+        c1=candidate('XS-18',win=20,loss=10,asset='AUDUSD-OTC')
+        c2=candidate('XS-18',win=21,loss=9,asset='EURUSD-OTC')
+        c3=candidate('XS-17',win=19,loss=11,asset='XAGUSD-OTC')
+        roster=assign_desks([c1,c2,c3])
+        self.assertEqual(len(roster),3)
+        self.assertEqual([r['strategy_id'] for r in roster],['sniper','XS-18','XS-17'])
+        signal={**c1,'signal_status':'SINAL_PARA_ACOMPANHAMENTO',
+                'direction':'call','candle_close':1700000060}
+        simulated={'asset':'AUDUSD-OTC','status':'IGNORADA','strategy_key':'lab:XS-18','engine':'LAB_M1'}
+        # Only a broker-confirmed order counts as execution/WIN.
+        work=desk_work(roster,[c1,c2,c3],[signal],[simulated],True,True)
+        self.assertEqual(work[1]['recent_signal']['direction'],'call')
+        self.assertEqual(work[1]['executed'],0)
+        self.assertEqual(work[1]['wins'],0)
+        self.assertEqual(work[1]['watched_assets'],['EURUSD-OTC','AUDUSD-OTC'])
+        self.assertEqual(work[2]['executed'],0)
+    def test_broker_confirmed_win_belongs_to_correct_desk(self):
+        c=candidate('XS-18')
+        roster=assign_desks([c])
+        trades=[
+            {'id':12,'engine':'XTREME_PRINCIPAL','strategy_key':'sniper',
+             'asset':'EURUSD','status':'WIN','profit':1.60},
+            {'id':13,'engine':'LAB_M1','strategy_key':'lab:XS-18',
+             'asset':'EURUSD','status':'LOSS','profit':-2.00},
+            {'id':14,'engine':'LAB_M1','strategy_key':'lab:XS-18',
+             'asset':'EURUSD','status':'WIN','profit':1.70},
+        ]
+        info=desk_work(roster,[c],[],trades,True,True)
+        self.assertEqual(info[0]['wins'],1)
+        self.assertEqual(info[0]['losses'],0)
+        self.assertEqual(info[1]['wins'],1)
+        self.assertEqual(info[1]['losses'],1)
+        self.assertEqual(info[1]['last_operation']['id'],14)
+        self.assertEqual(info[1]['status'],'ÚLTIMO WIN')
+        self.assertEqual(info[1]['executed'],2)
+    def test_research_only_desk_is_not_labeled_live_order(self):
+        c=candidate('XS-18')
+        info=desk_work(assign_desks([c]),[c],[],[],False,False)
+        self.assertEqual(info[1]['status'],'SÓ ACOMPANHANDO')
+        self.assertFalse(info[1]['auto_order_enabled'])
+        self.assertIsNone(info[1]['active_order'])
+    def test_actual_open_order_shown_without_fake_win(self):
+        c=candidate('XS-18')
+        open_trade={'engine':'LAB_M1','strategy_key':'lab:XS-18',
+            'id':50,'asset':'EURUSD','direction':'call','status':'ABERTA'}
+        info=desk_work(assign_desks([c]),[c],[],[open_trade],True,True)
+        self.assertEqual(info[1]['status'],'ORDEM CONFIRMADA')
+        self.assertEqual(info[1]['active_order']['id'],50)
+        self.assertEqual(info[1]['wins'],0)
+        self.assertEqual(info[1]['executed'],0)
     def test_m5_never_execute_even_above_60(self):
         c=candidate(tf='M5')
         book={'candidates':[c],'signals':[{**c,'direction':'call','candle_close':1700000100}]}
