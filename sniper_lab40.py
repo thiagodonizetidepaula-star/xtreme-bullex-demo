@@ -133,11 +133,14 @@ def _pattern(pattern, bars, i, direction, fast_ma):
 
 
 def evaluate_primary(bars, asset):
-    """Research baseline: the existing site's Sniper + provided Xtreme Tendência.
+    """User-provided Xtreme Sniper and Xtreme Tendência formula reference.
 
-    IMPORTANT: Xtreme Tendência is based on the user's original Lua script
-    (ATR Wilder RMA 18 x 2, default high_low=False); the Xtreme Sniper Lua source now provided confirms SMA1/SMA34, WMA5 and strict crossovers. This Sniper uses the already-running code in
-    strategy.sniper_buffers, not a claimed transcription of the missing original.
+    Original Xtreme Sniper Lua: sma(inputs[MaValue],1)-sma(...,34),
+    wma(buffer1,5) and STRICT crossing (current > / previous <).
+    Xtreme Tendência: Wilder RMA ATR18 × 2, high_low=False.
+    Price-source selector MaValue=5 is not resolvable without the platform's
+    inputs.titles ordering, so research explicitly uses existing HL2 default.
+    Plot offset -1 is VISUAL ONLY; do not backdate hypothetical executions.
     """
     from strategy import sniper_buffers
     fast, slow = sniper_buffers(bars, 'hl2')
@@ -168,9 +171,11 @@ def evaluate_primary(bars, asset):
     rate=round(win/n*100,2) if n else None
     return {
         'id':'XS-PRINCIPAL','name':'PRINCIPAL · Xtreme Sniper + Xtreme Tendência',
-        'source':'CODIGO_SNIPER_ATUAL_DO_BOT_E_TENDENCIA_ORIGINAL_ENVIADA',
-        'source_note':'Sniper original não fornecido: implementação já usada pelo bot; Tendência ATR18×2 conferida pelo arquivo original.',
-        'base':'SMA1/34 com WMA5, cruzamento confirmado por Tendência ATR18 × 2 (High/Low desativado)',
+        'source':'FORMULAS_XTREME_SNIPER_ORIGINAL_E_TENDENCIA_ORIGINAL',
+        'source_note':'Sniper original conferido: SMA1/SMA34, WMA5 e cruzamentos estritos. MaValue=5 depende da lista inputs.titles não fornecida; o laboratório usa HL2 provisoriamente. Xtreme Tendência: ATR18×2 conferido. Deslocamento -1 é apenas visual.',
+        'base':'Original Sniper: SMA(1)-SMA(34), WMA(5) e cruzamento estrito + original Tendência ATR(18)×2',
+        'price_source_assumption':'hl2','price_source_confirmation':'PENDENTE_MAPEAR_INPUTS_TITLES_INDICE_5',
+        'plot_offset':'-1 apenas visual; backtest não antecipa sinais',
         'principal':True,'pattern':'cross','timeframe':'M1','asset':asset,
         'wins':win,'losses':loss,'ties':ties,'samples':n,
         'train_wins':train_win,'train_losses':train_loss,
