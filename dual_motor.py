@@ -82,8 +82,11 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
             owned=[t for t in trades if t.get('engine')=='XTREME_PRINCIPAL' or
                    (t.get('engine') is None and t.get('strategy_key')=='sniper')]
         else:
+            # A completed order belongs to the desk that ACTUALLY submitted it,
+            # even if a newly promoted strategy changes the later roster.
             owned=[t for t in trades if t.get('engine')=='LAB_M1' and
-                   t.get('strategy_key')=='lab:'+ident]
+                   (t.get('trader_index')==desk['index'] or
+                    (t.get('trader_index') is None and t.get('strategy_key')=='lab:'+ident))]
         # One operation at a time in the current PRACTICE execution channel.
         latest=owned[-1] if owned else None
         open_order=next((t for t in reversed(owned)
@@ -95,7 +98,9 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
                        if str(sig.get('id'))==ident
                        and sig.get('timeframe')=='M1'
                        and (ident,str(sig.get('asset'))) in ready
-                       and sig.get('signal_status')=='SINAL_PARA_ACOMPANHAMENTO']
+                       and sig.get('signal_status')=='SINAL_PARA_ACOMPANHAMENTO'
+                       and isinstance(sig.get('candle_close'),(int,float))
+                       and 0<=now-float(sig['candle_close'])<=90]
         signal=valid_signals[0] if valid_signals else None
         if open_order:
             status='ORDEM CONFIRMADA' if open_order.get('id') is not None else 'ENVIO PENDENTE'
