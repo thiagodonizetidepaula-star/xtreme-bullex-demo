@@ -349,7 +349,7 @@ def loop(c):
                 proposal=select_lab_order(multi_research.snapshot(),candidates,batch['now'],True)
                 if proposal:
                     matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
-                    if matched and matched.get('candles') and matched['candles'][-1].get('from')==proposal['candle']:
+                    if matched and matched.get('candles') and max(int(b.get('from',0)) for b in matched['candles'])==proposal['candle']:
                         lab_choice=proposal
                         item=matched
                         a={'direction':proposal['direction'],'candle':proposal['candle'],
