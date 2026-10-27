@@ -354,176 +354,153 @@ def limits(c):
     return risk_ok(c,m['profit'],m['used'])
 
 def loop(c):
-    last=state["last_candle"]; evaluated=None; state["analyzed_count"]=0
-    candidates=[];cursor=0;catalog_at=0;seen=set()
-    closed_cache=ClosedM1Cache()
+    """Trader Office: the LAB alone supplies new M1 signals for PRACTICE orders.
+
+    No autonomous Xtreme Sniper analysis or fallback trading is performed.
+    One eligible strategy -> one assigned desk -> one serialized order, after
+    fresh market / broker / risk validation. M5 remains research-only.
+    """
+    last=state['last_candle']
+    candidates=[]
+    catalog_at=0
     try:
         while not stop.is_set():
-            if not limits(c):log('Limite diário atingido. Robô parado.');break
+            if not limits(c):
+                log('Limite diário atingido. Escritório parado.')
+                break
             if not candidates or (time.time()-catalog_at>30 and 5<time.time()%60<50):
-                candidates=client.call('market',payout=c['payout'],strategy=c.get('strategy','rejection'))['assets'];catalog_at=time.time()
+                candidates=client.call('market',payout=max(80.01,c['payout']),
+                                       strategy='lab_m1')['assets']
+                catalog_at=time.time()
                 state['scan_assets']=candidates
                 multi_research.set_market(candidates)
-                log(str(len(candidates))+' ativos M1 abertos, incluindo OTC, com payout '+('igual ou superior a '+str(c['payout']) if c.get('strategy') in ('repetition','resumption','sniper','retest') else 'acima de '+str(max(80,c['payout'])))+'%.')
+                log(str(len(candidates))+' ativos M1 abertos, inclusive OTC, para o laboratório; payout superior a '+str(max(80,c['payout']))+'%.')
             if not candidates:
-                stop.wait(2);continue
+                state['message']='Nenhum ativo PRACTICE aberto com payout suficiente para o laboratório.'
+                stop.wait(2)
+                continue
             snapshot_started=time.monotonic()
             batch=client.call('snapshot',assets=[x['asset'] for x in candidates])
-            snapshot_duration_ms=round((time.monotonic()-snapshot_started)*1000)
-            scan_started=time.monotonic()
+            snapshot_ms=round((time.monotonic()-snapshot_started)*1000)
             lab40_offer_stream(batch)
             multi_enqueue(batch)
             for error in batch.get('errors',[]):log(error)
-            selected=None
-            for item in batch['items']:
-                try:
-                    analysis,_cache_hit=closed_cache.analyze(
-                        item['asset'],item['candles'],batch['now'],
-                        c.get('strategy','rejection'),c.get('sniper_source','hl2'),
-                        analyze_selected)
-                except (ValueError,KeyError,TypeError) as e:
-                    invalid_key=(item['asset'],int(batch['now']//60)*60,'invalid')
-                    if invalid_key not in seen:
-                        seen.add(invalid_key);log(item['asset']+': dados inválidos; ativo ignorado ('+str(e)+').')
-                    continue
-                key=(item['asset'],analysis.get('candle'))
-                if key not in seen:
-                    seen.add(key);state['analyzed_count']+=1
-                    log(item['asset']+' · '+analysis['reason'])
-                if selected is None or (analysis.get('direction') and not selected[1].get('direction')):
-                    selected=(item,analysis)
-            scan_duration_ms=round((time.monotonic()-scan_started)*1000)
-            state['stream_ready']=batch['ready'];state['stream_total']=batch['total']
-            if selected is None:
-                state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
-                stop.wait(.15);continue
-            # Motor A has strict priority. Motor B runs alongside it but sends
-            # orders only as a single serialized PRACTICE fallback (M1 only).
-            # Never send any lab signal if no independent historical validation
-            # or if the latest M1 candle is more than 2 s old.
-            item,a=selected
-            lab_choice=None
-            if not a.get('direction') and state['lab_orders_enabled']:
-                # Do not wait for research worker to publish its historical signals
-                # after the M1 entry deadline. Evaluate already-qualified
-                # strategies against the CURRENT broker-confirmed closed bars.
-                diag={}
-                proposal=select_lab_order(
-                    multi_research.snapshot(),candidates,batch['now'],True,
-                    live_items=batch['items'],diagnostics=diag)
-                diag['checked_at']=time.time()
-                diag['snapshot_ms']=snapshot_duration_ms
-                diag['xtreme_scan_ms']=scan_duration_ms
-                diag['cached_candle_calcs']=closed_cache.hits
-                diag['fresh_candle_calcs']=closed_cache.misses
-                diag['minutes_seconds']=round(float(batch['now'])%60,2)
-                diag['fresh_closed_assets']=int(batch.get('fresh_closed',0))
-                diag['streaming_assets']=int(batch.get('ready',0))
-                diag['motor_running']=True
-                state['lab_signal_diag']=diag
-                if proposal:
-                    matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
-                    if matched and matched.get('candles') and any(
-                        int(bar.get('from',-1))==proposal['candle']
-                        and int(bar.get('from',-1))+60<=float(batch['now'])
-                        for bar in matched['candles']):
-                        lab_choice=proposal
-                        item=matched
-                        a={'direction':proposal['direction'],'candle':proposal['candle'],
-                           'signal':proposal['direction'],
-                           'reason':'Motor B, trader '+proposal['trader_name']+
-                            ' · sinal M1 validado no streaming atual · '+proposal['strategy'],
-                           'checks':{'validação':str(proposal['samples'])+' resultados',
-                                     'assertividade':str(proposal['accuracy'])+'%'}}
-                    else:
-                        state['lab_signal_diag']['reason']='ATIVO_SEM_VELA_FECHADA_COMPATIVEL'
-            elif not state['lab_orders_enabled']:
-                state['lab_signal_diag']={'reason':'MOTOR_B_DESLIGADO','eligible':0,
-                    'assigned':0,'fresh_assets':0,'crossings':0,
-                    'valid_signals':0,'checked_at':time.time(),
-                    'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
-                    'cached_candle_calcs':closed_cache.hits,
-                    'fresh_candle_calcs':closed_cache.misses,
-                    'motor_running':True}
-            elif a.get('direction'):
-                # Motor A won the current one-order channel. This is by design,
-                # not evidence that the laboratory has lost its candidates.
-                state['lab_signal_diag']={
-                    **state['lab_signal_diag'],'reason':'XTREME_PRINCIPAL_TEM_PRIORIDADE',
-                    'checked_at':time.time(),
-                    'snapshot_ms':snapshot_duration_ms,'xtreme_scan_ms':scan_duration_ms,
-                    'cached_candle_calcs':closed_cache.hits,
-                    'fresh_candle_calcs':closed_cache.misses,
-                    'motor_running':True}
-            c['asset']=item['asset'];data={'candles':item['candles']}
-            # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
-            if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
-            state['analysis']=a;state['candles']=data['candles'][-50:];state['chart_asset']=item['asset'];state['chart_updated_at']=time.time()
-            if a.get('candle') is not None and (c['asset'],a['candle'])!=evaluated:
-                evaluated=(c['asset'],a['candle'])
-                checks=a.get('checks',{})
-                closed=datetime.fromtimestamp(a['candle']+60,timezone(timedelta(hours=-3))).strftime('%H:%M:%S')
-                log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
+            state['stream_ready']=batch['ready']
+            state['stream_total']=batch['total']
+            state['analyzed_count']=multi_diag['processed']
+            diag={}
+            scan_started=time.monotonic()
+            proposal=select_lab_order(
+                multi_research.snapshot(),candidates,batch['now'],
+                bool(state['lab_orders_enabled']),live_items=batch['items'],
+                diagnostics=diag)
+            diag.update(checked_at=time.time(),snapshot_ms=snapshot_ms,
+                        lab_scan_ms=round((time.monotonic()-scan_started)*1000),
+                        minutes_seconds=round(float(batch['now'])%60,2),
+                        fresh_closed_assets=int(batch.get('fresh_closed',0)),
+                        streaming_assets=int(batch.get('ready',0)),
+                        motor_running=True,execution_source='LAB_M1_ONLY')
+            state['lab_signal_diag']=diag
+            # Keep live chart meaningful while the laboratory waits for candidates.
+            if batch['items']:
+                chart_item=batch['items'][0]
+                state['candles']=chart_item.get('candles',[])[-50:]
+                state['chart_asset']=chart_item['asset']
+                state['chart_updated_at']=time.time()
+            if not proposal:
+                state['analysis']={'direction':None,'reason':'Laboratório: '+diag['reason']}
+                state['message']='Aguardando sinal validado do laboratório: '+diag['reason']
+                stop.wait(.15)
+                continue
+            item=next((v for v in batch['items'] if v['asset']==proposal['asset']
+                       and any(int(bar.get('from',-1))==proposal['candle']
+                       and int(bar.get('from',-1))+60<=float(batch['now'])
+                       for bar in v.get('candles',[]))),None)
+            if item is None:
+                state['lab_signal_diag']['reason']='ATIVO_SEM_VELA_FECHADA_COMPATIVEL'
+                stop.wait(.15)
+                continue
+            a={'direction':proposal['direction'],'candle':proposal['candle'],
+               'signal':proposal['direction'],
+               'reason':'Trader '+proposal['trader_name']+' · sinal M1 do laboratório validado · '+proposal['strategy'],
+               'checks':{'validação':str(proposal['samples'])+' resultados',
+                         'assertividade':str(proposal['accuracy'])+'%'}}
+            state['analysis']=a
             state['message']=a['reason']
-            if (c['asset'],a.get('candle'))!=last and a.get('direction'):
-                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'], 'sniper' if lab_choice else c.get('strategy','rejection'))
-                if not allowed:
-                    log(c['asset']+': '+reason);stop.wait(.2);continue
-                last=(c['asset'],a['candle']);state['last_candle']=last
-                with lock:
-                    if stop.is_set():break
-                    # Original order path preserved; only metadata / derived
-                    # guarded lab signal are added. One open order at a time.
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),
-                           'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],
-                           'status':'ENVIANDO','candle':a['candle'],
-                           'strategy_key':('lab:'+lab_choice['strategy_id']) if lab_choice else c.get('strategy','rejection'),
-                           'strategy':lab_choice['strategy'] if lab_choice else STRATEGIES[c.get('strategy','rejection')],
-                           'engine':'LAB_M1' if lab_choice else 'XTREME_PRINCIPAL',
-                           'trader_index':lab_choice['trader_index'] if lab_choice else 0,
-                           'trader_name':lab_choice['trader_name'] if lab_choice else 'Alex',
-                           'expiration':a['candle']+120}
-                    state['trades'].append(trade)
-                    state['uncertain']=True
-                if lab_choice:
-                    state['lab_executions']['attempted']+=1
-                    state['lab_executions'].update(last_status='ENVIANDO',
-                        last_reason=None,last_asset=c['asset'],
-                        last_strategy=lab_choice['strategy'],last_at=time.time())
-                order=client.call('order',asset=c['asset'],stake=c['stake'],
-                                  # Enforce >80% payout on research trades even though
-                                  # the original Sniper accepts >= user minimum.
-                                  payout=max(80.01,lab_choice['payout']) if lab_choice else c['payout'],
-                                  direction=a['direction'],candle=a['candle'],
-                                  strategy='sniper' if lab_choice else c.get('strategy','rejection'))
-                if not order['sent']:
-                    trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;log(order['reason'])
-                    if lab_choice:
-                        state['lab_executions']['refused']+=1
-                        state['lab_executions'].update(last_status='RECUSADA',
-                            last_reason=str(order['reason'])[:180],last_at=time.time())
-                else:
-                    if lab_choice:
-                        state['lab_executions']['accepted']+=1
-                        state['lab_executions'].update(last_status='CONFIRMADA',
-                            last_reason=None,last_at=time.time())
-                    trade.update(id=order['id'],status='ABERTA',payout=order['payout'],source=c.get('sniper_source') if c.get('strategy')=='sniper' else None,send_delay=order.get('send_delay'),catalog_age=order.get('catalog_age'));
-                    if order.get('sent_at') is not None:trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
-                    log('Ordem confirmada na DEMO. Aguardando resultado.')
-                    result=client.call('result',timeout=150,id=order['id'])
-                    trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
-                    trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
-                    state['balance']=result['balance'];state['uncertain']=False;log('Resultado confirmado: '+trade['status'])
+            state['candles']=item['candles'][-50:]
+            state['chart_asset']=item['asset']
+            state['chart_updated_at']=time.time()
+            key=(item['asset'],a['candle'])
+            if key==last:
+                stop.wait(.15)
+                continue
+            allowed,reason=entry_allowed(state['trades'],item['asset'],a['candle'],'lab_m1')
+            if not allowed:
+                log(item['asset']+': '+reason)
+                stop.wait(.2)
+                continue
+            with lock:
+                if stop.is_set() or not state['lab_orders_enabled']:
+                    break
+                last=key
+                state['last_candle']=key
+                trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),
+                       'day':day(),'asset':item['asset'],
+                       'direction':a['direction'],'stake':c['stake'],
+                       'status':'ENVIANDO','candle':a['candle'],
+                       'strategy_key':'lab:'+proposal['strategy_id'],
+                       'strategy':proposal['strategy'],'engine':'LAB_M1',
+                       'trader_index':proposal['trader_index'],
+                       'trader_name':proposal['trader_name'],
+                       'expiration':a['candle']+120}
+                state['trades'].append(trade)
+                state['uncertain']=True
+                state['lab_executions']['attempted']+=1
+                state['lab_executions'].update(last_status='ENVIANDO',
+                    last_reason=None,last_asset=item['asset'],
+                    last_strategy=proposal['strategy'],last_at=time.time())
+            order=client.call('order',asset=item['asset'],stake=c['stake'],
+                              payout=max(80.01,c['payout'],proposal['payout']),
+                              direction=a['direction'],candle=a['candle'],
+                              strategy='lab_m1')
+            if not order['sent']:
+                trade['status']='IGNORADA'
+                trade['reason']=order['reason']
+                state['uncertain']=False
+                state['lab_executions']['refused']+=1
+                state['lab_executions'].update(last_status='RECUSADA',
+                    last_reason=str(order['reason'])[:180],last_at=time.time())
+                log('Sinal do laboratório recusado pela Bullex: '+str(order['reason'])[:180])
+            else:
+                state['lab_executions']['accepted']+=1
+                state['lab_executions'].update(last_status='CONFIRMADA',
+                    last_reason=None,last_at=time.time())
+                trade.update(id=order['id'],status='ABERTA',payout=order['payout'],
+                             send_delay=order.get('send_delay'),
+                             catalog_age=order.get('catalog_age'))
+                if order.get('sent_at') is not None:
+                    trade['time']=datetime.fromtimestamp(order['sent_at'],timezone(timedelta(hours=-3))).isoformat(timespec='milliseconds')
+                log('Ordem do laboratório confirmada na DEMO: '+proposal['trader_name']+' · '+proposal['strategy'])
+                result=client.call('result',timeout=150,id=order['id'])
+                trade['result_time']=datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds')
+                trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
+                state['balance']=result['balance']
+                state['uncertain']=False
+                log('Resultado do trader '+proposal['trader_name']+': '+trade['status'])
             stop.wait(.15)
     except Exception as e:
-        log(str(e));state['connected']=False
+        log(str(e))
+        state['connected']=False
         if client:client.close()
         if state['uncertain']:
-            state['trades'][-1]['status']='INCERTA';log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
+            state['trades'][-1]['status']='INCERTA'
+            log('Ordem ou resultado incerto. Confira o histórico na Bullex antes de reconectar.')
     finally:
         state['running']=False
         state['lab_orders_enabled']=False
-        state['lab_signal_diag']={**state['lab_signal_diag'],'reason':'MOTOR_PARADO','motor_running':False,'checked_at':time.time()}
+        state['lab_signal_diag']={**state['lab_signal_diag'],
+                                  'reason':'MOTOR_PARADO','motor_running':False,
+                                  'checked_at':time.time()}
 
 @app.before_request
 def auth():
@@ -773,7 +750,7 @@ def office_overview():
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
             lab_orders_enabled=bool(state['lab_orders_enabled']),
-            office_mode='AMBOS_ATIVOS' if state['running'] and state['lab_orders_enabled'] else
+            office_mode='LABORATORIO_OPERANDO' if state['running'] and state['lab_orders_enabled'] else
                         'PARANDO' if stop.is_set() and state['running'] else
                         'AGUARDANDO_INICIO',
             dual_start_available=bool(state['connected'] and not state['running'] and
@@ -842,16 +819,15 @@ def config():
         except Exception as e:return jsonify(error=str(e)),400
 @app.post('/api/start')
 def start():
-    """One confirmed PRACTICE start turns on both engines atomically.
+    """Start lab analysis and its single PRACTICE trader order channel.
 
-    Lab research is always on while connected. The Xtreme Sniper remains the
-    priority trading motor; the lab motor may forward only qualified current M1
-    signals via the SAME serialized order path and shared risk limits.
+    No Xtreme Sniper signal is accepted. Lab candidates need independently
+    validated M1 history and fresh broker confirmation before any order.
     """
     global bot
     data=request.get_json(silent=True) or {}
-    if data.get('both_motors') is not True:
-        return jsonify(error='Confirme iniciar os dois motores na conta PRACTICE.'),400
+    if data.get('lab_only') is not True:
+        return jsonify(error='Confirme iniciar apenas o laboratório na conta PRACTICE.'),400
     with lock:
         if state['running']:
             return jsonify(ok=True,already_running=True,
@@ -863,33 +839,33 @@ def start():
         if not state['connected'] or state['uncertain']:
             return jsonify(error='Conecte e valide a DEMO antes de iniciar.'),409
         c=dict(state['config'])
-        # The Xtreme Sniper + Tendência NEVER gets replaced by lab studies.
-        c['strategy']='sniper'
+        # Only the LAB may send a broker order. No legacy strategy fallback.
+        c['strategy']='lab_m1'
         if c['asset'] not in state['assets']:
             return jsonify(error='Ativo não reconhecido pela corretora.'),400
         if not limits(c):
             return jsonify(error='Limites do dia atingidos.'),409
-        state['config']['strategy']='sniper'
+        state['config']['strategy']='lab_m1'
         state['lab_orders_enabled']=True
         state['lab_signal_diag']={**state['lab_signal_diag'],
                                  'reason':'AGUARDANDO_SINAL_M1',
                                  'eligible':0,'assigned':0,'fresh_assets':0,
                                  'crossings':0,'valid_signals':0,
                                  'checked_at':time.time(),'motor_running':True}
-        log('Escritório PRACTICE iniciado: Xtreme Sniper + Tendência prioritário; laboratório analisando continuamente e Motor B pronto para sinais M1 validados.')
+        log('Escritório PRACTICE iniciado: Motor A analisa; Motor B recebe EXCLUSIVAMENTE sinais M1 validados do laboratório. Xtreme Sniper automático desativado.')
         stop.clear()
         state['running']=True
         try:
-            bot=threading.Thread(target=loop,args=(c,),daemon=True,name='XtremeDualPractice')
+            bot=threading.Thread(target=loop,args=(c,),daemon=True,name='TraderOfficeLabPractice')
             bot.start()
         except Exception:
             stop.set()
             state['running']=False
             state['lab_orders_enabled']=False
             raise
-        return jsonify(ok=True,mode='PRACTICE',both_motors=True,
-                       primary='Xtreme Sniper + Tendência',
-                       secondary='Estratégias M1 validadas',
+        return jsonify(ok=True,mode='PRACTICE',lab_only=True,
+                       analysis_motor='LAB_M1',execution_motor='LAB_M1',
+                       execution_source='VALIDATED_LAB_SIGNAL_ONLY',
                        shared_order_channel=True,m5_execution=False)
 @app.post('/api/stop')
 def halt():
