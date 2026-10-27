@@ -1682,14 +1682,27 @@ function renderTraderLeaderboard(p){
   SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou cruzamento novo.',
   ATIVO_SEM_VELA_FECHADA_COMPATIVEL:'O sinal não corresponde à vela fechada mais recente da Bullex.',
   SINAL_VALIDADO_M1_ATUAL:'Sinal M1 validado na vela atual; ainda sujeito às verificações finais da Bullex.',
-  AGUARDANDO_MOTOR:'Aguardando inicialização do motor.'
+  AGUARDANDO_MOTOR:'Aguardando inicialização do motor.',
+  MOTOR_PARADO:'Motor parado: os traders acompanham estratégias, mas nenhuma nova ordem será enviada.',
+  FORA_JANELA_DE_ENTRADA_M1:'Aguardando a próxima virada M1; entradas são verificadas apenas nos primeiros 2 segundos.',
+  STREAM_M1_INDISPONIVEL:'Ativo candidato ainda não tem streaming de velas M1.',
+  HISTORICO_M1_INSUFICIENTE:'Ativo candidato ainda não tem histórico contínuo suficiente.',
+  HISTORICO_M1_INVALIDO:'Velas do ativo com lacunas ou valores inválidos.',
+  VELA_M1_ATRASADA:'As velas do ativo chegaram após a janela de 2 segundos.',
+  XTREME_PRINCIPAL_TEM_PRIORIDADE:'O Xtreme principal teve um sinal e recebeu prioridade neste ciclo.'
  };
- const reason=descriptions[diag.reason]||'Aguardando nova vela M1 e verificação de execução.';
+ const reason=!p.running?'Motor PARADO. O laboratório continua estudando, mas nenhum trader pode executar ordens.':
+   descriptions[diag.reason]||'Aguardando nova vela M1 e verificação de execução.';
  $('labEntryDiagnostics').textContent='🧪 Motor B · '+reason+
   ' | Estratégias elegíveis: '+Number(diag.eligible||0)+
   ' | Traders atribuídos: '+Number(diag.assigned||0)+
   ' | Velas dentro do prazo: '+Number(diag.fresh_assets||0)+
   ' | Sinais novos: '+Number(diag.valid_signals||0)+
+  (Number.isFinite(Number(diag.snapshot_ms))?' | Recepção de dados: '+Number(diag.snapshot_ms)+' ms':'')+
+  (Number.isFinite(Number(diag.xtreme_scan_ms))?' | Análise Xtreme: '+Number(diag.xtreme_scan_ms)+' ms':'')+
+  (diag.payout_rejected?' | Payout insuficiente: '+diag.payout_rejected:'')+
+  (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
+  (diag.stale_candle?' | Velas atrasadas: '+diag.stale_candle:'')+
   '. Uma ordem só é confirmada após aceitação pela Bullex.';
  const tv=charts.find(c=>c.roomView==='ranking');if(tv)drawRoomTV(tv);
 }
