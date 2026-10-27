@@ -1575,9 +1575,13 @@ async function lab40Setup(){
   const resp=await hubApi('lab40');
   if(resp.count!==40||!Array.isArray(resp.strategies)||resp.strategies.length!==40)throw Error('Catálogo de estratégias incompleto.');
   lab40Catalog=resp.strategies;
-  const stored=JSON.parse(localStorage.getItem(LAB40_CACHE_KEY)||'null');
-  if(stored&&stored.source==='HISTORICO_BULLEX_PRACTICE'&&Array.isArray(stored.strategies)&&stored.strategies.length===40)lab40Use(stored,true);
-  else lab40Message('40 estratégias prontas. Selecione um ativo M1, mantenha o robô parado e toque em “Testar 40 estratégias”. Resultados não são ordens reais.');
+  let stored=null;try{stored=JSON.parse(localStorage.getItem(LAB40_CACHE_KEY)||'null');}catch(e){}
+  if(resp.latest&&resp.latest.source==='HISTORICO_BULLEX_PRACTICE'&&Array.isArray(resp.latest.strategies)&&resp.latest.strategies.length===40){
+   lab40Use(resp.latest,false);
+  }else if(lab40ServerVersion<0&&stored&&stored.source==='HISTORICO_BULLEX_PRACTICE'&&
+          stored.asset===resp.tracking?.asset&&Array.isArray(stored.strategies)&&stored.strategies.length===40){
+   lab40Use(stored,true);
+  }else lab40Message('40 estratégias cadastradas. O acompanhamento M1 usa velas fechadas da PRACTICE e atualiza resultados quando houver dados; sem ordens automáticas.');
   refreshPipeline();
  }catch(e){lab40Initialized=false;lab40Message('Não foi possível carregar o catálogo: '+e.message);refreshPipeline();}
 }
