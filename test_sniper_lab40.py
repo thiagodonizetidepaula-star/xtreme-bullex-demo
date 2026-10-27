@@ -164,6 +164,16 @@ class ResearchLabTests(unittest.TestCase):
         self.assertEqual(status['studies'],1)
         self.assertEqual(status['ready_by_timeframe']['M5'],0)
         self.assertEqual(status['signals'],[])
+    def test_research_threads_recover_inside_serving_worker(self):
+        # Static regression: avoid importing app.py (which starts live threads).
+        from pathlib import Path
+        source=(Path(__file__).resolve().parent/'app.py').read_text()
+        self.assertIn('def ensure_research_threads():',source)
+        self.assertIn('if pid!=research_thread_pid:',source)
+        self.assertIn('ensure_research_threads()\n    if request.method',source)
+        self.assertIn("('MultiTimeframeStudy',multi_worker)",source)
+        self.assertIn("('ResearchMarketScanner',multi_paused_scanner)",source)
+        self.assertIn("'scanner_alive':any(",source)
     def test_short_history_rejected(self):
         with self.assertRaises(ValueError):evaluate(sample_bars(40),'EURUSD')
 if __name__=='__main__':

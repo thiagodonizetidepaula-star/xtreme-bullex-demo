@@ -117,7 +117,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div class="rooms">
 <section class="room" id="automaticLabRoom">
 <h3>🧠 Sala esquerda · Análise automática</h3>
-<div class="roomdesc">Xtreme Sniper + Tendência (principal) e 40 variações · todos os ativos elegíveis que a Bullex entregar · M1 e M5 · <strong>payout M1 acima de 80%</strong>.</div>
+<div class="roomdesc">Xtreme Sniper + Tendência (principal) e 40 variações · M1 e M5 · <strong>payout M1 acima de 80%</strong>. A pesquisa inicia automaticamente ao conectar a PRACTICE; não precisa ativar o Motor B.</div>
 <div class="roomStats"><span>Ativos elegíveis: <b id="multiAssets">0</b></span><span>Analisados: <b id="multiStudied">0</b></span><span>M1 / M5: <b id="multiPeriods">0 / 0</b></span></div>
 <div id="multiState" class="autoLabMeta">Aguardando conexão PRACTICE e velas reais.</div>
 <div id="multiLast" class="lab40Help">O laboratório recebe velas fechadas. Nenhuma estratégia é aprovada sem no mínimo 30 resultados fora da amostra.</div>
@@ -1497,8 +1497,10 @@ function renderMultiLab(data,p){
  const diag=data.diagnostics||{};
  const processed=Number(diag.processed||0),queued=Number(diag.queued||0),seen=Number(diag.received_items||0);
  const workerStopped=diag.worker_alive===false;
+ const scannerStopped=diag.scanner_alive===false;
  const busySeconds=Number(diag.active_seconds||0);
- const message=workerStopped?'⚠️ Processador do laboratório não está ativo. Não usar o Motor B.':
+ const message=workerStopped?'⚠️ Processador do laboratório ainda não iniciou. Aguarde recuperação automática; não usar o Motor B.':
+  scannerStopped?'⚠️ Coletor de históricos não iniciou. Aguarde recuperação automática; não usar Motor B.':
   (diag.last_error||diag.scanner_last_error)||
   (busySeconds>20?'⚠️ Estudo do ativo '+String(diag.active_asset||'')+' está levando '+busySeconds+' segundos; processamento limitado.':
    seen===0?'Ainda sem velas recebidas pelo motor.':

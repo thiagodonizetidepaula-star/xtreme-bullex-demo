@@ -148,7 +148,9 @@ def multi_paused_scanner():
                 multi_research.set_market(results.get('assets') or [])
                 multi_scan_state['catalog_at']=time.time()
             with multi_research.lock:assets=list(multi_research.market)
-            if not assets:continue
+            if not assets:
+                multi_scan_state['last_error']='Nenhum ativo aberto com payout superior a 80% foi retornado pela Bullex.'
+                continue
             cursor=multi_scan_state['cursor']%len(assets)
             asset=assets[cursor]
             multi_scan_state['cursor']=(cursor+1)%len(assets)
@@ -445,6 +447,9 @@ def auth():
         return
     if request.path in ['/','/office','/legacy','/health','/api/access']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
+    # Start/recover research threads inside the serving Gunicorn worker, not
+    # only at module import time (which may happen before a process fork).
+    ensure_research_threads()
     if request.method=='POST' and request.headers.get('X-CSRF-Token')!=session.get('csrf'):return jsonify(error='Sessão inválida.'),403
 
 @app.after_request
@@ -693,6 +698,8 @@ def office_overview():
                     'research_queue_capacity':multi_queue.maxsize,
                     'next_stream_research_at':multi_next_dispatch,
                     'worker_alive':any(t.name=='MultiTimeframeStudy' and t.is_alive() for t in threading.enumerate()),
+                    'scanner_alive':any(t.name=='ResearchMarketScanner' and t.is_alive() for t in threading.enumerate()),
+                    'research_pid':os.getpid(),
                     'scanner_busy':multi_scan_state['busy'],
                     'scanner_last_error':multi_scan_state['last_error'],
                     'live_bars_ready':state.get('stream_ready',0),
@@ -771,23 +778,45 @@ def logout():
         if client:client.close()
         state['connected']=False;session.clear()
     return jsonify(ok=True)
-threading.Thread(target=lab40_auto_worker,daemon=True,name='XtremeLabM1').start()
-multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
-multi_worker_thread.start()
-def multi_worker_supervisor():
-    """Recover an unexpectedly exited research thread without affecting broker orders."""
-    global multi_worker_thread
-    while True:
-        time.sleep(20)
-        if multi_worker_thread.is_alive():continue
-        multi_diag['last_error']='Processador de estudos reiniciado após encerramento inesperado.'
-        print('XTREME LAB: restarting research worker',flush=True)
-        with multi_pending_lock:multi_pending.clear()
-        while True:
-            try:multi_queue.get_nowait();multi_queue.task_done()
-            except queue.Empty:break
-        multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
-        multi_worker_thread.start()
-threading.Thread(target=multi_worker_supervisor,daemon=True,name='ResearchSupervisor').start()
-threading.Thread(target=multi_paused_scanner,daemon=True,name='ResearchMarketScanner').start()
+# Gunicorn may import app.py before worker processes fork. Threads created in
+# the parent don't survive a fork. Ensure threads inside authenticated requests.
+research_threads={}
+research_thread_pid=os.getpid()
+research_thread_guard=threading.Lock()
+research_last_start={}
+def research_thread_body(label,task):
+    try:task()
+    except BaseException as error:
+        multi_diag['last_error']='Falha na rotina '+label+': '+str(error)[:180]
+        multi_diag['thread_failed_at']=time.time()
+        print('XTREME LAB THREAD FAILED '+label+': '+repr(error),flush=True)
+
+def ensure_research_threads():
+    global research_thread_pid
+    with research_thread_guard:
+        pid=os.getpid()
+        if pid!=research_thread_pid:
+            # Threads from a Gunicorn preload/master do not survive worker fork.
+            research_thread_pid=pid
+            research_threads.clear()
+            research_last_start.clear()
+            with multi_pending_lock:multi_pending.clear()
+            multi_diag['last_error']='Iniciando pesquisa no processo ativo.'
+        for label,task in (
+            ('XtremeLabM1',lab40_auto_worker),
+            ('MultiTimeframeStudy',multi_worker),
+            ('ResearchMarketScanner',multi_paused_scanner),
+        ):
+            existing=research_threads.get(label)
+            if existing is not None and existing.is_alive():continue
+            if time.time()-research_last_start.get(label,0)<5:continue
+            thread=threading.Thread(
+                target=research_thread_body,args=(label,task),
+                name=label,daemon=True)
+            research_threads[label]=thread
+            research_last_start[label]=time.time()
+            thread.start()
+            print('XTREME LAB THREAD STARTED '+label+' pid='+str(pid),flush=True)
+
+ensure_research_threads()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
