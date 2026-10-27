@@ -97,8 +97,11 @@ def multi_worker():
         multi_diag['active_asset']=asset
         multi_diag['active_since']=time.time()
         try:
+            multi_diag['active_stage']='calculando 41 estratégias M1'
             m1=multi_research.ingest(asset,'M1',bars,source)
+            multi_diag['active_stage']='agregando velas M5'
             m5bars=aggregate_m5(bars)
+            multi_diag['active_stage']='calculando M5' if m5bars else 'sem histórico M5 suficiente'
             m5=bool(m5bars) and multi_research.ingest(asset,'M5',m5bars,source)
             multi_diag['processed']+=1
             multi_diag['last_duration_seconds']=round(time.time()-multi_diag['active_since'],2)
@@ -116,6 +119,7 @@ def multi_worker():
         finally:
             with multi_pending_lock:multi_pending.discard(asset)
             multi_diag['active_asset']=None
+            multi_diag['active_stage']=None
             multi_diag['active_since']=0
             multi_queue.task_done()
         time.sleep(.07)
@@ -683,6 +687,7 @@ def office_overview():
                     'pending_queue':multi_queue.qsize(),
                     'pending_unique_assets':len(multi_pending),
                     'active_asset':multi_diag.get('active_asset'),
+                    'active_stage':multi_diag.get('active_stage'),
                     'active_since':multi_diag.get('active_since'),
                     'active_seconds':max(0,int(time.time()-multi_diag['active_since'])) if multi_diag.get('active_since') else 0,
                     'research_queue_capacity':multi_queue.maxsize,
@@ -767,6 +772,22 @@ def logout():
         state['connected']=False;session.clear()
     return jsonify(ok=True)
 threading.Thread(target=lab40_auto_worker,daemon=True,name='XtremeLabM1').start()
-threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy').start()
+multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
+multi_worker_thread.start()
+def multi_worker_supervisor():
+    """Recover an unexpectedly exited research thread without affecting broker orders."""
+    global multi_worker_thread
+    while True:
+        time.sleep(20)
+        if multi_worker_thread.is_alive():continue
+        multi_diag['last_error']='Processador de estudos reiniciado após encerramento inesperado.'
+        print('XTREME LAB: restarting research worker',flush=True)
+        with multi_pending_lock:multi_pending.clear()
+        while True:
+            try:multi_queue.get_nowait();multi_queue.task_done()
+            except queue.Empty:break
+        multi_worker_thread=threading.Thread(target=multi_worker,daemon=True,name='MultiTimeframeStudy')
+        multi_worker_thread.start()
+threading.Thread(target=multi_worker_supervisor,daemon=True,name='ResearchSupervisor').start()
 threading.Thread(target=multi_paused_scanner,daemon=True,name='ResearchMarketScanner').start()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
