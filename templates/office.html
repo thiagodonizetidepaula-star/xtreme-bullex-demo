@@ -1629,10 +1629,10 @@ function renderMultiLab(data,p){
   retest:'Xtreme Reteste',sniper:'Xtreme Sniper',lab_m1:'Laboratório M1 · Traders'
  };
  const cur=p?.config?.strategy||'desconhecida';
- $('preservedMotor').textContent='🔒 Motor anterior preservado: '+(strategies[cur]||cur);
+ $('preservedMotor').textContent='📡 Fonte exclusiva de ordens: Laboratório M1';
  $('preservedMotorInfo').textContent='Conta '+(p?.connected?'PRACTICE conectada':'desconectada')+
   ' · '+(p?.running?'robô em operação':'robô parado')+
-  '. O laboratório não muda a estratégia, não envia ordens e não aumenta os limites. M5 simultâneo ainda não é suportado.';
+  '. Xtreme Sniper automático desativado. Apenas sinais M1 validados do laboratório podem tentar ordens DEMO; M5 é somente estudo.';
  const history=$('multiRecentTrades');history.replaceChildren();
  const past=[...(p?.trades||[])].reverse().slice(0,6);
  for(const t of past){
@@ -1738,11 +1738,11 @@ function hubLoadLive(p){
  const approved=Number(p.multi_lab?.candidates?.length||0);
  const running=!!p.running;
  $('dualMotorStatus').textContent=running?
-  '🟢 ESCRITÓRIO RODANDO · Motor A: Xtreme Sniper + Tendência procurando entradas · '+
-  'Motor B: '+(on?'ATIVO, recebendo estratégias aprovadas e aguardando sinais M1.':'FINALIZANDO operações.')+
+  '🟢 ESCRITÓRIO RODANDO · Motor A: analisando estratégias e gerando sinais · '+
+  'Motor B: '+(on?'ATIVO, recebendo APENAS sinais M1 validados do laboratório.':'FINALIZANDO operações.')+
   ' · Estudos '+labStudies+' · Candidatas '+approved+' · Ordens sequenciais.':
   '🟡 ESCRITÓRIO PARADO · Laboratório permanece em pesquisa somente leitura enquanto conectado. '+
-  'Últimos estudos '+labStudies+' · Candidatas '+approved+'. Toque em Iniciar escritório para ativar automaticamente os dois motores.';
+  'Últimos estudos '+labStudies+' · Candidatas '+approved+'. Inicie para ativar os traders usando exclusivamente o laboratório.';
  const roster=$('traderRoster');roster.replaceChildren();
  const work=Array.isArray(p.trader_work)?p.trader_work:[];
  for(let i=0;i<12;i++){
@@ -1850,18 +1850,19 @@ $('hubConfigForm').onsubmit=async e=>{
 $('hubStartBtn').onclick=async()=>{
  if(!hubState||hubBusy||!hubState.connected||hubState.running||hubState.uncertain||!hubState.management?.can_trade)return;
  const c=hubState.config||{};
- if(!confirm('INICIAR ESCRITÓRIO · APENAS BULLEX PRACTICE\n\n'+
-  'MOTOR A: Xtreme Sniper + Tendência continuará sendo a estratégia principal.\n'+
-  'MOTOR B: Laboratório pesquisará e encaminhará sinais M1 validados para operações automáticas DEMO.\n'+
-  'Payout Motor B: acima de 80%, amostras e filtros de risco obrigatórios.\n'+
-  'Ordens dos dois motores: UMA POR VEZ; M5 somente estudo.\n\n'+
+ if(!confirm('INICIAR LABORATÓRIO E TRADERS · APENAS BULLEX PRACTICE\n\n'+
+  'MOTOR A: pesquisa e valida as estratégias.\n'+
+  'MOTOR B: executa SOMENTE sinais M1 aprovados pelo laboratório.\n'+
+  'Xtreme Sniper automático: DESATIVADO.\n'+
+  'Exige validação acima de 60% em 30 testes, payout acima de 80% e os filtros de segurança.\n'+
+  'Operações: uma por vez; M5 apenas estudo.\n\n'+
   'Valor por operação: '+String(c.stake)+' '+String(hubState.currency||'USD')+
-  '\nLimite diário compartilhado: '+String(c.limit)+
-  '\nStops compartilhados conforme suas configurações.\n\nCONFIRMAR E INICIAR OS DOIS?'))return;
- await hubExecute('start',{both_motors:true},
-  'Escritório iniciando: Xtreme Sniper principal e Motor B em pesquisa/operação PRACTICE.');
+  '\nLimite diário: '+String(c.limit)+
+  '\nStops conforme suas configurações.\n\nCONFIRMAR E INICIAR?'))return;
+ await hubExecute('start',{lab_only:true},
+  'Escritório iniciando: análise e traders em PRACTICE com sinais exclusivos do laboratório.');
 };
-$('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada dos dois motores solicitada. Ordens já enviadas continuarão acompanhadas até o resultado.');};
+$('hubStopBtn').onclick=async()=>{if(hubState?.running&&!hubBusy)await hubExecute('stop',{},'Parada dos traders solicitada. Ordens já enviadas continuarão acompanhadas até o resultado.');};
 $('hubRefreshBtn').onclick=hubRefresh;
 $('hubLogoutBtn').onclick=async()=>{
  if(hubBusy||hubState?.running||hubState?.uncertain)return;
