@@ -139,38 +139,82 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
     return output
 
 
-def select_lab_order(snapshot, market, now, enabled):
-    """Select one fresh candidate; broker order needs additional live checks."""
-    if not enabled or not isinstance(snapshot,dict):return None
-    assets={str(c['asset']):float(c['payout']) for c in market
-            if isinstance(c,dict) and isinstance(c.get('asset'),str)
-            and isinstance(c.get('payout'),(int,float))}
-    roster=assign_desks(snapshot.get('candidates') or [])
+def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostics=None):
+    """Evaluate verified study strategies from the CURRENT closed M1 streaming bars.
+
+    This avoids the historical-study worker's seconds-long delay after the
+    candle closes. It never backdates research signals, extends the broker's
+    strict two-second execution window, or changes the Xtreme primary engine.
+    """
+    stats={'eligible':0,'assigned':0,'fresh_assets':0,'crossings':0,
+           'valid_signals':0,'reason':'SEM_CANDIDATAS'}
+    def finish(value,reason):
+        stats['reason']=reason
+        if isinstance(diagnostics,dict):diagnostics.update(stats)
+        return value
+    if not enabled or not isinstance(snapshot,dict):
+        return finish(None,'MOTOR_B_DESLIGADO')
+    # Cheap fail-fast outside the broker's strict 2-second M1 entry window:
+    # avoid repeatedly calculating hundreds of historical candle indicators.
+    if not 0<=float(now)%60<=MAX_SIGNAL_AGE_SEC:
+        return finish(None,'SEM_VELAS_M1_NO_PRAZO')
+    market_map={str(c['asset']):float(c['payout']) for c in market
+         if isinstance(c,dict) and isinstance(c.get('asset'),str)
+         and isinstance(c.get('payout'),(int,float))
+         and math.isfinite(c['payout'])}
+    from sniper_lab40 import CANDIDATES,WARMUP
+    from multiasset_lab import latest_direction
+    study={v['id']:v for v in CANDIDATES}
+    candidates=[c for c in snapshot.get('candidates',[]) if research_eligible(c)]
+    stats['eligible']=len(candidates)
+    if not candidates:return finish(None,'SEM_CANDIDATAS_VALIDADAS')
+    roster=assign_desks(candidates)
     assigned={r['strategy_id']:r for r in roster[1:]}
-    by_id={(c.get('asset'),c.get('timeframe'),c.get('id')):c
-           for c in snapshot.get('candidates') or [] if research_eligible(c)}
-    ranked=[]
-    for signal in snapshot.get('signals') or []:
-        if not isinstance(signal,dict) or signal.get('timeframe')!='M1':continue
-        id_=str(signal.get('id',''))
-        if id_ not in assigned:continue
-        key=(signal.get('asset'),signal.get('timeframe'),signal.get('id'))
-        evidence=by_id.get(key)
-        if not evidence:continue
-        asset=str(signal.get('asset',''))
-        live_payout=assets.get(asset,0)
-        if not live_payout>MIN_PAYOUT:continue
-        candle_close=signal.get('candle_close')
-        try: candle_close=int(candle_close)
-        except (TypeError,ValueError,OverflowError):continue
-        if not 0<=now-candle_close<=MAX_SIGNAL_AGE_SEC:continue
-        if signal.get('direction') not in ('call','put'):continue
-        if float(evidence['payout_m1'])>live_payout+0.01:continue
-        ranked.append({
-            'asset':asset,'direction':signal['direction'],'candle':candle_close-60,
-            'candle_close':candle_close,'strategy_id':id_,'strategy':str(evidence['name']),
-            'trader_index':assigned[id_]['index'],'trader_name':assigned[id_]['name'],
-            'samples':int(evidence['samples']),'accuracy':float(evidence['accuracy']),
-            'payout':live_payout,'timeframe':'M1'})
-    ranked.sort(key=lambda s:(-s['accuracy'],-s['samples'],s['asset'],s['strategy_id']))
-    return ranked[0] if ranked else None
+    stats['assigned']=len(assigned)
+    if not assigned:return finish(None,'SEM_TRADERS_ATRIBUIDOS')
+    # Current snapshots come directly from the authenticated streaming worker.
+    # Process only candidate assets, never another broker request.
+    items={str(v['asset']):v.get('candles',[]) for v in (live_items or [])
+           if isinstance(v,dict) and isinstance(v.get('asset'),str)}
+    signals=[]
+    for candidate in candidates:
+        identifier=str(candidate['id'])
+        if identifier not in assigned or candidate.get('timeframe')!='M1':continue
+        asset=str(candidate['asset'])
+        payout=market_map.get(asset,0)
+        if payout<=MIN_PAYOUT or payout+0.01<float(candidate['payout_m1']):continue
+        raw=items.get(asset) or []
+        if len(raw)<WARMUP+1:continue
+        try:
+            bars=sorted(raw,key=lambda x:int(x['from']))[-150:]
+            last=int(bars[-1]['from'])
+            if len(bars)<WARMUP+1 or any(
+                int(right['from'])-int(left['from'])!=60
+                for left,right in zip(bars[-(WARMUP+1):],bars[-WARMUP:])):
+                continue
+        except (KeyError,TypeError,ValueError,OverflowError):continue
+        close_time=last+60
+        if not 0<=now-close_time<=MAX_SIGNAL_AGE_SEC:continue
+        stats['fresh_assets']+=1
+        spec=study.get(identifier)
+        if spec is None:continue
+        try:direction=latest_direction(bars,spec)
+        except (KeyError,TypeError,ValueError,ArithmeticError):continue
+        if direction not in ('call','put'):continue
+        stats['crossings']+=1
+        stats['valid_signals']+=1
+        signals.append({
+            'asset':asset,'direction':direction,'candle':last,
+            'candle_close':close_time,'strategy_id':identifier,
+            'strategy':str(candidate['name']),
+            'trader_index':assigned[identifier]['index'],
+            'trader_name':assigned[identifier]['name'],
+            'samples':int(candidate['samples']),
+            'accuracy':float(candidate['accuracy']),
+            'payout':payout,'timeframe':'M1'})
+    if not signals:
+        reason=('SEM_VELAS_M1_NO_PRAZO' if stats['fresh_assets']==0
+                else 'SEM_CRUZAMENTO_VALIDADO_NA_VELA')
+        return finish(None,reason)
+    signals.sort(key=lambda x:(-x['accuracy'],-x['samples'],x['asset'],x['strategy_id']))
+    return finish(signals[0],'SINAL_VALIDADO_M1_ATUAL')

@@ -8,6 +8,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 #automaticLabRoom,#automaticOpsRoom{min-width:0}
 #automaticLabRoom details{margin:8px 0}
 #automaticLabRoom summary{cursor:pointer;color:#b6eddd;font-weight:600}
+.leaderBoardRows{display:grid;gap:6px}.leaderBoardRow{display:grid;grid-template-columns:35px minmax(0,1fr) auto;gap:9px;align-items:center;padding:10px;border:1px solid #345668;border-radius:9px;background:#132b3b}.leaderBoardRow strong{color:#dbfbe9}.leaderBoardRow small{display:block;margin-top:3px;color:#a8c2cc}.leaderBoardRow b{font-variant-numeric:tabular-nums;color:#7cf0b9}.leaderBoardRow .rank{font-size:19px;font-weight:750;text-align:center}.leaderBoardSub{font-size:12px;color:#adcad0;margin:7px 0}
 .traderRoster{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:280px;overflow:auto}.traderSlot{background:#17303e;border:1px solid #355b66;border-radius:7px;padding:7px;font-size:12px;min-width:0}.traderSlot.in-session{border-color:#5aa99a}.traderSlot.open-trade{border-color:#edc472;box-shadow:inset 0 0 0 1px #806b39}.traderSlot.win-trade{border-color:#53b988}.traderSlot.loss-trade{border-color:#d47783}
 .traderSlot .deskStatus{display:block;font-size:11px;font-weight:750;color:#9ad9dc;letter-spacing:.02em;margin:6px 0 4px}
 .traderSlot .deskScore{margin-top:7px;font-size:11px;color:#d5e4eb}
@@ -144,6 +145,10 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <div class="favoriteBox"><h4>👥 Traders e suas estratégias · 12 mesas</h4>
 <div class="lab40Help">Distribuição automática: uma estratégia validada por trader. Cada mesa acompanha seus ativos, sinais e WIN/LOSS confirmados. Os sinais não são ordens até a Bullex aceitar a entrada. As ordens compartilham o mesmo limite e são enviadas uma por vez.</div>
 <div id="traderRoster" class="traderRoster"><small>Esperando lista de estratégias validadas.</small></div></div>
+<div class="favoriteBox"><h4>🏆 Mural dos melhores traders · Bullex PRACTICE</h4>
+<div class="leaderBoardSub" id="leaderboardUpdated">O mural usa somente WIN/LOSS de ordens confirmadas na sessão atual. Não usa acertos de backtest.</div>
+<div id="leaderboardRows" class="leaderBoardRows"><small>Sem operações confirmadas até agora.</small></div></div>
+<div class="hubInfo" id="labEntryDiagnostics" aria-live="polite">Motor B: aguardando ativação e velas válidas.</div>
 </section>
 
 <section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper + Tendência</h3>
@@ -195,6 +200,7 @@ const makeStudy=()=>strategies.map((name,i)=>({name,wins:studyWinSeeds[i],sample
 let officeBridgeToken='',officeSnapshot=null,officePollTimer=null,bridgeLinked=false,officeIntegratedMode=true;
 let lab40Catalog=[],lab40Rows=[],lab40Primary=null,lab40Latest=null,lab40Initialized=false,lab40Working=false;
 let lastMultiLab=null;
+let latestTraderRanking=null;
 let labMotorBusy=false;
 let lab40ServerVersion=-1,lab40ServerAsset='',lab40SyncBusy=false,lab40TrackBusy=false;
 function actualStudies(){
@@ -521,6 +527,31 @@ function drawBigChart(c){
 }
 
 function drawRoomTV(c){
+ if(c.roomView==='ranking'){
+  const g=c.ctx,w=c.cv.width,h=c.cv.height;
+  const leaderboard=latestTraderRanking;
+  g.fillStyle='#091f2e';g.fillRect(0,0,w,h);
+  g.fillStyle='#e6c985';g.font='bold 29px system-ui';
+  g.fillText('🏆 MURAL DOS MELHORES TRADERS',24,46);
+  g.font='16px system-ui';g.fillStyle='#aac9cd';
+  g.fillText('BULLEX PRACTICE · RESULTADOS CONFIRMADOS · SESSAO ATUAL',24,76);
+  const rows=Array.isArray(leaderboard?.ranking)?leaderboard.ranking:[];
+  if(!rows.length){g.fillStyle='#c8dcda';g.font='bold 22px system-ui';
+   g.fillText('Aguardando primeira operacao finalizada na PRACTICE',27,178);}
+  else for(let i=0;i<Math.min(rows.length,8);i++){
+   const x=rows[i],y=121+i*34;
+   g.fillStyle=i%2?'#133448':'#153d46';g.fillRect(20,y-22,w-40,33);
+   g.fillStyle=i<3?'#f5d28a':'#b5e3d7';g.font='bold 19px system-ui';
+   g.fillText((i+1)+'. '+String(x.name||'')+' · '+Number(x.wins||0)+'W / '+Number(x.losses||0)+'L',31,y);
+   g.textAlign='right';g.fillStyle=Number(x.profit||0)>=0?'#81e8b5':'#ff93a1';
+   g.fillText((Number(x.profit||0)>=0?'+':'')+Number(x.profit||0).toFixed(2)+' USD',w-27,y);
+   g.textAlign='left';
+  }
+  g.fillStyle='#a3c2c7';g.font='15px system-ui';
+  g.fillText('Rank por lucro confirmado · amostras pequenas podem oscilar',24,h-21);
+  c.tex.needsUpdate=true;return;
+ }
+
  if(lastMultiLab){
   const lab=c.roomView==='lab',d=lastMultiLab,g=c.ctx,w=c.cv.width,h=c.cv.height;
   g.fillStyle='#092432';g.fillRect(0,0,w,h);
@@ -591,7 +622,7 @@ function drawRoomTV(c){
 function bigTV(pair,x,y,z,w,h,seed){
  const cv=document.createElement('canvas');cv.width=768;cv.height=432;
  const ctx=cv.getContext('2d'),tex=new THREE.CanvasTexture(cv);tex.colorSpace=THREE.SRGBColorSpace;
- const roomView=pair==='LABORATÓRIO'?'lab':pair==='OPERAÇÕES DEMO'?'operations':null;
+ const roomView=pair==='LABORATÓRIO'?'lab':pair==='OPERAÇÕES DEMO'?'operations':pair==='MURAL DOS TRADERS'?'ranking':null;
  const reception=pair==='RECEPÇÃO BULLEX';
  const ch={ctx,cv,tex,seed,big:true,pair,roomView,reception,prices:Array.from({length:38},(_,i)=>76+Math.sin(i*.44+seed)*9+Math.sin(i*.16)*7+(i-18)*.23)};
  charts.push(ch);drawBigChart(ch);box(w+.22,h+.2,.12,mat('#0b1a24'),x,y,z-.07);
@@ -603,7 +634,7 @@ setInterval(()=>{if(document.hidden||!sceneVisible)return;
  charts.filter(c=>c.big&&!c.reception).forEach(c=>drawBigChart(c));
 },12500);
 // TVs on back wall of each office, never on the central glass partition.
-bigTV('LABORATÓRIO',-4,2.6,-5.72,3.2,1.9,6);bigTV('OPERAÇÕES DEMO',4,2.6,-5.72,3.2,1.9,16);
+bigTV('LABORATÓRIO',-4,2.6,-5.72,3.2,1.9,6);bigTV('MURAL DOS TRADERS',2.03,2.6,-5.72,2.25,1.9,17);bigTV('OPERAÇÕES DEMO',5.0,2.6,-5.72,2.5,1.9,16);
 // Separate waiting room beyond the office glass: carpet, sofa, coffee table and TV.
 const receptionGlass=new THREE.MeshPhysicalMaterial({color:'#b6e1ec',roughness:.07,transparent:true,opacity:.21,depthWrite:false,side:THREE.DoubleSide});
 // Reception glass has a real opening at z=7.75 for staff returning from the sofa.
@@ -656,7 +687,7 @@ const ray=new THREE.Raycaster(),pointer=new THREE.Vector2();let down=null,select
 function setFocusMode(on){controls.enablePan=on;controls.mouseButtons.LEFT=on?THREE.MOUSE.PAN:THREE.MOUSE.ROTATE;controls.mouseButtons.RIGHT=on?THREE.MOUSE.ROTATE:THREE.MOUSE.PAN;controls.touches.ONE=on?THREE.TOUCH.PAN:THREE.TOUCH.ROTATE;}
 function focusOnScreen(mesh){
  if(!returnCamera)returnCamera={pos:camera.position.clone(),target:controls.target.clone()};
- const pos=mesh.getWorldPosition(new THREE.Vector3()),screen=mesh.userData.screen,big=screen.kind==='tv';
+ const pos=mesh.getWorldPosition(new THREE.Vector3()),screen=mesh.userData.screen,big=screen.kind!=='desk';
  focusTarget=pos.clone();focusPosition=pos.clone().add(new THREE.Vector3(0,big?.18:.07,big?Math.max(2.2,mesh.geometry.parameters.width*.9):1.05));
  camera.position.copy(focusPosition);controls.target.copy(focusTarget);controls.minDistance=big?1.3:.52;controls.maxDistance=big?13:8;setFocusMode(true);controls.update();
  activeScreen=screen;$('inspector').classList.add('open');refreshInspector();
@@ -674,13 +705,19 @@ function refreshInspector(){
  const ss=activeScreen,desk=ss.kind==='desk',
        lab=ss.kind==='lab'||desk&&[0,1,2,6,7,8].includes(ss.index),
        linked=bridgeLinked,shot=officeSnapshot;
- $('screenTitle').textContent=lab?'🧠 Laboratório de Estratégias':'📈 Central de Operações';
+ $('screenTitle').textContent=ss.kind==='ranking'?'🏆 Mural dos melhores traders':lab?'🧠 Laboratório de Estratégias':'📈 Central de Operações';
  $('screenSource').textContent=linked?(officeIntegratedMode?'BULLEX PRACTICE · CONTROLE INTEGRADO NO ESCRITÓRIO':'BULLEX PRACTICE · SOMENTE LEITURA'):'SIMULAÇÃO SINTÉTICA · SEM DADOS REAIS';
  const studies=[...displayedStudies()].sort((a,b)=>studyRate(b)-studyRate(a));
  const trades=linked?[...(shot?.trades||[])].reverse():demoLedger.recent;
- const entries=lab?(desk?studies.slice(ss.index%Math.max(1,studies.length),ss.index%Math.max(1,studies.length)+1):studies):trades;
+ const entries=ss.kind==='ranking'?(shot?.trader_leaderboard?.ranking||[]):lab?
+  (desk?studies.slice(ss.index%Math.max(1,studies.length),ss.index%Math.max(1,studies.length)+1):studies):trades;
  const m=shot?.management||{};
- const boxes=lab?[
+ const boxes=ss.kind==='ranking'?[
+  ['Traders com resultado',entries.length],
+  ['Ordens confirmadas',shot?.trader_leaderboard?.total_confirmed||0],
+  ['Fonte','BULLEX PRACTICE'],
+  ['Período','SESSÃO ATUAL']
+ ]:lab?[
   ['Aprovadas (>60%; mín. 30)',approvedStudies().length],
   ['Estratégias observadas',studies.length],
   ['Fonte',lab40Rows.length?'VELAS HISTÓRICAS PRACTICE':'AGUARDANDO TESTES'],
@@ -695,12 +732,14 @@ function refreshInspector(){
   ['Saldo fictício',money(demoLedger.balance)],['Sinais gerados',signalLog.length]
  ];
  $('screenSummary').replaceChildren(...boxes.map(([k,v])=>{const box=document.createElement('span'),title=document.createElement('div'),value=document.createElement('b');title.textContent=k;value.textContent=v;box.append(title,value);return box}));
- $('inspectorListTitle').textContent=lab?'Estratégias e suas taxas':'Últimas operações';
+ $('inspectorListTitle').textContent=ss.kind==='ranking'?'Ranking por lucro confirmado':lab?'Estratégias e suas taxas':'Últimas operações';
  const area=$('screenOps');area.replaceChildren();
  if(!entries.length){const p=document.createElement('p');p.textContent='Ainda não há dados para esta tela.';area.append(p);}
  for(const x of entries.slice(0,12)){
   const e=document.createElement('div');e.className='miniOp';
-  e.textContent=lab?x.name+' · '+formatRate(x)+' · '+x.samples+' validações / '+(x.train_samples||0)+' treinos · '+(approvedStudies().includes(x)?'APROVADA EM ESTUDO':x.samples>=30?'EM ESTUDO':'AMOSTRA INSUFICIENTE'):
+  e.textContent=ss.kind==='ranking'?'#'+x.rank+' '+x.name+' · '+officeMoney(x.profit,shot?.currency||'USD')+
+    ' · WIN '+x.wins+' / LOSS '+x.losses+' · '+(x.win_rate===null?'sem taxa':x.win_rate+'%')+
+    (x.small_sample?' · amostra pequena':''):lab?x.name+' · '+formatRate(x)+' · '+x.samples+' validações / '+(x.train_samples||0)+' treinos · '+(approvedStudies().includes(x)?'APROVADA EM ESTUDO':x.samples>=30?'EM ESTUDO':'AMOSTRA INSUFICIENTE'):
   linked?String(x.time||'')+' · '+String(x.asset||'')+' · '+String(x.direction||'').toUpperCase()+' · '+String(x.status||'')+' · '+String(x.strategy||'')+' · '+(Number.isFinite(Number(x.profit))&&x.profit!==undefined?officeMoney(x.profit,shot?.currency||'USD'):'Pendente'):
   x.time+' · '+x.name+' · '+x.asset+' · '+(x.win?'WIN':'LOSS')+' · '+money(x.v);
   area.append(e);
@@ -1491,6 +1530,11 @@ function hubLockData(){
  $('hubControlArea').hidden=true;$('hubLoginForm').hidden=false;
  hubCsrf='';hubState=null;hubLoadedConfig=false;$('dualMotorPanel').hidden=true;
  officeSnapshot=null;bridgeLinked=false;hubHaveBaseline=false;hubLastWins.clear();
+ latestTraderRanking=null;
+ $('leaderboardRows').replaceChildren();
+ $('leaderboardUpdated').textContent='Entre no servidor protegido para consultar o ranking da sessão PRACTICE.';
+ $('labEntryDiagnostics').textContent='Motor B: aguardando sessão autenticada.';
+ const mural=charts.find(c=>c.roomView==='ranking');if(mural)drawRoomTV(mural);
  $('realBridgePanel').hidden=true;
  $('hubControlState').textContent='Faça login no seu servidor para acompanhar as ordens da DEMO.';
  hubNote('Entre com a chave do painel para acessar os controles de sua conta.',false);
@@ -1602,6 +1646,53 @@ function renderMultiLab(data,p){
  charts.filter(c=>c.big&&c.roomView).forEach(drawRoomTV);
 }
 
+function renderTraderLeaderboard(p){
+ const data=p?.trader_leaderboard;
+ if(!data||data.broker_mode!=='PRACTICE')return;
+ latestTraderRanking=data;
+ const confirmed=Number(data.total_confirmed||0);
+ $('leaderboardUpdated').textContent='🏆 Ranking por lucro em '+confirmed+
+ ' operações confirmadas na Bullex PRACTICE nesta sessão. '+
+ 'WIN/LOSS do laboratório são apenas estudos e não entram no mural. '+
+ 'Rankings com menos de 10 resultados têm amostra pequena.';
+ const host=$('leaderboardRows');host.replaceChildren();
+ const rank=Array.isArray(data.ranking)?data.ranking:[];
+ if(!rank.length){
+  const empty=document.createElement('small');
+  empty.textContent='Aguardando operações WIN/LOSS confirmadas. Os 12 traders permanecem nas mesas.';
+  host.append(empty);
+ }
+ for(const t of rank.slice(0,12)){
+  const row=document.createElement('div'),number=document.createElement('div'),detail=document.createElement('div'),
+    title=document.createElement('strong'),meta=document.createElement('small'),money=document.createElement('b');
+  row.className='leaderBoardRow';number.className='rank';
+  number.textContent=t.rank<=3?['🥇','🥈','🥉'][t.rank-1]:'#'+t.rank;
+  title.textContent=t.name+' · Mesa '+(t.index+1);
+  meta.textContent='WIN '+t.wins+' · LOSS '+t.losses+' · '+t.trades+' operações'+
+   (t.win_rate!==null?' · '+t.win_rate.toFixed(1)+'%':'')+
+   (t.small_sample?' · pouca amostra':'');
+  money.textContent=officeMoney(t.profit,p.currency||'USD');
+  detail.append(title,meta);row.append(number,detail,money);host.append(row);
+ }
+ const diag=p.lab_signal_diag||{},descriptions={
+  MOTOR_B_DESLIGADO:'Motor B desligado. O laboratório continua estudando.',
+  SEM_CANDIDATAS_VALIDADAS:'Ainda não há estratégias com validação e filtro de payout aprovados.',
+  SEM_TRADERS_ATRIBUIDOS:'Nenhuma estratégia aprovada foi atribuída a uma mesa.',
+  SEM_VELAS_M1_NO_PRAZO:'As velas candidatas não chegaram dentro dos 2 segundos aceitos pela corretora.',
+  SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou cruzamento novo.',
+  ATIVO_SEM_VELA_FECHADA_COMPATIVEL:'O sinal não corresponde à vela fechada mais recente da Bullex.',
+  SINAL_VALIDADO_M1_ATUAL:'Sinal M1 validado na vela atual; ainda sujeito às verificações finais da Bullex.',
+  AGUARDANDO_MOTOR:'Aguardando inicialização do motor.'
+ };
+ const reason=descriptions[diag.reason]||'Aguardando nova vela M1 e verificação de execução.';
+ $('labEntryDiagnostics').textContent='🧪 Motor B · '+reason+
+  ' | Estratégias elegíveis: '+Number(diag.eligible||0)+
+  ' | Traders atribuídos: '+Number(diag.assigned||0)+
+  ' | Velas dentro do prazo: '+Number(diag.fresh_assets||0)+
+  ' | Sinais novos: '+Number(diag.valid_signals||0)+
+  '. Uma ordem só é confirmada após aceitação pela Bullex.';
+ const tv=charts.find(c=>c.roomView==='ranking');if(tv)drawRoomTV(tv);
+}
 function hubLoadLive(p){
  if(!p)return;
  if(p.source!=='XTREME_BULLEX_DEMO_BACKEND'||p.mode!=='PRACTICE')throw Error('Servidor não confirmou modo PRACTICE.');
@@ -1659,6 +1750,7 @@ function hubLoadLive(p){
  }
  // Live stats have a distinct data source. The local synthetic engine is paused.
  officeSnapshot=p;bridgeLinked=true;
+ renderTraderLeaderboard(p);
  $('hubLoginForm').hidden=true;$('hubControlArea').hidden=false;
  $('brokerState').textContent=p.connected?'PRACTICE · CONECTADA':'PRACTICE · DESCONECTADA';
  $('hubConnectForm').hidden=p.connected===true;
