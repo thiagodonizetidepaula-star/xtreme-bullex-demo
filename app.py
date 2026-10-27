@@ -40,6 +40,8 @@ def lab40_summary():
 multi_research=ResearchRegistry()
 multi_queue=queue.Queue(maxsize=100)
 multi_last_queued={}
+multi_pending=set()
+multi_pending_lock=threading.Lock()
 multi_diag={'snapshots':0,'received_items':0,'queued':0,'queue_full':0,'processed':0,'processed_m1':0,'processed_m5':0,'last_asset':None,'last_bars_count':0,'last_error':None,'last_processed':0}
 multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
 
@@ -56,10 +58,13 @@ def multi_enqueue(batch):
         bars.sort(key=lambda x:x.get('from',0))
         newest=int(bars[-1]['from'])
         if newest<=multi_last_queued.get(asset,0):continue
-        try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
-        except queue.Full:
-            multi_diag['queue_full']+=1
-            break
+        with multi_pending_lock:
+            if asset in multi_pending:continue
+            try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
+            except queue.Full:
+                multi_diag['queue_full']+=1
+                break
+            multi_pending.add(asset)
         multi_last_queued[asset]=newest
         multi_diag['queued']+=1
         multi_diag['last_asset']=asset
@@ -70,6 +75,8 @@ def multi_worker():
     while True:
         try:asset,bars,source=multi_queue.get(timeout=1)
         except queue.Empty:continue
+        multi_diag['active_asset']=asset
+        multi_diag['active_since']=time.time()
         try:
             m1=multi_research.ingest(asset,'M1',bars,source)
             m5bars=aggregate_m5(bars)
@@ -84,7 +91,11 @@ def multi_worker():
             multi_diag['last_processed']=time.time()
             with multi_research.lock:multi_research.error='Leitura rejeitada: '+multi_diag['last_error']
             print('XTREME LAB ERROR: '+multi_diag['last_error'],flush=True)
-        finally:multi_queue.task_done()
+        finally:
+            with multi_pending_lock:multi_pending.discard(asset)
+            multi_diag['active_asset']=None
+            multi_diag['active_since']=0
+            multi_queue.task_done()
         time.sleep(.07)
 
 def multi_paused_scanner():
@@ -118,7 +129,10 @@ def multi_paused_scanner():
             result=source_client.call('lab_candles',timeout=28,asset=asset)
             if result.get('source')!='PRACTICE':raise ValueError('Conta PRACTICE não confirmada.')
             bars=result.get('candles') or []
-            multi_queue.put((asset,bars,'HISTORICO_PRACTICE'),timeout=2)
+            with multi_pending_lock:
+                if asset not in multi_pending:
+                    multi_queue.put_nowait((asset,bars,'HISTORICO_PRACTICE'))
+                    multi_pending.add(asset)
             multi_scan_state['last_error']=None
         except Exception as error:
             multi_scan_state['last_error']='Pesquisa pausada: '+str(error)[:130]
@@ -645,6 +659,10 @@ def office_overview():
                 'diagnostics':{
                     **multi_diag,
                     'pending_queue':multi_queue.qsize(),
+                    'pending_unique_assets':len(multi_pending),
+                    'active_asset':multi_diag.get('active_asset'),
+                    'active_since':multi_diag.get('active_since'),
+                    'active_seconds':max(0,int(time.time()-multi_diag['active_since'])) if multi_diag.get('active_since') else 0,
                     'scanner_busy':multi_scan_state['busy'],
                     'scanner_last_error':multi_scan_state['last_error'],
                     'live_bars_ready':state.get('stream_ready',0),
