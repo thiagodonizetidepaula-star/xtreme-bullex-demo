@@ -1,4 +1,4 @@
-"""Safety and UI regression for single-click start of both PRACTICE engines.
+"""Safety and UI regression for lab-only PRACTICE start and guarded trader operations.
 
 Source checks avoid importing app.py and accidentally connecting to Bullex
 during CI. Trading signals/stops are regression tested in other modules.
@@ -21,17 +21,26 @@ class SingleButtonSessionTests(unittest.TestCase):
         self.assertNotIn("hubApi('lab/motor'",self.office)
         self.assertNotIn("@app.post('/api/lab/motor')",self.api)
 
-    def test_start_requires_explicit_consent_to_both_paper_engines(self):
+    def test_start_requires_explicit_consent_to_lab_only_practice(self):
         portion=self.api.split("@app.post('/api/start')",1)[1].split("@app.post('/api/stop')",1)[0]
-        self.assertIn("data.get('both_motors') is not True",portion)
+        self.assertIn("data.get('lab_only') is not True",portion)
         self.assertIn("state['lab_orders_enabled']=True",portion)
-        self.assertIn("c['strategy']='sniper'",portion)
+        self.assertIn("c['strategy']='lab_m1'",portion)
+        self.assertNotIn("c['strategy']='sniper'",portion)
         self.assertIn("if not limits(c)",portion)
         self.assertLess(portion.index("if not limits(c)"),portion.index("state['lab_orders_enabled']=True"))
         self.assertIn("mode='PRACTICE'",portion)
         self.assertIn("shared_order_channel=True",portion)
         self.assertIn("m5_execution=False",portion)
-        self.assertIn("await hubExecute('start',{both_motors:true}",self.office)
+        self.assertIn("await hubExecute('start',{lab_only:true}",self.office)
+
+    def test_only_lab_strategy_may_submit_orders(self):
+        loop=self.api.split('def loop(c):',1)[1].split('@app.before_request',1)[0]
+        self.assertIn("strategy='lab_m1'",loop)
+        self.assertIn("'engine':'LAB_M1'",loop)
+        self.assertIn('proposal=select_lab_order(',loop)
+        self.assertNotIn('analyze_selected(',loop)
+        self.assertNotIn("'engine':'XTREME_PRINCIPAL'",loop)
 
     def test_stop_disables_both_order_engines_but_tracks_pending_order(self):
         portion=self.api.split("@app.post('/api/stop')",1)[1].split("@app.post('/api/logout')",1)[0]
