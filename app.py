@@ -5,6 +5,7 @@ from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
+from dual_motor import assign_desks,select_lab_order
 ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
@@ -39,6 +40,8 @@ def lab40_summary():
 multi_research=ResearchRegistry()
 multi_queue=queue.Queue(maxsize=100)
 multi_last_queued={}
+multi_pending=set()
+multi_pending_lock=threading.Lock()
 multi_diag={'snapshots':0,'received_items':0,'queued':0,'queue_full':0,'processed':0,'processed_m1':0,'processed_m5':0,'last_asset':None,'last_bars_count':0,'last_error':None,'last_processed':0}
 multi_scan_state={'catalog_at':0,'next_asset_at':0,'cursor':0,'busy':False,'last_error':None}
 
@@ -55,10 +58,13 @@ def multi_enqueue(batch):
         bars.sort(key=lambda x:x.get('from',0))
         newest=int(bars[-1]['from'])
         if newest<=multi_last_queued.get(asset,0):continue
-        try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
-        except queue.Full:
-            multi_diag['queue_full']+=1
-            break
+        with multi_pending_lock:
+            if asset in multi_pending:continue
+            try:multi_queue.put_nowait((asset,bars,'STREAMING_M1'))
+            except queue.Full:
+                multi_diag['queue_full']+=1
+                break
+            multi_pending.add(asset)
         multi_last_queued[asset]=newest
         multi_diag['queued']+=1
         multi_diag['last_asset']=asset
@@ -69,6 +75,8 @@ def multi_worker():
     while True:
         try:asset,bars,source=multi_queue.get(timeout=1)
         except queue.Empty:continue
+        multi_diag['active_asset']=asset
+        multi_diag['active_since']=time.time()
         try:
             m1=multi_research.ingest(asset,'M1',bars,source)
             m5bars=aggregate_m5(bars)
@@ -83,7 +91,11 @@ def multi_worker():
             multi_diag['last_processed']=time.time()
             with multi_research.lock:multi_research.error='Leitura rejeitada: '+multi_diag['last_error']
             print('XTREME LAB ERROR: '+multi_diag['last_error'],flush=True)
-        finally:multi_queue.task_done()
+        finally:
+            with multi_pending_lock:multi_pending.discard(asset)
+            multi_diag['active_asset']=None
+            multi_diag['active_since']=0
+            multi_queue.task_done()
         time.sleep(.07)
 
 def multi_paused_scanner():
@@ -117,7 +129,10 @@ def multi_paused_scanner():
             result=source_client.call('lab_candles',timeout=28,asset=asset)
             if result.get('source')!='PRACTICE':raise ValueError('Conta PRACTICE não confirmada.')
             bars=result.get('candles') or []
-            multi_queue.put((asset,bars,'HISTORICO_PRACTICE'),timeout=2)
+            with multi_pending_lock:
+                if asset not in multi_pending:
+                    multi_queue.put_nowait((asset,bars,'HISTORICO_PRACTICE'))
+                    multi_pending.add(asset)
             multi_scan_state['last_error']=None
         except Exception as error:
             multi_scan_state['last_error']='Pesquisa pausada: '+str(error)[:130]
@@ -133,6 +148,7 @@ def office_error(message,status):return jsonify(error=message),status
 
 state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'chart_asset':None,'chart_updated_at':None,'candles':[],'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
 
+state['lab_orders_enabled']=False  # Must be explicitly enabled on the authenticated PRACTICE panel.
 def log(s):
     state['message']=s
     state['logs'].append({'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'text':s})
@@ -323,7 +339,23 @@ def loop(c):
             if selected is None:
                 state['message']='Preparando/aguardando streaming M1: '+str(batch['ready'])+'/'+str(batch['total'])+' ativos com vela atual recebida.'
                 stop.wait(.15);continue
-            item,a=selected;c['asset']=item['asset'];data={'candles':item['candles']}
+            # Motor A has strict priority. Motor B runs alongside it but sends
+            # orders only as a single serialized PRACTICE fallback (M1 only).
+            # Never send any lab signal if no independent historical validation
+            # or if the latest M1 candle is more than 2 s old.
+            item,a=selected
+            lab_choice=None
+            if not a.get('direction') and state['lab_orders_enabled']:
+                proposal=select_lab_order(multi_research.snapshot(),candidates,batch['now'],True)
+                if proposal:
+                    matched=next((v for v in batch['items'] if v['asset']==proposal['asset']),None)
+                    if matched and matched.get('candles') and max(int(b.get('from',0)) for b in matched['candles'])==proposal['candle']:
+                        lab_choice=proposal
+                        item=matched
+                        a={'direction':proposal['direction'],'candle':proposal['candle'],
+                           'signal':proposal['direction'],'reason':'Motor laboratório validado (PRACTICE M1) · '+proposal['strategy'],
+                           'checks':{'validação':str(proposal['samples'])+' resultados','assertividade':str(proposal['accuracy'])+'%'}}
+            c['asset']=item['asset'];data={'candles':item['candles']}
             # Limitar memória de deduplicação das análises; deduplicação de ordens usa histórico.
             if len(seen)>20000:seen={k for k in seen if k[1] is not None and k[1]>=batch['now']-3600}
             state['analysis']=a;state['candles']=data['candles'][-50:];state['chart_asset']=item['asset'];state['chart_updated_at']=time.time()
@@ -334,16 +366,31 @@ def loop(c):
                 log('Vela fechada às '+closed+' · '+str(c['asset'])+' · '+('Sinal '+a['signal'].upper() if a.get('signal') else 'Sem sinal')+' · '+a['reason'])
             state['message']=a['reason']
             if (c['asset'],a.get('candle'))!=last and a.get('direction'):
-                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'],c.get('strategy','rejection'))
+                allowed,reason=entry_allowed(state['trades'],c['asset'],a['candle'], 'sniper' if lab_choice else c.get('strategy','rejection'))
                 if not allowed:
                     log(c['asset']+': '+reason);stop.wait(.2);continue
                 last=(c['asset'],a['candle']);state['last_candle']=last
                 with lock:
                     if stop.is_set():break
-                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],'status':'ENVIANDO','candle':a['candle'],'strategy_key':c.get('strategy','rejection'),'strategy':STRATEGIES[c.get('strategy','rejection')],'expiration':a['candle']+120}
+                    # Original order path preserved; only metadata / derived
+                    # guarded lab signal are added. One open order at a time.
+                    trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),'day':day(),
+                           'asset':c['asset'],'direction':a['direction'],'stake':c['stake'],
+                           'status':'ENVIANDO','candle':a['candle'],
+                           'strategy_key':('lab:'+lab_choice['strategy_id']) if lab_choice else c.get('strategy','rejection'),
+                           'strategy':lab_choice['strategy'] if lab_choice else STRATEGIES[c.get('strategy','rejection')],
+                           'engine':'LAB_M1' if lab_choice else 'XTREME_PRINCIPAL',
+                           'trader_index':lab_choice['trader_index'] if lab_choice else 0,
+                           'trader_name':lab_choice['trader_name'] if lab_choice else 'Alex',
+                           'expiration':a['candle']+120}
                     state['trades'].append(trade)
                     state['uncertain']=True
-                order=client.call('order',asset=c['asset'],stake=c['stake'],payout=c['payout'],direction=a['direction'],candle=a['candle'],strategy=c.get('strategy','rejection'))
+                order=client.call('order',asset=c['asset'],stake=c['stake'],
+                                  # Enforce >80% payout on research trades even though
+                                  # the original Sniper accepts >= user minimum.
+                                  payout=max(80.01,lab_choice['payout']) if lab_choice else c['payout'],
+                                  direction=a['direction'],candle=a['candle'],
+                                  strategy='sniper' if lab_choice else c.get('strategy','rejection'))
                 if not order['sent']:
                     trade['status']='IGNORADA';trade['reason']=order['reason'];state['uncertain']=False;log(order['reason'])
                 else:
@@ -591,7 +638,7 @@ def office_overview():
     with lock:
         recent=[]
         for t in state['trades'][-45:]:
-            recent.append({k:t[k] for k in ('id','time','asset','direction','strategy','strategy_key',
+            recent.append({k:t[k] for k in ('id','time','asset','direction','strategy','strategy_key','engine','trader_index','trader_name',
                 'status','profit','stake','payout','expiration','result_time') if k in t})
         return jsonify(source='XTREME_BULLEX_DEMO_BACKEND',mode='PRACTICE',
             csrf=session['csrf'],
@@ -599,6 +646,8 @@ def office_overview():
             uncertain=bool(state['uncertain']),message=str(state['message'])[:240],
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
+            lab_orders_enabled=bool(state['lab_orders_enabled']),
+            trader_roster=assign_desks(multi_research.snapshot().get('candidates') or []),
             trades=recent,
             chart={'asset':state.get('chart_asset'),
                    'updated_at':state.get('chart_updated_at'),
@@ -610,6 +659,10 @@ def office_overview():
                 'diagnostics':{
                     **multi_diag,
                     'pending_queue':multi_queue.qsize(),
+                    'pending_unique_assets':len(multi_pending),
+                    'active_asset':multi_diag.get('active_asset'),
+                    'active_since':multi_diag.get('active_since'),
+                    'active_seconds':max(0,int(time.time()-multi_diag['active_since'])) if multi_diag.get('active_since') else 0,
                     'scanner_busy':multi_scan_state['busy'],
                     'scanner_last_error':multi_scan_state['last_error'],
                     'live_bars_ready':state.get('stream_ready',0),
@@ -646,6 +699,21 @@ def config():
         if state['running']:return jsonify(error='Pare o robô para editar.'),409
         try:state['config']=validate_config(request.get_json());return jsonify(ok=True)
         except Exception as e:return jsonify(error=str(e)),400
+@app.post('/api/lab/motor')
+def set_lab_motor():
+    # Opt-in required; only PRACTICE, no running-order config mutation.
+    data=request.get_json(silent=True) or {}
+    value=data.get('enabled')
+    if not isinstance(value,bool):return jsonify(error='Escolha ativar ou desativar.'),400
+    with lock:
+        if state['running'] or state['uncertain'] or (bot and bot.is_alive()):
+            return jsonify(error='Para alterar a execução do laboratório, pare o motor e aguarde todas as ordens.'),409
+        if not state['connected']:return jsonify(error='Conecte a conta PRACTICE primeiro.'),409
+        state['lab_orders_enabled']=value
+        log('Motor de execução do laboratório: '+('habilitado apenas na DEMO M1.' if value else 'desativado.'))
+        return jsonify(ok=True,enabled=value,mode='PRACTICE',serial_execution=True,
+                       independent_engines=True,m5_execution=False)
+
 @app.post('/api/start')
 def start():
     global bot
