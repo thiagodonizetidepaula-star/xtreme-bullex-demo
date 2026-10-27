@@ -101,13 +101,13 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 </section>
 <div class="rooms">
 <section class="room" id="strategyRoom"><h3>🧠 Sala esquerda · Laboratório Xtreme Sniper + Tendência</h3>
-<div class="roomdesc" id="labRoomDesc">1 estratégia PRINCIPAL (Sniper atual + Tendência original ATR18×2) e 40 variações experimentais. Resultados apenas do estudo, não de ordens.</div>
+<div class="roomdesc" id="labRoomDesc">1 PRINCIPAL baseada nas fórmulas originais de Sniper + Tendência ATR18×2 e 40 variações experimentais. Fonte de preço padrão HL2 ainda precisa ser conferida com MaValue=5 da sua plataforma. Resultados só de estudo.</div>
 <div class="lab40Controls"><label>Ativo M1 para estudo<input id="lab40Asset" list="hubAssets" value="EURUSD" autocomplete="off" spellcheck="false"></label>
 <button id="lab40Run" class="primary" disabled>🧪 Testar 40 estratégias</button><button id="lab40AutoToggle" disabled>🔄 Auto M1: aguardando</button></div><div id="lab40TrackStatus" class="autoLabMeta" aria-live="polite">Atualização: aguardando conexão PRACTICE.</div>
 <div id="lab40Status" class="lab40Help" aria-live="polite">Entre no escritório e conecte sua conta PRACTICE para consultar velas reais. Pare o robô antes de iniciar o teste.</div>
 <div class="roomStats"><span>Aprovadas em estudo: <b id="approvedCount">0</b></span><span>Estratégias avaliadas: <b id="labCount">41</b></span></div>
 <div class="lab40Help">Critério: <strong>mais de 60%</strong> em pelo menos <strong>30 resultados fora da amostra</strong>. Divisão cronológica 70% treino / 30% validação. Resultado = direção da próxima vela fechada; não considera payout, execução ou corretagem. Amostras insuficientes ficam sem aprovação.</div>
-<div class="favoriteBox" id="principalLabPanel"><h4>🐯 ESTRATÉGIA PRINCIPAL · Xtreme Sniper + Xtreme Tendência</h4><div class="lab40Help">Xtreme Tendência: código original fornecido (ATR Wilder 18 × 2, high/low desligado). Sniper: implementação do bot (SMA1/34 + WMA5); aguardando o arquivo original completo para confirmar equivalência.</div>
+<div class="favoriteBox" id="principalLabPanel"><h4>🐯 ESTRATÉGIA PRINCIPAL · Xtreme Sniper + Xtreme Tendência</h4><div class="lab40Help">Xtreme Tendência: código original fornecido (ATR Wilder 18 × 2, high/low desligado). Sniper ORIGINAL conferido: SMA1 − SMA34, WMA5 e cruzamento estrito. A fonte MaValue=5 depende da lista da plataforma (inputs.titles); o laboratório usa HL2 provisoriamente. O deslocamento −1 da seta é visual, não uma entrada antecipada.</div>
 <strong id="principalStats">Aguardando velas M1 para calcular o resultado principal.</strong></div>
 <strong>40 estratégias experimentais</strong>
 <div id="labStrategies" class="lab40List"></div></section>
