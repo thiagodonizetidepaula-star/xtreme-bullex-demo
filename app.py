@@ -407,7 +407,7 @@ def loop(c):
             proposal=select_lab_order(
                 multi_research.snapshot(),candidates,batch['now'],
                 bool(state['lab_orders_enabled']),live_items=batch['items'],
-                diagnostics=diag)
+                diagnostics=diag,trades=list(state['trades']))
             diag.update(checked_at=time.time(),snapshot_ms=snapshot_ms,
                         lab_scan_ms=round((time.monotonic()-scan_started)*1000),
                         minutes_seconds=round(float(batch['now'])%60,2),
