@@ -32,6 +32,8 @@ assert len(CANDIDATES) == 40
 MIN_OBSERVATIONS = 30
 MIN_RATE = 60.0
 WARMUP = 85
+RECENT_RESULTS_WINDOW = 20  # last closed, non-tied OOS observations
+MIN_RECENT_RESULTS = 10
 
 
 def _validate(candles, step=60):
@@ -212,6 +214,7 @@ def evaluate(candles, asset, timeframe='M1'):
         fast, slow = buffers[candidate["source"]]
         wins = losses = ties = train_wins = train_losses = 0
         last_signal = -100
+        recent_outcomes = deque(maxlen=RECENT_RESULTS_WINDOW)
         for i in range(WARMUP, len(bars) - 1):
             if i - last_signal < 2:
                 continue  # never overlap test outcomes
@@ -246,21 +249,34 @@ def evaluate(candles, asset, timeframe='M1'):
             delta = sign * (following["close"] - following["open"])
             if delta > 0:
                 if i < cutoff: train_wins += 1
-                else: wins += 1
+                else:
+                    wins += 1
+                    recent_outcomes.append(1)
             elif delta < 0:
                 if i < cutoff: train_losses += 1
-                else: losses += 1
+                else:
+                    losses += 1
+                    recent_outcomes.append(0)
             else: ties += 1
         tested = wins + losses
         train_tested = train_wins + train_losses
         rate = round(100 * wins / tested, 2) if tested else None
         train_rate = round(100 * train_wins / train_tested, 2) if train_tested else None
+        recent_n = len(recent_outcomes)
+        recent_wins = sum(recent_outcomes)
+        recent_losses = recent_n - recent_wins
+        recent_rate = round(100 * recent_wins / recent_n, 2) if recent_n else None
+        # Recent results are separated from the lifetime OOS result. A strategy
+        # whose recent candles became unfavorable cannot qualify for execution.
         # Never treat insufficient samples as a 60% verified success.
         approved = tested >= MIN_OBSERVATIONS and rate is not None and rate > MIN_RATE
         rows.append({
             **candidate, "train_wins": train_wins, "train_losses": train_losses,
             "train_samples": train_tested, "train_rate": train_rate,
             "wins": wins, "losses": losses, "ties": ties, "samples": tested,
+            "recent_wins": recent_wins, "recent_losses": recent_losses,
+            "recent_samples": recent_n, "recent_rate": recent_rate,
+            "recent_validation_ready": recent_n >= MIN_RECENT_RESULTS,
             "rate": rate, "approved": approved,
             "status": "APROVADA EM ESTUDO" if approved else "AMOSTRA INSUFICIENTE" if tested < MIN_OBSERVATIONS else "EM ESTUDO",
         })
@@ -270,6 +286,7 @@ def evaluate(candles, asset, timeframe='M1'):
             "to": bars[-1]["from"], "data_source": "BULLEX_PRACTICE_CANDLES",
             "proxy": "Próxima vela fechada (open-close); não representa ordens executadas nem payout.",
             "split": "70% treino / 30% validação fora da amostra, cronológica",
+            "recent_rule": "Os últimos 20 resultados não empatados dentro da validação, com mínimo de 10 para avaliar desempenho atual",
             "approval_rule": "Taxa > 60% com pelo menos 30 resultados WIN/LOSS na validação",
             "approved": sum(r["approved"] for r in rows) + int(primary["approved"]),
             "strategies": rows}
