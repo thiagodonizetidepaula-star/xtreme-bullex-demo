@@ -8,6 +8,10 @@ def candidate(identifier='XS-04',rate=65,payout=85,win=20,loss=10,asset='EURUSD'
         'id':identifier,'name':'Test '+identifier,'asset':asset,'timeframe':tf,
         'samples':win+loss,'wins':win,'losses':loss,'accuracy':100*win/(win+loss),
         'payout_m1':payout,
+        'recent_samples':20,
+        'recent_wins':round(20*win/(win+loss)),
+        'recent_losses':20-round(20*win/(win+loss)),
+        'recent_accuracy':round(100*round(20*win/(win+loss))/20,2),
         'status':'ESTUDO_CANDIDATO_NAO_EXECUTAVEL',
         'passes_break_even_math':win*payout/100>loss,
         'principal':False,
@@ -33,6 +37,45 @@ class DualMotorSafetyTests(unittest.TestCase):
         self.assertFalse(research_eligible(candidate(win=8,loss=6,payout=90)))
         self.assertFalse(research_eligible(candidate(tf='M5')))
         self.assertTrue(research_eligible(candidate(win=20,loss=10,payout=81)))
+    def test_old_high_rate_with_recent_losses_is_rejected(self):
+        c=candidate(win=25,loss=5,payout=88)
+        c.update(recent_samples=20,recent_wins=7,recent_losses=13,
+                 recent_accuracy=35.0)
+        self.assertFalse(research_eligible(c))
+        c.update(recent_samples=9,recent_wins=7,recent_losses=2,
+                 recent_accuracy=77.78)
+        self.assertFalse(research_eligible(c))
+        c.update(recent_samples=20,recent_wins=13,recent_losses=7,
+                 recent_accuracy=65.0)
+        self.assertTrue(research_eligible(c))
+
+    def test_live_losses_cool_down_only_the_losing_market(self):
+        from unittest.mock import patch
+        from datetime import datetime,timezone
+        a=candidate('XS-04',win=20,loss=10,payout=89,asset='EURUSD')
+        b=candidate('XS-04',win=20,loss=10,payout=89,asset='USDJPY')
+        minute=1700000040
+        bars=[{'from':minute+i*60,'open':1.1,'close':1.13,
+               'max':1.17,'min':1.08} for i in range(90)]
+        now=bars[-1]['from']+60
+        live_time=datetime.fromtimestamp(now-60,timezone.utc).isoformat()
+        trades=[{'id':i+1,'status':status,'strategy_key':'lab:XS-04',
+                 'asset':'EURUSD','time':live_time}
+                for i,status in enumerate(['LOSS','LOSS','WIN','LOSS'])]
+        live_items=[{'asset':'EURUSD','candles':bars},
+                    {'asset':'USDJPY','candles':bars}]
+        diag={}
+        with patch('multiasset_lab.latest_direction',return_value='call'):
+            order=select_lab_order({'candidates':[a,b],'signals':[]},
+                [{'asset':'EURUSD','payout':89},{'asset':'USDJPY','payout':89}],
+                now,True,live_items=live_items,diagnostics=diag,trades=trades)
+        self.assertIsNotNone(order)
+        self.assertEqual(order['asset'],'USDJPY')
+        self.assertEqual(diag['live_loss_cooldown'],1)
+        # A temporary block expires automatically; no permanent blacklist.
+        from dual_motor import recent_live_losses_blocked
+        self.assertFalse(recent_live_losses_blocked(trades,a,now+46*60))
+
     def test_no_signal_when_disabled_or_stale_or_not_exact_market(self):
         c=candidate(payout=85)
         signal={**c,'direction':'call','candle_close':1700000060}
