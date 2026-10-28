@@ -19,6 +19,23 @@ MIN_PAYOUT_EXCLUSIVE = 80.0
 MAX_ASSETS = 180
 MAX_RECENT_SIGNALS = 35
 
+def candidate_rank(row):
+    """Put RECENTLY validated M1 candidates before stale historical winners."""
+    try:
+        n=int(row.get('recent_samples',0))
+        w=int(row.get('recent_wins',0))
+        long_rate=float(row.get('accuracy',0))
+        recent_rate=float(row.get('recent_accuracy') or 0)
+        qualified=(row.get('timeframe')=='M1' and row.get('id')!='XS-PRINCIPAL'
+                   and int(row.get('samples',0))>=30 and long_rate>58
+                   and n>=10 and w*100>58*n and recent_rate>58
+                   and float(row.get('payout_m1',0))>80
+                   and bool(row.get('passes_break_even_math')))
+        score=.60*recent_rate+.40*long_rate if n>=10 else long_rate
+        return (0 if qualified else 1,-score,-int(row.get('samples',0)),str(row.get('id','')))
+    except (KeyError,ValueError,TypeError,ZeroDivisionError,OverflowError):
+        return (2,0,0,str(row.get('id','')))
+
 
 def aggregate_m5(closed_m1):
     """Only truly completed and contiguous groups of five M1 candles count."""
@@ -104,13 +121,18 @@ def shortlist(outcome, payout, now=None):
             'id':row['id'],'name':row['name'],'principal':bool(row.get('principal')),
             'asset':outcome['asset'],'timeframe':outcome['timeframe'],'samples':n,
             'wins':wins,'losses':losses,'accuracy':round(rate,2),
+            'recent_wins':int(row.get('recent_wins',0)),
+            'recent_losses':int(row.get('recent_losses',0)),
+            'recent_samples':int(row.get('recent_samples',0)),
+            'recent_accuracy':row.get('recent_rate'),
+            'recent_validation_ready':bool(row.get('recent_validation_ready',False)),
             'payout_m1':round(float(payout),1),
             'expected_net_per_unit_if_payout_matches':round(net,4),
             'passes_break_even_math':net>0,
             'status':'ESTUDO_CANDIDATO_NAO_EXECUTAVEL',
             'time':int(outcome['to']+seconds),
         })
-    return sorted(chosen,key=lambda x:(-x['accuracy'],-x['samples']))[:25]
+    return sorted(chosen,key=candidate_rank)[:25]
 
 
 class ResearchRegistry:
@@ -230,7 +252,7 @@ class ResearchRegistry:
         with self.lock:
             records=list(self.records.values())
             shortlist_rows=[s for r in records for s in r.get('shortlist',[])]
-            shortlist_rows=sorted(shortlist_rows,key=lambda x:(-x['accuracy'],-x['samples']))[:65]
+            shortlist_rows=sorted(shortlist_rows,key=candidate_rank)[:65]
             return {
                 'enabled':self.running,'source':'BULLEX_PRACTICE_HISTORICAL_CANDLES',
                 'mode':'RESEARCH_ONLY','threshold':DISPLAY_THRESHOLD,

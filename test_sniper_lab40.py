@@ -36,6 +36,15 @@ class ResearchLabTests(unittest.TestCase):
             self.assertEqual(row['train_samples'],row['train_wins']+row['train_losses'])
             self.assertEqual(row['approved'],row['samples']>=MIN_OBSERVATIONS and row['rate'] is not None and row['rate']>60)
             self.assertIn(row['status'],('APROVADA EM ESTUDO','EM ESTUDO','AMOSTRA INSUFICIENTE'))
+            self.assertEqual(row['recent_samples'],
+                             row['recent_wins']+row['recent_losses'])
+            self.assertLessEqual(row['recent_samples'],20)
+            self.assertLessEqual(row['recent_samples'],row['samples'])
+            self.assertEqual(row['recent_validation_ready'],
+                             row['recent_samples']>=10)
+            if row['recent_samples']:
+                self.assertAlmostEqual(row['recent_rate'],
+                    100*row['recent_wins']/row['recent_samples'],places=2)
     def test_primary_matches_original_formula_and_flags_price_source(self):
         result=evaluate(sample_bars(),'EURUSD')
         main=result['primary']
