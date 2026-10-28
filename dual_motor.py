@@ -6,12 +6,42 @@ serialized. Historical hit rates never guarantee live performance.
 """
 import math
 from datetime import datetime
+from sniper_lab40 import MIN_RECENT_RESULTS
 
 TRADERS=('Alex','Bia','Caio','Dani')
 MIN_TESTS=30
 MIN_TEST_RATE_EXCLUSIVE=58.0
 MIN_PAYOUT=80.0
 MAX_SIGNAL_AGE_SEC=2.0
+LIVE_LOSS_WINDOW_SEC=45*60
+LIVE_RESULTS_N=4
+LIVE_LOSSES_TO_COOLDOWN=3
+
+def quality_score(candidate):
+    """Ranking favors the latest closed-candle validation over old averages."""
+    return .60*float(candidate['recent_accuracy'])+.40*float(candidate['accuracy'])
+
+def recent_live_losses_blocked(trades, candidate, now):
+    """Stop a losing strategy/asset pair for 45 minutes based on REAL DEMO closes.
+
+    Ignored/rejected/unconfirmed orders never count. Missing time stamps do
+    not become invented broker outcomes. A temporary block eventually expires.
+    """
+    observed=[]
+    for trade in trades or []:
+        if not isinstance(trade,dict) or trade.get('id') is None:continue
+        if trade.get('strategy_key')!='lab:'+str(candidate.get('id')):continue
+        if trade.get('asset')!=candidate.get('asset'):continue
+        if trade.get('status') not in ('WIN','LOSS'):continue
+        ts=trade.get('result_time') or trade.get('time')
+        if not isinstance(ts,str):continue
+        try:closed_at=datetime.fromisoformat(ts).timestamp()
+        except (ValueError,OverflowError):continue
+        if 0<=float(now)-closed_at<=LIVE_LOSS_WINDOW_SEC:
+            observed.append((closed_at,trade.get('status')))
+    recent=[status for _,status in sorted(observed)[-LIVE_RESULTS_N:]]
+    return len(recent)==LIVE_RESULTS_N and recent.count('LOSS')>=LIVE_LOSSES_TO_COOLDOWN
+
 
 def research_eligible(candidate):
     if not isinstance(candidate,dict):return False
@@ -22,11 +52,19 @@ def research_eligible(candidate):
         payout=float(candidate['payout_m1'])
         rate=float(candidate['accuracy'])
         threshold=(100/(1+payout/100))
+        recent_n=int(candidate['recent_samples'])
+        recent_w=int(candidate['recent_wins'])
+        recent_l=int(candidate['recent_losses'])
+        recent_pct=float(candidate['recent_accuracy'])
         return (candidate.get('timeframe')=='M1'
                 and candidate.get('id')!='XS-PRINCIPAL'
                 and samples>=MIN_TESTS and wins+losses==samples
                 and 100*wins/samples>MIN_TEST_RATE_EXCLUSIVE
                 and rate>MIN_TEST_RATE_EXCLUSIVE and rate>threshold
+                and MIN_RECENT_RESULTS<=recent_n<=20
+                and recent_w+recent_l==recent_n
+                and 100*recent_w/recent_n>MIN_TEST_RATE_EXCLUSIVE
+                and recent_pct>MIN_TEST_RATE_EXCLUSIVE and math.isfinite(recent_pct)
                 and payout>MIN_PAYOUT and math.isfinite(rate)
                 and candidate.get('status')=='ESTUDO_CANDIDATO_NAO_EXECUTAVEL'
                 and bool(candidate.get('passes_break_even_math')))
@@ -43,7 +81,7 @@ def assign_desks(candidates):
     roster=[]
     used=set()
     qualified=sorted((c for c in candidates if research_eligible(c)),
-                     key=lambda c:(-float(c['accuracy']),-int(c['samples']),str(c['id']),str(c.get('asset',''))))
+                     key=lambda c:(-quality_score(c),-int(c['recent_samples']),-int(c['samples']),str(c['id']),str(c.get('asset',''))))
     for c in qualified:
         identifier=str(c['id'])
         if identifier in used:continue
@@ -55,6 +93,9 @@ def assign_desks(candidates):
                        'motor':'LAB_M1','mode':'PRACTICE',
                        'asset':str(c.get('asset','')),'timeframe':'M1',
                        'accuracy':round(float(c['accuracy']),2),
+                       'recent_accuracy':round(float(c['recent_accuracy']),2),
+                       'recent_samples':int(c['recent_samples']),
+                       'quality_score':round(quality_score(c),2),
                        'samples':int(c['samples']),
                        'payout_m1':round(float(c['payout_m1']),1)})
     return roster
@@ -131,7 +172,7 @@ def desk_work(roster, candidates, signals, trades, motor_running=False,
     return output
 
 
-def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostics=None):
+def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostics=None, trades=None):
     """Evaluate verified study strategies from the CURRENT closed M1 streaming bars.
 
     This avoids the historical-study worker's seconds-long delay after the
@@ -141,7 +182,8 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
     stats={'eligible':0,'assigned':0,'fresh_assets':0,'crossings':0,
            'valid_signals':0,'reason':'SEM_CANDIDATAS',
            'without_stream':0,'insufficient_history':0,
-           'invalid_history':0,'payout_rejected':0,'stale_candle':0}
+           'invalid_history':0,'payout_rejected':0,'stale_candle':0,
+           'live_loss_cooldown':0,'recent_validation_required':MIN_RECENT_RESULTS}
     def finish(value,reason):
         stats['reason']=reason
         if isinstance(diagnostics,dict):diagnostics.update(stats)
@@ -179,6 +221,9 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
         payout=market_map.get(asset,0)
         if payout<=MIN_PAYOUT or payout+0.01<float(candidate['payout_m1']):
             stats['payout_rejected']+=1
+            continue
+        if recent_live_losses_blocked(trades,candidate,now):
+            stats['live_loss_cooldown']+=1
             continue
         raw=items.get(asset) or []
         if not raw:stats['without_stream']+=1;continue
@@ -220,13 +265,16 @@ def select_lab_order(snapshot, market, now, enabled, live_items=None, diagnostic
             'trader_name':assigned[identifier]['name'],
             'samples':int(candidate['samples']),
             'accuracy':float(candidate['accuracy']),
+            'recent_accuracy':float(candidate['recent_accuracy']),
+            'quality_score':quality_score(candidate),
             'payout':payout,'timeframe':'M1'})
     if not signals:
         reason=('STREAM_M1_INDISPONIVEL' if stats['without_stream'] and not stats['fresh_assets'] and not stats['stale_candle'] else
                 'HISTORICO_M1_INSUFICIENTE' if stats['insufficient_history'] and not stats['fresh_assets'] and not stats['stale_candle'] else
                 'HISTORICO_M1_INVALIDO' if stats['invalid_history'] and not stats['fresh_assets'] and not stats['stale_candle'] else
                 'VELA_M1_ATRASADA' if stats['fresh_assets']==0 else
+                'DESEMPENHO_REAL_RECENTE_RUIM' if stats['live_loss_cooldown'] else
                 'SEM_CRUZAMENTO_VALIDADO_NA_VELA')
         return finish(None,reason)
-    signals.sort(key=lambda x:(-x['accuracy'],-x['samples'],x['asset'],x['strategy_id']))
+    signals.sort(key=lambda x:(-x['quality_score'],-x['samples'],x['asset'],x['strategy_id']))
     return finish(signals[0],'SINAL_VALIDADO_M1_ATUAL')
