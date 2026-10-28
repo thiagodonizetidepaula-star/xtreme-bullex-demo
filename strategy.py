@@ -222,11 +222,11 @@ def entry_pause_seconds(mode, settled_status):
     return 0
 
 def validate_config(c):
+    if not isinstance(c,dict):raise ValueError('Configuração inválida')
     for k in ['stake','stop_win','stop_loss','payout','limit']:
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
     for flag in ['stop_win_enabled','stop_loss_enabled']:
         if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
-    if not isinstance(c,dict):raise ValueError('Configuração inválida')
     if c.get('entry_pause_mode','off') not in ENTRY_PAUSE_MODES:raise ValueError('Pausa entre operações inválida')
     c=dict(c)
     c['entry_pause_mode']=c.get('entry_pause_mode','off')
