@@ -81,7 +81,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
   <div class="hubInfo" id="dualMotorStatus">Aguardando conexão. Um botão ativa análise e traders.</div>
   <div class="lab40Help">
     🧠 <strong>Laboratório:</strong> pesquisa todos os ativos elegíveis e testa múltiplas estratégias. As quatro melhores estratégias M1 aprovadas vão aos traders.
-    📈 <strong>Operações:</strong> cada trader usa uma estratégia aprovada acima de 58% em no mínimo 30 testes fora da amostra. O Xtreme Sniper principal não tem prioridade.
+    📈 <strong>Operações:</strong> cada trader utiliza estratégia com mais de 58% no histórico e nos testes mais recentes, sempre na conta DEMO. O Xtreme Sniper principal não tem prioridade.
     As ordens PRACTICE são sequenciais e compartilham os mesmos limites. M5 permanece em estudo.
   </div>
 </div>
@@ -113,7 +113,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
     </div>
     <label><input id="hubStopWinEnabled" type="checkbox" checked>Ativar stop win</label>
     <label><input id="hubStopLossEnabled" type="checkbox" checked>Ativar stop loss</label>
-    <p class="formHint">O laboratório testa várias estratégias M1 e distribui até quatro diferentes: acima de 58% em no mínimo 30 testes, payout maior que 80% e filtros de risco da DEMO.</p>
+    <p class="formHint">O laboratório testa várias estratégias M1 e distribui até quatro diferentes: acima de 58% em no mínimo 30 testes e nos últimos 20 resultados (mínimo 10), payout maior que 80% e filtros da DEMO.</p>
     <div class="rowButtons"><button type="submit" id="hubSaveBtn">💾 Salvar configurações</button></div>
    </form>
   </details>
@@ -135,7 +135,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 </section>
 <section class="room" id="automaticOpsRoom">
 <h3>📈 Sala direita · Recebimento de oportunidades</h3>
-<div class="roomdesc">Exibe estudos acima de 50%. Para enviar uma ordem DEMO, a estratégia precisa superar 58% em 30 testes fora da amostra e payout acima de 80%.</div>
+<div class="roomdesc">Exibe estudos acima de 50%. Para enviar uma ordem DEMO, a estratégia precisa superar 58% em 30 testes fora da amostra, também superar 58% nos últimos 20 resultados (mínimo 10) e ter payout acima de 80%.</div>
 <div class="roomStats"><span>Candidatas: <b id="multiCandidatesCount">0</b></span><span>Sinais de estudo: <b id="multiSignalsCount">0</b></span></div>
 <div class="favoriteBox"><h4>⭐ Favoritas em observação · M1 / M5</h4><div class="lab40Help">Exibe payout M1 conferido, taxa, amostra e se supera o ponto de equilíbrio estimado. M5 ainda não tem payout de execução verificado.</div>
 <div id="multiCandidatesList" class="favoriteList"><small>Nenhuma candidata com amostra suficiente.</small></div></div>
@@ -165,7 +165,7 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
 <strong>40 estratégias experimentais</strong>
 <div id="labStrategies" class="lab40List"></div></section>
 <section class="room" id="operationsRoom"><h3>📈 Sala direita · Central de Operações</h3><div class="roomdesc" id="opsRoomDesc">Recebe sinais M1 das quatro melhores estratégias validadas do laboratório. Ordens apenas na <strong>Bullex PRACTICE</strong>, mediante confirmação da corretora.</div><div class="roomStats"><span id="signalLabel">Sinais aprovados: <b id="signalCount">0</b></span><span>Em execução DEMO: <b id="pendingCount">0</b></span></div><div class="favoriteBox"><h4>⭐ Favoritas enviadas pelo Laboratório <span id="favoriteCount">0</span>/41</h4>
-<div class="lab40Help">Filtro: mais de 58% em pelo menos 30 validações fora da amostra. O envio ainda depende de sinal M1 atual, payout e filtros da Bullex.</div>
+<div class="lab40Help">Filtro duplo: mais de 58% em 30 testes e mais de 58% nos últimos 20 resultados (mínimo 10). Três perdas em quatro operações DEMO recentes bloqueiam temporariamente aquele ativo/estratégia. O sinal também depende da vela M1 atual e do payout.</div>
 <div id="favoriteUpdate" class="autoLabMeta">Aguardando o laboratório atualizar.</div>
 <div id="favoriteList" class="favoriteList"><small>Nenhuma estratégia aprovada até agora.</small></div></div>
 <strong style="display:block;margin:9px 0">Operações PRACTICE do robô existente</strong>
@@ -1744,6 +1744,7 @@ function renderMultiLab(data,p){
   left.textContent=(c.principal?'🐯 ':'⭐ ')+String(c.name||c.id)+' · '+String(c.asset||'')+' · '+String(c.timeframe||'');
   const details=document.createElement('small');
   details.textContent='Payout M1 '+Number(c.payout_m1||0).toFixed(1)+'% · '+String(c.samples||0)+' testes · '+
+    'Recente: '+(Number.isFinite(Number(c.recent_accuracy))&&Number(c.recent_samples)>=10?Number(c.recent_accuracy).toFixed(1)+'%':'amostra insuficiente')+' ('+Number(c.recent_samples||0)+'/20) · '+
     (c.passes_break_even_math?'Acima do equilíbrio teórico M1':'Abaixo do equilíbrio teórico M1')+
     (c.timeframe==='M5'?' · payout M5 NÃO confirmado':'')+' · CANDIDATA (sem ordem)';
   left.append(details);right.textContent=Number(c.accuracy||0).toFixed(1)+'%';row.append(left,right);root.append(row);
@@ -1830,6 +1831,7 @@ function renderTraderLeaderboard(p){
   SEM_TRADERS_ATRIBUIDOS:'Nenhuma estratégia aprovada foi atribuída a uma mesa.',
   SEM_VELAS_M1_NO_PRAZO:'As velas candidatas não chegaram dentro dos 2 segundos aceitos pela corretora.',
   SEM_CRUZAMENTO_VALIDADO_NA_VELA:'Houve velas recentes, mas nenhuma das estratégias atribuídas gerou sinal novo.',
+   DESEMPENHO_REAL_RECENTE_RUIM:'Estratégia e ativo em pausa de 45 min por 3 perdas em 4 operações DEMO recentes.',
   ATIVO_SEM_VELA_FECHADA_COMPATIVEL:'O sinal não corresponde à vela fechada mais recente da Bullex.',
   SINAL_VALIDADO_M1_ATUAL:'Sinal M1 validado na vela atual; ainda sujeito às verificações finais da Bullex.',
   AGUARDANDO_MOTOR:'Aguardando inicialização do motor.',
@@ -1854,6 +1856,7 @@ function renderTraderLeaderboard(p){
   (diag.payout_rejected?' | Payout insuficiente: '+diag.payout_rejected:'')+
   (diag.insufficient_history?' | Histórico insuficiente: '+diag.insufficient_history:'')+
   (diag.stale_candle?' | Velas atrasadas: '+diag.stale_candle:'')+
+  (diag.live_loss_cooldown?' | Estratégias/ativos suspensos por perdas reais: '+diag.live_loss_cooldown:'')+
   '. Uma ordem só é confirmada após aceitação pela Bullex.';
  const exec=p.lab_executions||{};
  $('labEntryDiagnostics').textContent+=' | TRADERS · Ordens tentadas: '+Number(exec.attempted||0)+
@@ -1908,7 +1911,8 @@ function hubLoadLive(p){
   if(job){
    const cells=Array.isArray(job.watched_assets)?job.watched_assets.slice(0,3):[];
    assets.textContent='M1 · '+(cells.length?cells.join(', '):job.asset||'Aguardando ativo')+
-    (Number.isFinite(job.accuracy)?' · '+Number(job.accuracy).toFixed(1)+'% no estudo':'');
+    (Number.isFinite(job.accuracy)?' · Histórico '+Number(job.accuracy).toFixed(1)+'%':'')+
+    (Number.isFinite(job.recent_accuracy)?' · Recente '+Number(job.recent_accuracy).toFixed(1)+'%':'');
   }
   if(job?.recent_signal&&!ongoing){
    const direction=String(job.recent_signal.direction||'').toUpperCase();
@@ -2002,7 +2006,7 @@ $('hubStartBtn').onclick=async()=>{
   'MOTOR A: pesquisa múltiplas estratégias nos ativos abertos.\n'+
   'MOTOR B: distribui até quatro estratégias distintas aprovadas.\n'+
   'Xtreme Sniper principal: sem prioridade automática.\n'+
-  'Exige MAIS de 58% em 30 testes fora da amostra, payout acima de 80% e filtros de segurança.\n'+
+  'Exige MAIS de 58% em 30 testes e nos últimos 20 resultados (mínimo 10), payout acima de 80% e limites de risco.\n'+
   'Operações: uma por vez; M5 apenas estudo.\n\n'+
   'Valor por operação: '+String(c.stake)+' '+String(hubState.currency||'USD')+
   '\nLimite diário: '+String(c.limit)+
