@@ -1,7 +1,7 @@
 import os,secrets,threading,subprocess,sys,queue,json,time,pathlib,math,hashlib
 from datetime import datetime,timezone,timedelta
 from flask import Flask,request,jsonify,session,render_template,make_response,send_file
-from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok
+from strategy import analyze,analyze_selected,entry_allowed,STRATEGIES,validate_config,risk_ok,entry_pause_seconds
 from sniper_lab40 import CANDIDATES,evaluate as evaluate_lab40,MIN_OBSERVATIONS
 from lab40_autoupdate import merge_closed_bars,favorite_rows
 from multiasset_lab import ResearchRegistry, aggregate_m5, is_closed_m1
@@ -190,8 +190,10 @@ def office_digest(value):return hashlib.sha256(value.encode('utf-8')).digest()
 def office_origin_allowed():return request.headers.get('Origin')==OFFICE_ORIGIN
 def office_error(message,status):return jsonify(error=message),status
 
-state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'chart_asset':None,'chart_updated_at':None,'candles':[],'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2'}}
+state={'connected':False,'running':False,'message':'Conecte sua demo para verificar a integração.','balance':None,'currency':None,'assets':[],'analysis':{},'chart_asset':None,'chart_updated_at':None,'candles':[],'trades':[],'logs':[],'uncertain':False,'last_candle':None,'config':{'asset':'EURUSD','stake':2,'payout':80,'stop_win':20,'stop_loss':10,'limit':5,'strategy':'sniper','stop_win_enabled':True,'stop_loss_enabled':True,'sniper_source':'hl2','entry_pause_mode':'off'}}
 
+state['next_entry_at']=0.0  # Deadline after confirmed PRACTICE settlement; preserves pause across Stop/Start.
+state['last_entry_pause_status']=None
 state['lab_orders_enabled']=False  # Must be explicitly enabled on the authenticated PRACTICE panel.
 state['lab_signal_diag']={'reason':'AGUARDANDO_MOTOR','eligible':0,'assigned':0,
                            'fresh_assets':0,'crossings':0,'valid_signals':0,'checked_at':None}
@@ -421,6 +423,15 @@ def loop(c):
                 state['candles']=chart_item.get('candles',[])[-50:]
                 state['chart_asset']=chart_item['asset']
                 state['chart_updated_at']=time.time()
+            pause_remaining=max(0,int(math.ceil(state['next_entry_at']-time.time())))
+            if pause_remaining:
+                state['lab_signal_diag'].update(reason='PAUSA_ENTRE_OPERACOES',
+                                                pause_remaining_seconds=pause_remaining,
+                                                pause_mode=c.get('entry_pause_mode','off'))
+                state['analysis']={'direction':None,'reason':'Pausa configurada: '+str(pause_remaining)+'s restantes'}
+                state['message']='Analisando mercados; próxima operação permitida após '+str(pause_remaining)+'s.'
+                stop.wait(.25)
+                continue
             if not proposal:
                 state['analysis']={'direction':None,'reason':'Laboratório: '+diag['reason']}
                 state['message']='Aguardando sinal validado do laboratório: '+diag['reason']
@@ -456,6 +467,8 @@ def loop(c):
             with lock:
                 if stop.is_set() or not state['lab_orders_enabled']:
                     break
+                if time.time()<state['next_entry_at']:
+                    continue
                 last=key
                 state['last_candle']=key
                 trade={'time':datetime.now(timezone(timedelta(hours=-3))).isoformat(timespec='seconds'),
@@ -500,7 +513,11 @@ def loop(c):
                 trade.update(status='WIN' if result['profit']>0 else 'LOSS' if result['profit']<0 else 'EMPATE',profit=result['profit'])
                 state['balance']=result['balance']
                 state['uncertain']=False
-                log('Resultado do trader '+proposal['trader_name']+': '+trade['status'])
+                seconds=entry_pause_seconds(c.get('entry_pause_mode','off'),trade['status'])
+                state['next_entry_at']=time.time()+seconds if seconds else 0.0
+                state['last_entry_pause_status']=trade['status']
+                log('Resultado do trader '+proposal['trader_name']+': '+trade['status']+
+                    ('. Pausa antes de nova ordem: '+str(seconds//60)+' min.' if seconds else '.'))
             stop.wait(.15)
     except Exception as e:
         log(str(e))
@@ -764,6 +781,9 @@ def office_overview():
             balance=state['balance'],currency=state['currency'],assets=state['assets'][:150],
             config=state['config'],comparison=comparison(),management=management(),
             lab_orders_enabled=bool(state['lab_orders_enabled']),
+            next_entry_at=state['next_entry_at'],
+            entry_pause_remaining_seconds=max(0,int(math.ceil(state['next_entry_at']-time.time()))),
+            entry_pause_last_status=state['last_entry_pause_status'],
             office_mode='LABORATORIO_OPERANDO' if state['running'] and state['lab_orders_enabled'] else
                         'PARANDO' if stop.is_set() and state['running'] else
                         'AGUARDANDO_INICIO',

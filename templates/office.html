@@ -108,11 +108,21 @@ html:fullscreen .stage{height:calc(86vh - 84px);min-height:350px;max-height:none
      <label>Valor por operação<input id="hubStake" type="number" step="0.01" min="0.01" value="2" required></label>
      <label>Payout mínimo (%)<input id="hubPayout" type="number" min="0" max="100" step="1" value="80" required></label>
      <label>Limite de operações/dia<input id="hubLimit" type="number" min="1" max="100" value="5" step="1" required></label>
+     <label>Pausa antes da próxima operação
+      <select id="hubPauseMode">
+       <option value="off">Sem pausa extra</option>
+       <option value="all_2">2 minutos após cada resultado</option>
+       <option value="all_3">3 minutos após cada resultado</option>
+       <option value="all_5">5 minutos após cada resultado</option>
+       <option value="loss_3">3 minutos somente após um LOSS</option>
+      </select>
+     </label>
      <label>Stop win diário<input id="hubStopWin" type="number" min="0.01" step="0.01" value="20" required></label>
      <label>Stop loss diário<input id="hubStopLoss" type="number" min="0.01" step="0.01" value="10" required></label>
     </div>
     <label><input id="hubStopWinEnabled" type="checkbox" checked>Ativar stop win</label>
     <label><input id="hubStopLossEnabled" type="checkbox" checked>Ativar stop loss</label>
+    <p class="formHint">A contagem começa após o resultado WIN, LOSS ou EMPATE confirmado pela Bullex. O motor continua analisando e somente as ordens ficam suspensas.</p>
     <p class="formHint">O laboratório testa várias estratégias M1 e distribui até quatro diferentes: acima de 58% em no mínimo 30 testes, payout maior que 80% e filtros de risco da DEMO.</p>
     <div class="rowButtons"><button type="submit" id="hubSaveBtn">💾 Salvar configurações</button></div>
    </form>
@@ -1653,7 +1663,7 @@ restroomDoorAmount+=(Number(bathroomNear)-restroomDoorAmount)*.085;restroomDoor.
 // Same-origin control panel: CSRF session cookie is HttpOnly and first-party.
 // Never allow the 3D client to send REAL orders or store passwords/tokens.
 let hubCsrf='',hubState=null,hubPolling=null,hubBusy=false,hubLoadedConfig=false,hubRefreshing=false,hubHaveBaseline=false,hubLastWins=new Set();
-const hubIds={strategy:'hubStrategy',asset:'hubAsset',sniper_source:'hubSniperSource',stake:'hubStake',payout:'hubPayout',limit:'hubLimit',stop_win:'hubStopWin',stop_loss:'hubStopLoss'};
+const hubIds={strategy:'hubStrategy',asset:'hubAsset',sniper_source:'hubSniperSource',stake:'hubStake',payout:'hubPayout',limit:'hubLimit',stop_win:'hubStopWin',stop_loss:'hubStopLoss',entry_pause_mode:'hubPauseMode'};
 async function hubApi(endpoint,body){
  const response=await fetch('/api/'+endpoint,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',
   headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':hubCsrf},
@@ -1932,6 +1942,9 @@ function hubLoadLive(p){
   ['Saldo DEMO',officeMoney(p.balance,p.currency||'USD')],
   ['Resultado diário',officeMoney(m.profit||0,p.currency||'USD')],
   ['WIN/LOSS',String(m.wins||0)+' / '+String(m.losses||0)],
+  ['Próxima entrada',Number(p.entry_pause_remaining_seconds||0)>0?
+    'Aguardar '+Math.floor(Number(p.entry_pause_remaining_seconds)/60)+':'+
+    String(Math.ceil(Number(p.entry_pause_remaining_seconds)%60)).padStart(2,'0'):'Liberada para sinais válidos'],
   ['Motor',p.running?'RODANDO':p.uncertain?'⚠️ INCERTO':'PARADO']];
  const host=$('hubStats');host.replaceChildren();
  for(const [name,value] of stats){
@@ -2006,6 +2019,7 @@ $('hubStartBtn').onclick=async()=>{
   'Operações: uma por vez; M5 apenas estudo.\n\n'+
   'Valor por operação: '+String(c.stake)+' '+String(hubState.currency||'USD')+
   '\nLimite diário: '+String(c.limit)+
+  '\nPausa entre operações: '+String(({off:'Sem pausa extra',all_2:'2 minutos após resultado',all_3:'3 minutos após resultado',all_5:'5 minutos após resultado',loss_3:'3 minutos somente após LOSS'})[c.entry_pause_mode||'off']||'Sem pausa extra')+
   '\nStops conforme suas configurações.\n\nCONFIRMAR E INICIAR?'))return;
  await hubExecute('start',{lab_only:true},
   'Escritório iniciando: quatro traders analisam múltiplas estratégias aprovadas na PRACTICE.');

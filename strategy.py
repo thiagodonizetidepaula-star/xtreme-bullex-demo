@@ -204,11 +204,32 @@ def entry_allowed(trades, asset, candle, strategy):
     if strategy=='repetition' and any(t.get('strategy_key')=='repetition' and t.get('status')!='IGNORADA' and candle<t['candle']+180 for t in previous):return False,'Aguardando três novas velas sem reutilizar a sequência anterior.'
     return True,''
 
+ENTRY_PAUSE_MODES = ('off', 'all_2', 'all_3', 'all_5', 'loss_3')
+
+def entry_pause_seconds(mode, settled_status):
+    """Seconds from broker-confirmed settlement to next possible DEMO order.
+
+    No delay is triggered by a refused signal, unconfirmed order or while an
+    existing order is awaiting its result. Timing is a risk control, not an
+    assertion that a later signal will be profitable.
+    """
+    if settled_status not in ('WIN', 'LOSS', 'EMPATE'):
+        return 0
+    if mode == 'all_2': return 120
+    if mode == 'all_3': return 180
+    if mode == 'all_5': return 300
+    if mode == 'loss_3' and settled_status == 'LOSS': return 180
+    return 0
+
 def validate_config(c):
+    if not isinstance(c,dict):raise ValueError('Configuração inválida')
     for k in ['stake','stop_win','stop_loss','payout','limit']:
         if not isinstance(c[k],(int,float)) or isinstance(c[k],bool) or not math.isfinite(c[k]): raise ValueError('Configuração inválida')
     for flag in ['stop_win_enabled','stop_loss_enabled']:
         if flag in c and not isinstance(c[flag],bool):raise ValueError('Stops precisam de ativação explícita')
+    if c.get('entry_pause_mode','off') not in ENTRY_PAUSE_MODES:raise ValueError('Pausa entre operações inválida')
+    c=dict(c)
+    c['entry_pause_mode']=c.get('entry_pause_mode','off')
     if c.get('sniper_source','hl2') not in PRICE_SOURCES:raise ValueError('Fonte Sniper inválida')
     if c.get('strategy','rejection') not in STRATEGIES:raise ValueError('Estratégia inválida')
     if c['stake']<=0 or c['stop_win']<=0 or c['stop_loss']<c['stake']: raise ValueError('Entrada e stops inválidos. Stop loss deve cobrir uma entrada.')
