@@ -27,6 +27,12 @@ def connect_loop():
         with _lock:_state["message"]="Variáveis BULLEX_EMAIL e BULLEX_PASSWORD indisponíveis neste serviço"
         return
     try:
+        with _lock:_state["message"]="Preparando biblioteca Bullex no servidor"
+        vendor=ROOT/"vendor"
+        if not (vendor/"bullexapi"/"stable_api.py").exists():
+            subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","-q","--target",str(vendor),"-r",str(ROOT/"requirements.txt")],check=True,timeout=120,stdout=subprocess.DEVNULL)
+            subprocess.run([sys.executable,str(ROOT/"bootstrap.py")],check=True,timeout=120,stdout=subprocess.DEVNULL)
+        with _lock:_state["message"]="Biblioteca preparada; autenticando PRACTICE"
         _proc=subprocess.Popen([sys.executable,"-u",str(ROOT/"worker.py")],cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
         threading.Thread(target=worker_read,daemon=True).start()
         result=call("connect",timeout=55,email=email,password=password)
