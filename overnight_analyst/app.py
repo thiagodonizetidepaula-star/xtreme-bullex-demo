@@ -1,6 +1,7 @@
 """Read-only overnight market research. NEVER sends broker orders."""
 import os,sys,time,json,threading,subprocess,queue,datetime,urllib.request,pathlib
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
+from urllib.parse import urlparse
 from importlib.util import spec_from_file_location,module_from_spec
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=spec_from_file_location("research",pathlib.Path(__file__).with_name("research.py"))
@@ -76,9 +77,12 @@ def worker():
             if proc and proc.poll() is None:proc.terminate()
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in ("/","/health","/status"):self.send_error(404);return
+        if urlparse(self.path).path not in ("/","/health","/status"):self.send_error(404);return
         with guard:content=json.dumps(dict(state,timestamp=time.time())).encode()
         self.send_response(200);self.send_header("Content-Type","application/json");self.send_header("Cache-Control","no-store");self.send_header("Content-Length",str(len(content)));self.end_headers();self.wfile.write(content)
+    def do_HEAD(self):
+        if urlparse(self.path).path not in ("/","/health","/status"):self.send_error(404);return
+        self.send_response(200);self.send_header("Content-Type","application/json");self.end_headers()
     def do_POST(self):self.send_error(403,"Research only; trading disabled")
 if __name__=="__main__":
     threading.Thread(target=worker,daemon=True).start()
