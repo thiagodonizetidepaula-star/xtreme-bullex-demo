@@ -11,7 +11,7 @@ $('signup').onclick=async()=>{if(!$('loginForm').reportValidity())return;try{con
 let recoveryToken=null;
 $('forgot').onclick=async()=>{const email=$('email').value.trim();if(!email||!$('email').checkValidity()){$('email').reportValidity();return}
 $('loginStatus').textContent='Solicitando e-mail de recuperação…';
-try{await auth('recover',{email});$('loginStatus').textContent='Se este e-mail estiver cadastrado, você receberá um link para criar uma senha nova. Confira também o spam.'}
+try{await jsonFetch(config.url+'/auth/v1/recover?redirect_to='+encodeURIComponent(location.origin+'/'),{method:'POST',headers:{apikey:config.key,'Content-Type':'application/json'},body:JSON.stringify({email})});$('loginStatus').textContent='Se este e-mail estiver cadastrado, você receberá um link para criar uma senha nova. Confira também o spam.'}
 catch(e){$('loginStatus').textContent=e.message}};
 (function checkRecovery(){
 const hash=new URLSearchParams(location.hash.slice(1));
