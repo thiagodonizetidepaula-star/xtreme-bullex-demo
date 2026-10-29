@@ -111,14 +111,14 @@ class Tests(unittest.TestCase):
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-19+i,1.1+i*.01] for i in range(20)])
   orders=[json.loads(msg[2:]) for msg in b.ws.sent if msg.startswith('42["openOrder"')]
-  self.assertEqual(len(orders),1)
-  self.assertEqual(orders[0][1]['isDemo'],1)
-  self.assertEqual(orders[0][1]['time'],5)
-  self.assertEqual(orders[0][1]['action'],'call')
+  self.assertEqual(len(orders),2) # one prior manual trade + one automated demo trade
+  self.assertEqual(orders[-1][1]['isDemo'],1)
+  self.assertEqual(orders[-1][1]['time'],5)
+  self.assertEqual(orders[-1][1]['action'],'call')
   self.assertIsNotNone(b.pending)
   b.event('updateStream',[[b.symbol,now+1,1.4]])
   orders=[msg for msg in b.ws.sent if msg.startswith('42["openOrder"')]
-  self.assertEqual(len(orders),1)
+  self.assertEqual(len(orders),2) # no duplicate while previous auto order remains pending
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
