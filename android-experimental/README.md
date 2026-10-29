@@ -45,3 +45,10 @@ Inspect the commit, CI results and Android WebView test before trusting a local 
 - The Android embedded Xtreme dashboard ALWAYS hides the old SSID field and its F12 instructions (the DOM connection button remains for a one-time, consented handoff).
 - A foreground-only status monitor runs every 15 seconds, even when the Pocket Option browser is visible, to reduce the original server's 120-second idle-disconnect risk. It makes only a user-authenticated status request and NEVER sends orders. Disconnects caused by broker refusal or Android backgrounding still require reconnection.
 - TESTE MANUAL 5S selects an available OTC asset if necessary, clicks Analisar ativo (subscribes to price stream), and scrolls to the manual 5-second order controls. This does NOT place an order. The user must explicitly confirm one demo trade after real ticks arrive; only a broker-verified five-second close unlocks automated demo.
+
+## V5 — visible manual confirmation and order response
+
+- The embedded Xtreme web view uses an Android-native confirmation dialog ONLY for the expected manual demo trade message from the verified Xtreme domain. It never auto-confirms an order and does not intercept Pocket Option dialogs. Cancel means no request should be sent.
+- Android-injected, ephemeral client-only diagnostics show the backend response to POST /api/order beside the manual buttons instead of relying on the top-of-screen status that is overwritten during polling. The diagnostic does not read or persist any SSID, password, Authorization header or order payload.
+- HTTP 200 means the app server *received* the request, **NOT** that Pocket Option accepted or settled a trade. Success requires broker event/history confirmation. On ambiguous failure, check the broker before repeating.
+- The original Render web app and all broker-side checks remain unchanged. In particular, automatic DEMO remains locked until a broker-verified five-second manual order has settled.

@@ -14,6 +14,7 @@ import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
+import android.webkit.JsResult
 import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -84,13 +85,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V4"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V5"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V4: conecte a DEMO e use TESTE MANUAL 5S para carregar cotações."
+            text = "V5: confirmação nativa e resultado das ordens DEMO no próprio painel."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -204,7 +205,36 @@ class MainActivity : Activity() {
             settings.setSupportMultipleWindows(false)
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             isSaveEnabled = false
-            webChromeClient = WebChromeClient()
+            webChromeClient = object : WebChromeClient() {
+                override fun onJsConfirm(
+                    view: WebView?, url: String?, message: String?, result: JsResult?
+                ): Boolean {
+                    // Only intercept the known manual-order confirmation from OUR Xtreme web app.
+                    // Pocket Option prompts retain their normal browser behavior.
+                    if (homeUrl != tigerUrl ||
+                        Uri.parse(url ?: "").host != "xtreme-pocket-5s.onrender.com" ||
+                        !message.orEmpty().startsWith("Enviar uma ordem de ") ||
+                        !message.orEmpty().contains("na conta DEMO") ||
+                        !message.orEmpty().contains("5 segundos")) {
+                        return false
+                    }
+                    if (result == null) return true
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("Confirmar ordem MANUAL — conta DEMO")
+                        .setMessage(message.orEmpty() + "\\n\\nNão é uma ordem real. Aguarde a confirmação do servidor e da corretora antes de repetir.")
+                        .setPositiveButton("Confirmar DEMO") { _, _ ->
+                            result.confirm()
+                            status.text = "Ordem DEMO confirmada no Android. Veja a resposta perto dos botões de compra/venda."
+                        }
+                        .setNegativeButton("Cancelar") { _, _ ->
+                            result.cancel()
+                            status.text = "Ordem manual cancelada. Nada foi enviado por esta tentativa."
+                        }
+                        .setOnCancelListener { result.cancel() }
+                        .show()
+                    return true
+                }
+            }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
