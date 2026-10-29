@@ -65,26 +65,44 @@ class MainActivity : Activity() {
             setPadding(10, 0, 10, 8)
         }
         val openTiger = Button(this).apply {
-            text = "1. Abrir Xtreme Tiger / Fazer login"
+            text = "PAINEL XTREME"
             setOnClickListener { showTiger() }
         }
         val openBroker = Button(this).apply {
-            text = "2. Testar login Pocket Option DEMO"
+            text = "CONECTAR POCKET DEMO"
             setOnClickListener { confirmBeforeOpeningBroker() }
         }
         transferButton = Button(this).apply {
-            text = "3. Enviar sessão DEMO ao Xtreme"
+            text = "ENVIAR SESSÃO DEMO PARA O XTREME"
             isEnabled = false
+            visibility = View.GONE
             setOnClickListener { confirmTransfer() }
         }
         val discard = Button(this).apply {
-            text = "Descartar sessão / Limpar navegador interno"
+            text = "LIMPAR SESSÃO"
             setOnClickListener { clearExperimentalSession() }
         }
-        controls.addView(openTiger)
-        controls.addView(openBroker)
+        val manual = Button(this).apply {
+            text = "TESTE MANUAL 5S"
+            setOnClickListener { openManualTest() }
+        }
+        val start = Button(this).apply {
+            text = "INICIAR BOT DEMO"
+            setOnClickListener { startDemoBot() }
+        }
+        val stop = Button(this).apply {
+            text = "PARAR BOT"
+            setOnClickListener { stopDemoBot() }
+        }
+        fun pair(a: Button, b: Button) = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        controls.addView(pair(openTiger, openBroker))
         controls.addView(transferButton)
-        controls.addView(discard)
+        controls.addView(pair(manual, start))
+        controls.addView(pair(stop, discard))
         val frame = FrameLayout(this)
         root.addView(header)
         root.addView(status)
@@ -109,6 +127,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     capturedPacket = candidate
                     transferButton.isEnabled = true
+                    transferButton.visibility = View.VISIBLE
                     status.text = "Mensagem DEMO identificada no navegador interno. Ainda NÃO está conectada. Faça login no Xtreme e confirme o envio."
                 }
             }
@@ -139,6 +158,13 @@ class MainActivity : Activity() {
             isSaveEnabled = false
             webChromeClient = WebChromeClient()
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    if (homeUrl == tigerUrl && url?.startsWith(tigerUrl) == true) {
+                        val js = assets.open("web-ui-assist.js").bufferedReader().use { it.readText() }
+                        view?.evaluateJavascript(js, null)
+                    }
+                }
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val u = request?.url ?: return true
                     val host = u.host?.lowercase() ?: return true
@@ -178,6 +204,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Continuar") { _, _ ->
                 capturedPacket = null
                 transferButton.isEnabled = false
+                transferButton.visibility = View.GONE
                 broker.visibility = View.VISIBLE
                 tiger.visibility = View.GONE
                 broker.loadUrl(brokerUrl)
@@ -190,6 +217,7 @@ class MainActivity : Activity() {
         if (DemoAuthPacket.validate(packet) == null) {
             capturedPacket = null
             transferButton.isEnabled = false
+            transferButton.visibility = View.GONE
             return
         }
         AlertDialog.Builder(this)
@@ -226,13 +254,111 @@ class MainActivity : Activity() {
             }
             capturedPacket = null
             transferButton.isEnabled = false
+            transferButton.visibility = View.GONE
             broker.loadUrl("about:blank")
         }
+    }
+
+    private fun jsValue(raw: String?): String =
+        try { org.json.JSONTokener(raw ?: "").nextValue() as? String ?: "" }
+        catch (_: Exception) { "" }
+
+    private fun openManualTest() {
+        showTiger()
+        tiger.evaluateJavascript("""
+            (() => {
+                if (document.getElementById('dashboard')?.hidden !== false) return 'LOGIN';
+                if (document.getElementById('connection')?.textContent?.trim() !== 'DEMO CONFIRMADA') return 'DEMO';
+                document.getElementById('call')?.closest('.card')?.scrollIntoView({behavior:'smooth',block:'start'});
+                return 'OK';
+            })()
+        """.trimIndent()) { raw ->
+            status.text = when (jsValue(raw)) {
+                "OK" -> "Faça uma operação MANUAL DEMO de 5s e aguarde a confirmação oficial para desbloquear o automático. Se necessário, selecione e analise o ativo antes."
+                "LOGIN" -> "Primeiro entre na sua conta do Xtreme Tiger."
+                "DEMO" -> "A conta DEMO ainda não foi confirmada no servidor. Conecte novamente."
+                else -> "Não foi possível abrir o teste; confira o painel."
+            }
+        }
+    }
+
+    private fun startDemoBot() {
+        showTiger()
+        tiger.evaluateJavascript("""
+            (() => {
+                if (document.getElementById('dashboard')?.hidden !== false) return 'LOGIN';
+                if (document.getElementById('connection')?.textContent?.trim() !== 'DEMO CONFIRMADA') return 'DEMO';
+                const button = document.getElementById('auto');
+                if (!button) return 'SEM_BOTAO';
+                if (button.textContent.includes('em execução')) return 'ATIVO';
+                if (button.disabled) {
+                    document.getElementById('call')?.closest('.card')?.scrollIntoView({behavior:'smooth',block:'start'});
+                    return 'VALIDAR';
+                }
+                button.scrollIntoView({behavior:'smooth',block:'start'});
+                return 'PRONTO|' + ['amount','stop_win','stop_loss','limit','min_payout']
+                    .map(id => document.getElementById(id)?.value || '?').join('|');
+            })()
+        """.trimIndent()) { raw ->
+            val answer = jsValue(raw)
+            if (answer.startsWith("PRONTO|")) {
+                val v = answer.split("|")
+                if (v.size != 6) { status.text = "Configure os parâmetros no painel."; return@evaluateJavascript }
+                AlertDialog.Builder(this).setTitle("Iniciar bot SOMENTE DEMO?")
+                    .setMessage("Valor: ${v[1]} por entrada; Stop Win: ${v[2]}; Stop Loss: ${v[3]}; Limite: ${v[4]} operações; Payout mínimo: ${v[5]}%.\n\nOperações já enviadas podem continuar pendentes. Confirma?")
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Iniciar DEMO") { _, _ ->
+                        tiger.evaluateJavascript("""
+                            (() => {
+                                const button = document.getElementById('auto');
+                                if (document.getElementById('connection')?.textContent?.trim() !== 'DEMO CONFIRMADA'
+                                   || !button || button.disabled) return 'BLOQUEADO';
+                                button.click();
+                                return 'SOLICITADO';
+                            })()
+                        """.trimIndent()) { result ->
+                            status.text = if (jsValue(result) == "SOLICITADO")
+                                "Início solicitado. Confirme no painel a mensagem Automático em execução."
+                            else "Bot bloqueado. Confira a confirmação DEMO e os limites de segurança."
+                        }
+                    }.show()
+            } else {
+                status.text = when(answer) {
+                    "VALIDAR" -> "Para iniciar, faça primeiro um teste MANUAL de 5 segundos na conta DEMO e aguarde o resultado. O aplicativo mostrou os controles abaixo do gráfico."
+                    "ATIVO" -> "O automático DEMO já está em execução."
+                    "DEMO" -> "A conta DEMO não está confirmada. Reconecte."
+                    "LOGIN" -> "Entre primeiro no Xtreme Tiger."
+                    else -> "Abra o painel para verificar o automático."
+                }
+            }
+        }
+    }
+
+    private fun stopDemoBot() {
+        AlertDialog.Builder(this).setTitle("Parar novas operações DEMO?")
+            .setMessage("Uma operação já enviada não será cancelada automaticamente.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Parar") { _, _ ->
+                showTiger()
+                tiger.evaluateJavascript("""
+                    (() => {
+                        if (document.getElementById('dashboard')?.hidden !== false) return 'LOGIN';
+                        const button=document.getElementById('stop');
+                        if (!button) return 'SEM_BOTAO';
+                        button.click(); return 'SOLICITADO';
+                    })()
+                """.trimIndent()) { raw ->
+                    status.text = if (jsValue(raw) == "SOLICITADO")
+                        "Parada solicitada. Confira no painel e verifique ordens pendentes na corretora."
+                    else "Abra e entre no painel para parar o bot."
+                }
+            }.show()
     }
 
     private fun clearExperimentalSession() {
         capturedPacket = null
         transferButton.isEnabled = false
+        transferButton.visibility = View.GONE
         broker.loadUrl("about:blank")
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
