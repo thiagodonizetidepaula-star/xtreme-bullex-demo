@@ -31,7 +31,7 @@ class Broker:
     def __init__(self,auth,persist=lambda row:None):
         self.auth=auth; self.persist=persist; self.lock=threading.RLock(); self.ws=None
         self.connected=False; self.connecting=False; self.demo_confirmed=False; self.balance=None
-        self.assets={}; self.symbol=''; self.ticks=deque(maxlen=600); self.received=0; self.price_time=0
+        self.assets={}; self.symbol=''; self.ticks=deque(maxlen=600); self.received=0; self.price_time=0; self.quote_samples=deque(maxlen=80)
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
         self.auto=False; self.validated=False; self.last_order=0; self.closed=False; self.binary=None
         self.last_seen=time.time(); self.limit=10; self.stop_win=20.; self.stop_loss=20.; self.amount=1.; self.min_payout=80.; self.baseline=0; self.count=0
@@ -46,7 +46,7 @@ class Broker:
     def run(self):
         for url in DEMO_URLS:
             if self.closed: break
-            self.binary=None; self.demo_confirmed=False; self.validated=False; self.received=0; self.ticks.clear()
+            self.binary=None; self.demo_confirmed=False; self.validated=False; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -98,7 +98,7 @@ class Broker:
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
                     if math.isfinite(t) and math.isfinite(p) and p>0 and t>self.price_time:
-                        self.ticks.append((t,p));self.received=time.time();self.price_time=t
+                        self.ticks.append((t,p));self.received=time.time();self.price_time=t;self.quote_samples.append((t,self.received))
             if self.auto and not self.pending and time.time()-self.last_order>10:
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
@@ -153,12 +153,35 @@ class Broker:
         # Persist only allowlisted non-sensitive fields.
         row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status')};row['result']=p.get('result',{})
         self.persist(row)
+    def fresh_quote(self):
+        """Fail closed if the feed is stale, even if broker and server clocks differ.
+
+        When the upstream timestamp has a stable clock offset, prove that source
+        times advance at a credible rate over multiple separate arrivals.
+        A bulk replay with identical receipt times cannot satisfy this check.
+        """
+        now=time.time()
+        if not self.ticks or not self.received or not self.price_time:
+            return False
+        if not 0<=now-self.received<=2.0:
+            return False
+        if abs(now-self.price_time)<=3.0:
+            return True
+        if abs(now-self.price_time)>12*3600:
+            return False
+        for source,arrival in reversed(self.quote_samples):
+            elapsed=self.received-arrival
+            advanced=self.price_time-source
+            if 0.8<=elapsed<=5.0 and 0.25<=advanced<=elapsed+3:
+                return True
+        return False
+
     def subscribe(self,symbol):
         with self.lock:
             if self.pending:raise ValueError('Aguarde a resolução da ordem antes de trocar o ativo.')
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
-            self.auto=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0
+            self.auto=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
     def order(self,direction,amount):
         with self.lock:
@@ -167,7 +190,7 @@ class Broker:
             if not self.connected or not self.demo_confirmed:raise ValueError('Saldo de conta demo ainda não confirmado.')
             if self.pending:raise ValueError('Há uma ordem pendente. Não será enviada outra.')
             if time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
-            if not self.ticks or time.time()-self.received>2 or abs(time.time()-self.price_time)>3:raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
+            if not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
             asset=self.assets.get(self.symbol,{})
             if not asset.get('available') or not self.symbol.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para testar 5 segundos.')
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
@@ -190,7 +213,7 @@ class Broker:
             if self.auto and time.time()-self.received>3:self.auto=False;self.log('Leitura atrasada. Automático pausado.')
             if self.pending and time.time()-self.pending['sent_at']>30:
                 self.auto=False;self.log('Ordem sem resultado confirmado. Automático bloqueado; confira na corretora.')
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(time.time()-self.received,1) if self.received else None,'message':self.message,'auto':self.auto,'validated':self.validated,'signal':signal(self.ticks) if time.time()-self.received<3 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'message':self.message,'auto':self.auto,'validated':self.validated,'signal':signal(self.ticks) if time.time()-self.received<3 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
         self.auto=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.auth={}
         if self.ws:self.ws.close()

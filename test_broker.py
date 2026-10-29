@@ -15,6 +15,35 @@ class Tests(unittest.TestCase):
  def test_unknown_demo_blocked(self):
   b=self.broker();b.demo_confirmed=False
   with self.assertRaises(ValueError):b.order('call',1)
+ def test_clock_skew_live_quotes(self):
+  b=self.broker();now=time.time()
+  b.ticks.clear();b.quote_samples.clear();b.price_time=0;b.received=0
+  b.event('updateStream',[[b.symbol,now-3601,1.1]])
+  b.quote_samples.append((now-3601,now-1.2))
+  b.event('updateStream',[[b.symbol,now-3600,1.2]])
+  self.assertTrue(b.fresh_quote())
+  b.order('call',1)
+  self.assertEqual(len(b.ws.sent),1)
+ def test_clock_skew_single_packet_rejected(self):
+  b=self.broker();now=time.time();b.quote_samples.clear()
+  b.price_time=now-3600;b.received=now
+  b.quote_samples.append((now-3601,now))
+  b.quote_samples.append((now-3600,now))
+  self.assertFalse(b.fresh_quote())
+  with self.assertRaisesRegex(ValueError,'Preço ausente'):
+   b.order('call',1)
+ def test_unmoving_stale_price_rejected(self):
+  b=self.broker();now=time.time();b.quote_samples.clear()
+  b.price_time=now-3600;b.received=now
+  b.quote_samples.append((now-3600,now-1.2))
+  b.quote_samples.append((now-3600,now))
+  self.assertFalse(b.fresh_quote())
+ def test_old_broker_timestamp_rejected(self):
+  b=self.broker();now=time.time();b.quote_samples.clear()
+  b.price_time=now-15*3600;b.received=now
+  b.quote_samples.append((now-15*3600-1,now-1.2))
+  b.quote_samples.append((now-15*3600,now))
+  self.assertFalse(b.fresh_quote())
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
