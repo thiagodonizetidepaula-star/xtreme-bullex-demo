@@ -8,6 +8,26 @@ async function api(path,body){if(!session)throw Error('Entre no aplicativo.');if
 async function enter(s){session=s;refreshAt=Date.now()+Math.max(60,s.expires_in-120)*1000;$('password').value='';$('login').hidden=true;$('dashboard').hidden=false;await poll();try{saved=await api('history');renderHistory()}catch(e){status(e.message)}}
 $('loginForm').onsubmit=async e=>{e.preventDefault();$('loginStatus').textContent='Entrando…';try{await enter(await auth('token?grant_type=password',{email:$('email').value,password:$('password').value}));$('loginStatus').textContent=''}catch(e){$('loginStatus').textContent=e.message}};
 $('signup').onclick=async()=>{if(!$('loginForm').reportValidity())return;try{const d=await auth('signup',{email:$('email').value,password:$('password').value});if(d.access_token)await enter(d);else $('loginStatus').textContent='Cadastro solicitado. Confirme seu e-mail e depois volte para entrar neste app.'}catch(e){$('loginStatus').textContent=e.message}};
+let recoveryToken=null;
+$('forgot').onclick=async()=>{const email=$('email').value.trim();if(!email||!$('email').checkValidity()){$('email').reportValidity();return}
+$('loginStatus').textContent='Solicitando e-mail de recuperação…';
+try{await auth('recover',{email});$('loginStatus').textContent='Se este e-mail estiver cadastrado, você receberá um link para criar uma senha nova. Confira também o spam.'}
+catch(e){$('loginStatus').textContent=e.message}};
+(function checkRecovery(){
+const hash=new URLSearchParams(location.hash.slice(1));
+if(hash.get('type')==='recovery'&&hash.get('access_token')){
+ recoveryToken=hash.get('access_token');$('loginForm').hidden=true;$('resetForm').hidden=false;
+ $('loginStatus').textContent='Link confirmado. Escolha uma nova senha.';
+ history.replaceState(null,'',location.pathname);
+}else if(hash.get('error_description')){$('loginStatus').textContent=hash.get('error_description');history.replaceState(null,'',location.pathname)}
+})();
+$('resetForm').onsubmit=async e=>{e.preventDefault();const pw=$('newPassword').value;
+if(pw!==$('confirmPassword').value){$('loginStatus').textContent='As senhas não coincidem.';return}
+try{await jsonFetch(config.url+'/auth/v1/user',{method:'PUT',headers:{apikey:config.key,Authorization:'Bearer '+recoveryToken,'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+recoveryToken=null;$('newPassword').value='';$('confirmPassword').value='';
+$('resetForm').hidden=true;$('loginForm').hidden=false;
+$('loginStatus').textContent='Senha alterada! Entre usando sua nova senha.'}
+catch(err){$('loginStatus').textContent=err.message}};
 $('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;saved=[];snapshot={};$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
 async function action(name,body={}){if(busy)return;busy=true;try{await api(name,body);await poll()}catch(e){status(e.message)}finally{busy=false}}
 $('connect').onclick=async()=>{const ssid=$('ssid').value.trim();$('ssid').value='';await action('connect',{ssid})};$('disconnect').onclick=()=>action('disconnect');$('subscribe').onclick=()=>action('subscribe',{symbol:$('asset').value});$('stop').onclick=()=>action('stop');
