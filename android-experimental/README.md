@@ -39,3 +39,9 @@ Inspect the commit, CI results and Android WebView test before trusting a local 
 - Android V3 is obvious in the banner. If the title still reads **EXPERIMENTAL** and buttons are numbered 1, 2, 3, then the old APK is installed.
 - Automatic demo session transfer is only enabled for the **single attempt** after tapping **CONECTAR POCKET DEMO** and explicitly approving. It does not reuse Chrome cookies, run unattended, bypass login, or save credentials. If Xtreme is not logged in, the user must log into the panel and manually retry the in-memory handoff.
 - Transfer is never represented as success before the Xtreme UI reports **DEMO CONFIRMADA**. Confirmation check times out after 30 seconds and does not trigger orders.
+
+## V4 — improved session feedback and manual trial
+- Android header contains V4; do not assume any older APK has these changes.
+- The Android embedded Xtreme dashboard ALWAYS hides the old SSID field and its F12 instructions (the DOM connection button remains for a one-time, consented handoff).
+- A foreground-only status monitor runs every 15 seconds, even when the Pocket Option browser is visible, to reduce the original server's 120-second idle-disconnect risk. It makes only a user-authenticated status request and NEVER sends orders. Disconnects caused by broker refusal or Android backgrounding still require reconnection.
+- TESTE MANUAL 5S selects an available OTC asset if necessary, clicks Analisar ativo (subscribes to price stream), and scrolls to the manual 5-second order controls. This does NOT place an order. The user must explicitly confirm one demo trade after real ticks arrive; only a broker-verified five-second close unlocks automated demo.

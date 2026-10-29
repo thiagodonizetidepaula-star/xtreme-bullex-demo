@@ -7,6 +7,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -40,6 +42,37 @@ class MainActivity : Activity() {
     private lateinit var transferButton: Button
     // One explicit per-attempt authorization: auto-send only a detected DEMO packet.
     private var autoTransferApproved = false
+    private lateinit var brokerState: TextView
+    private val monitorHandler = Handler(Looper.getMainLooper())
+    private var monitorActive = false
+    private val monitor = object : Runnable {
+        override fun run() {
+            if (!monitorActive || !::tiger.isInitialized) return
+            tiger.evaluateJavascript("""
+                (() => {
+                    const active = document.getElementById('dashboard')?.hidden === false;
+                    if (!active) return 'LOGIN';
+                    const badge = document.getElementById('connection')?.textContent?.trim() || 'DESCONECTADO';
+                    const age = document.getElementById('age')?.textContent?.trim() || '—';
+                    // Status-only request while foreground; this NEVER creates an order.
+                    if (typeof api === 'function') api('status').catch(() => {});
+                    return badge + '|' + age;
+                })()
+            """.trimIndent()) { raw ->
+                if (!monitorActive) return@evaluateJavascript
+                val x = jsValue(raw)
+                brokerState.text = when {
+                    x == "LOGIN" -> "Estado: entre no painel Xtreme antes de conectar a corretora."
+                    x.startsWith("DEMO CONFIRMADA|") ->
+                        "Estado: DEMO CONFIRMADA • Último tick: " + x.substringAfter("|")
+                    x.startsWith("CONECTANDO|") -> "Estado: conectando à DEMO…"
+                    x.startsWith("VALIDANDO DEMO|") -> "Estado: aguardando confirmação DEMO…"
+                    else -> "Estado: DEMO desconectada. Toque CONECTAR POCKET DEMO."
+                }
+            }
+            monitorHandler.postDelayed(this, 15000L)
+        }
+    }
     private var probeSupported = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,16 +84,22 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V3"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V4"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V3: entre no PAINEL XTREME e toque CONECTAR DEMO. A conta real nunca será aceita."
+            text = "V4: conecte a DEMO e use TESTE MANUAL 5S para carregar cotações."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
+        }
+        brokerState = TextView(this).apply {
+            text = "Estado: DEMO desconectada."
+            textSize = 12f
+            setTextColor(Color.rgb(193, 238, 116))
+            setPadding(18, 0, 18, 10)
         }
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -108,6 +147,7 @@ class MainActivity : Activity() {
         val frame = FrameLayout(this)
         root.addView(header)
         root.addView(status)
+        root.addView(brokerState)
         root.addView(controls)
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
@@ -313,15 +353,27 @@ class MainActivity : Activity() {
             (() => {
                 if (document.getElementById('dashboard')?.hidden !== false) return 'LOGIN';
                 if (document.getElementById('connection')?.textContent?.trim() !== 'DEMO CONFIRMADA') return 'DEMO';
+                const select = document.getElementById('asset');
+                const subscribe = document.getElementById('subscribe');
+                if (!select || !subscribe || subscribe.disabled) return 'INATIVO';
+                const otc = [...select.options].filter(x => x.value.endsWith('_otc') && !x.disabled);
+                if (!otc.length) return 'SEM_OTC';
+                if (!select.value.endsWith('_otc')) select.value = otc[0].value;
+                subscribe.click(); // Ask for price stream; does NOT create an order.
                 document.getElementById('call')?.closest('.card')?.scrollIntoView({behavior:'smooth',block:'start'});
-                return 'OK';
+                return 'COTACOES|' + select.options[select.selectedIndex]?.textContent;
             })()
         """.trimIndent()) { raw ->
-            status.text = when (jsValue(raw)) {
-                "OK" -> "Faça uma operação MANUAL DEMO de 5s e aguarde a confirmação oficial para desbloquear o automático. Se necessário, selecione e analise o ativo antes."
-                "LOGIN" -> "Primeiro entre na sua conta do Xtreme Tiger."
-                "DEMO" -> "A conta DEMO ainda não foi confirmada no servidor. Conecte novamente."
-                else -> "Não foi possível abrir o teste; confira o painel."
+            val result = jsValue(raw)
+            status.text = when {
+                result.startsWith("COTACOES|") ->
+                    "Solicitei preços de " + result.substringAfter("|") +
+                    ". Aguarde o 'Último tick' mostrar segundos. Só então faça UMA operação MANUAL demo de 5s e aguarde o resultado."
+                result == "SEM_OTC" -> "Ainda não há ativo OTC disponível. Aguarde o catálogo ou reconecte a DEMO."
+                result == "INATIVO" -> "O painel ainda não está pronto. Aguarde o catálogo e tente novamente."
+                result == "LOGIN" -> "Entre primeiro no painel Xtreme Tiger."
+                result == "DEMO" -> "A DEMO desconectou. Toque CONECTAR POCKET DEMO; não precisa de SSID."
+                else -> "Não foi possível carregar as cotações; confira a conexão."
             }
         }
     }
@@ -412,6 +464,19 @@ class MainActivity : Activity() {
         showTiger()
     }
 
+    override fun onResume() {
+        super.onResume()
+        monitorActive = true
+        monitorHandler.removeCallbacks(monitor)
+        if (::tiger.isInitialized) monitorHandler.post(monitor)
+    }
+
+    override fun onPause() {
+        monitorActive = false
+        monitorHandler.removeCallbacks(monitor)
+        super.onPause()
+    }
+
     @Deprecated("Legacy back navigation")
     override fun onBackPressed() {
         if (broker.visibility == View.VISIBLE) showTiger()
@@ -420,6 +485,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        monitorActive = false
+        monitorHandler.removeCallbacks(monitor)
         autoTransferApproved = false
         capturedPacket = null
         tiger.destroy()
