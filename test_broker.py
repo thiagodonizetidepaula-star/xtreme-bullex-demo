@@ -44,6 +44,38 @@ class Tests(unittest.TestCase):
   b.quote_samples.append((now-15*3600-1,now-1.2))
   b.quote_samples.append((now-15*3600,now))
   self.assertFalse(b.fresh_quote())
+ def test_app_heartbeat_demo_only(self):
+  b=self.broker()
+  self.assertTrue(b.send_keepalive())
+  self.assertEqual(b.ws.sent,['42["ps"]'])
+  self.assertIsNotNone(b.snapshot()['last_app_ping_age'])
+ def test_no_heartbeat_for_unconfirmed(self):
+  b=self.broker();b.demo_confirmed=False
+  self.assertFalse(b.send_keepalive())
+  self.assertEqual(b.ws.sent,[])
+  b.close()
+  self.assertFalse(b.send_keepalive())
+ def test_41_is_disconnect_not_proven_auth_rejection(self):
+  b=self.broker();b.auto=True
+  b.on_message(b.ws,'41')
+  self.assertTrue(b.closed)
+  self.assertFalse(b.demo_confirmed)
+  self.assertFalse(b.auto)
+  self.assertIn('Motivo não informado',b.message)
+  self.assertNotIn('Sessão recusada',b.message)
+ def test_explicit_not_authorized_closes_safely(self):
+  b=self.broker();b.auto=True
+  b.event('NotAuthorized',{})
+  self.assertTrue(b.closed)
+  self.assertFalse(b.auto)
+  self.assertIn('Autenticação DEMO recusada',b.message)
+ def test_repeated_balance_events_do_not_hide_disconnect(self):
+  b=self.broker()
+  original=len(b.events)
+  b.event('successupdateBalance',{'isDemo':1,'balance':101})
+  b.event('successupdateBalance',{'isDemo':1,'balance':102})
+  self.assertEqual(len(b.events),original)
+  self.assertEqual(b.balance,102)
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
