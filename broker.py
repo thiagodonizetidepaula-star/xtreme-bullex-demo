@@ -35,11 +35,32 @@ class Broker:
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
         self.auto=False; self.validated=False; self.last_order=0; self.closed=False; self.binary=None
         self.last_seen=time.time(); self.limit=10; self.stop_win=20.; self.stop_loss=20.; self.amount=1.; self.min_payout=80.; self.baseline=0; self.count=0
+        self.keepalive_stop=threading.Event()
+        self.last_app_ping=0
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
         self.connecting=True
         threading.Thread(target=self.run,daemon=True).start()
+        threading.Thread(target=self.keepalive_loop,daemon=True).start()
+    def send_keepalive(self):
+        # Distinct from Socket.IO Engine.IO ping/pong and WebSocket transport ping.
+        # Only authenticated DEMO connections get the documented 'ps' heartbeat.
+        with self.lock:
+            if self.closed or not self.connected or not self.demo_confirmed or not self.ws:
+                return False
+            try:
+                self.send('ps')
+                self.last_app_ping=time.time()
+                return True
+            except Exception:
+                self.auto=False
+                self.log('Falha ao manter conexão DEMO. Confira o estado antes de operar.')
+                return False
+    def keepalive_loop(self):
+        while not self.keepalive_stop.wait(20):
+            if self.closed: return
+            self.send_keepalive()
     def send(self,event,data=None):
         if not self.ws: raise ValueError('Conexão indisponível.')
         self.ws.send('42'+json.dumps([event] if data is None else [event,data],separators=(',',':')))
@@ -55,6 +76,7 @@ class Broker:
             if self.closed or self.connected or self.pending: break
         self.connecting=False; self.connected=False; self.auto=False
         if not self.closed:self.log('Conexão encerrada. Confira a sessão demo e reconecte. Nenhuma ordem é reenviada automaticamente.')
+        self.keepalive_stop.set()
     def on_error(self,ws,error):
         # Never log upstream payloads or authentication material.
         self.log('Falha de conexão com a Pocket Option. Sessão expirada, bloqueio de rede ou servidor indisponível.')
@@ -74,7 +96,12 @@ class Broker:
                 elif message.startswith('40'):
                     self.send('auth',self.auth)
                 elif message=='41':
-                    self.closed=True; self.log('Sessão recusada pela corretora. Obtenha uma nova sessão demo.');ws.close()
+                    # '41' denotes a Socket.IO namespace disconnect, not proof
+                    # by itself that the broker explicitly rejected credentials.
+                    self.closed=True;self.connected=False;self.demo_confirmed=False
+                    self.auto=False;self.validated=False;self.keepalive_stop.set()
+                    self.log('A Pocket Option encerrou a conexão (código 41). Motivo não informado. Reconecte à conta DEMO.')
+                    ws.close()
                 elif message.startswith('451-'):
                     p=json.loads(message.split('-',1)[1]);self.binary=p[0]
                 elif message.startswith('42'):
@@ -85,12 +112,13 @@ class Broker:
         if name=='successauth':
             self.connected=True;self.connecting=False;self.log('Autenticado. Aguardando confirmação do saldo demo e catálogo.');self.send('indicator/load');self.send('favorite/load')
         elif name=='successupdateBalance' and isinstance(d,dict):
+            previously_demo=self.demo_confirmed
             if 'isDemo' in d:
                 self.demo_confirmed=d['isDemo'] in (1,True)
                 if not self.demo_confirmed:self.auto=False;self.close();return
             b=d.get('balance')
             if isinstance(b,(int,float)) and math.isfinite(b):self.balance=b
-            if self.demo_confirmed:self.log('Conta demo confirmada. Selecione um ativo para receber preços.')
+            if self.demo_confirmed and not previously_demo:self.log('Conta demo confirmada. Selecione um ativo para receber preços.')
         elif name=='updateAssets' and isinstance(d,list):
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'payout':float(r[5]),'available':bool(r[14])} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str) and isinstance(r[5],(int,float))}
         elif name=='updateStream' and isinstance(d,list):
@@ -147,7 +175,11 @@ class Broker:
                         if 4.5<=duration<=5.5:self.validated=True
                     except (TypeError,ValueError):pass
                     self.history.append(p);self.history=self.history[-300:];self.pending=None;self.save(p);self.log('Resultado confirmado: '+p['status'])
-        elif 'error' in name.lower() or 'notauthorized' in name.lower():
+        elif name.lower()=='notauthorized':
+            self.auto=False;self.validated=False
+            self.log('Autenticação DEMO recusada pela corretora. Gere uma nova sessão no navegador interno.')
+            self.close()
+        elif 'error' in name.lower():
             self.auto=False;self.log('A corretora recusou a solicitação. Confira a sessão, ativo, valor e duração. Verifique possíveis ordens na corretora.')
     def save(self,p):
         # Persist only allowlisted non-sensitive fields.
@@ -213,7 +245,7 @@ class Broker:
             if self.auto and time.time()-self.received>3:self.auto=False;self.log('Leitura atrasada. Automático pausado.')
             if self.pending and time.time()-self.pending['sent_at']>30:
                 self.auto=False;self.log('Ordem sem resultado confirmado. Automático bloqueado; confira na corretora.')
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'message':self.message,'auto':self.auto,'validated':self.validated,'signal':signal(self.ticks) if time.time()-self.received<3 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'validated':self.validated,'signal':signal(self.ticks) if time.time()-self.received<3 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
-        self.auto=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.auth={}
+        self.auto=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
