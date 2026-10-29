@@ -1,5 +1,5 @@
 import json,time,unittest
-from broker import Broker,parse_auth,signal
+from broker import Broker,parse_auth,signal,verified_five_second_duration
 class FakeWS:
  def __init__(self):self.sent=[]
  def send(self,v):self.sent.append(v)
@@ -76,6 +76,49 @@ class Tests(unittest.TestCase):
   b.event('successupdateBalance',{'isDemo':1,'balance':102})
   self.assertEqual(len(b.events),original)
   self.assertEqual(b.balance,102)
+ def test_duration_normalization_seconds_and_milliseconds(self):
+  self.assertEqual(verified_five_second_duration(100,105),5)
+  self.assertEqual(verified_five_second_duration(1700000000000,1700000005000),5)
+  self.assertIsNone(verified_five_second_duration(1700000000000,None))
+  self.assertIsNone(verified_five_second_duration(1700000000000,1699999999999))
+  self.assertIsNone(verified_five_second_duration(True,False))
+ def test_ms_duration_unblocks_demo_auto(self):
+  b=self.broker();b.order('call',1);p=b.pending
+  b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000005000}]})
+  self.assertTrue(b.validated)
+  self.assertIn('5s confirmada',b.snapshot()['validation_message'])
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80})
+  self.assertTrue(b.auto)
+ def test_non_five_duration_stays_locked(self):
+  b=self.broker();b.order('call',1);p=b.pending
+  b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000009000}]})
+  self.assertFalse(b.validated)
+  self.assertIn('9.00s',b.snapshot()['validation_message'])
+ def test_missing_broker_times_must_not_unlock(self):
+  b=self.broker();b.order('call',1);p=b.pending
+  b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
+  self.assertFalse(b.validated)
+  self.assertIn('não informou horário',b.snapshot()['validation_message'])
+ def test_auto_reuses_verified_manual_order_route(self):
+  b=self.settle(.85,1.2)
+  self.assertTrue(b.validated)
+  b.subscribe(b.symbol)
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80})
+  b.last_order-=11
+  now=int(time.time())
+  b.event('updateStream',[[b.symbol,now-19+i,1.1+i*.01] for i in range(20)])
+  orders=[json.loads(msg[2:]) for msg in b.ws.sent if msg.startswith('42["openOrder"')]
+  self.assertEqual(len(orders),2) # one prior manual trade + one automated demo trade
+  self.assertEqual(orders[-1][1]['isDemo'],1)
+  self.assertEqual(orders[-1][1]['time'],5)
+  self.assertEqual(orders[-1][1]['action'],'call')
+  self.assertIsNotNone(b.pending)
+  b.event('updateStream',[[b.symbol,now+1,1.4]])
+  orders=[msg for msg in b.ws.sent if msg.startswith('42["openOrder"')]
+  self.assertEqual(len(orders),2) # no duplicate while previous auto order remains pending
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
