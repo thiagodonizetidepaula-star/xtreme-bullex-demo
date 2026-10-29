@@ -1,0 +1,40 @@
+name: Android demo connection prototype (not production)
+on:
+  push:
+    branches:
+      - experiment/android-pocket-demo-assist
+    paths:
+      - 'android-experimental/**'
+      - '.github/workflows/android-demo-experiment.yml'
+  workflow_dispatch:
+jobs:
+  mock-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: android-experimental
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Socket.IO packet filter with fake WebSocket
+        run: node tests/probe.test.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Run local JVM unit tests and assemble unsigned debug prototype
+        run: gradle --no-daemon testDebugUnitTest assembleDebug
+      - name: Upload debug APK as temporary CI artifact (NOT a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: xtreme-tiger-android-experimental-debug
+          path: android-experimental/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 3
