@@ -38,6 +38,8 @@ class MainActivity : Activity() {
     private lateinit var broker: WebView
     private lateinit var status: TextView
     private lateinit var transferButton: Button
+    // One explicit per-attempt authorization: auto-send only a detected DEMO packet.
+    private var autoTransferApproved = false
     private var probeSupported = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,13 +51,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  POCKET DEMO  •  EXPERIMENTAL"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V3"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "Teste Android. Nenhuma sessão da corretora conectada."
+            text = "V3: entre no PAINEL XTREME e toque CONECTAR DEMO. A conta real nunca será aceita."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -128,7 +130,13 @@ class MainActivity : Activity() {
                     capturedPacket = candidate
                     transferButton.isEnabled = true
                     transferButton.visibility = View.VISIBLE
-                    status.text = "Mensagem DEMO identificada no navegador interno. Ainda NÃO está conectada. Faça login no Xtreme e confirme o envio."
+                    if (autoTransferApproved) {
+                        autoTransferApproved = false
+                        status.text = "Sessão DEMO detectada. Enviando ao Xtreme conforme sua autorização..."
+                        transferToExistingApp(candidate)
+                    } else {
+                        status.text = "Sessão DEMO detectada. Faça login no Xtreme e confirme o envio."
+                    }
                 }
             }
             val script = assets.open("demo-probe.js").bufferedReader().use { it.readText() }
@@ -198,17 +206,18 @@ class MainActivity : Activity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("Teste assistido — somente DEMO")
-            .setMessage("A corretora abrirá em um navegador interno SEPARADO do Chrome. Você poderá precisar entrar novamente na Pocket Option e selecionar DEMO. O protótipo tentará detectar apenas a mensagem de sessão DEMO. Não lemos nem salvamos sua senha. O método não é oficial e pode falhar ou ser bloqueado pela corretora. Continuar?")
+            .setTitle("Conectar somente conta DEMO?")
+            .setMessage("Após sua autorização, abriremos a Pocket Option neste navegador interno. Se detectarmos uma sessão DEMO, tentaremos enviá-la AUTOMATICAMENTE ao seu Xtreme Tiger conectado, sem copiar SSID. Você precisa já estar logado no painel Xtreme. Não lemos sua senha nem conectamos contas reais. Esta integração é experimental e pode falhar. Autoriza esta tentativa?")
             .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Continuar") { _, _ ->
+            .setPositiveButton("Autorizar DEMO") { _, _ ->
+                autoTransferApproved = true
                 capturedPacket = null
                 transferButton.isEnabled = false
                 transferButton.visibility = View.GONE
                 broker.visibility = View.VISIBLE
                 tiger.visibility = View.GONE
                 broker.loadUrl(brokerUrl)
-                status.text = "Abra a conta DEMO na Pocket Option. Aguardando sessão; nenhuma conexão foi estabelecida."
+                status.text = "Abra a Pocket Option em modo DEMO. Assim que a sessão DEMO aparecer, o app tentará conectar ao Xtreme automaticamente."
             }.show()
     }
 
@@ -231,6 +240,11 @@ class MainActivity : Activity() {
     private fun transferToExistingApp(packet: String) {
         // Send to existing form only after user action. No token in URL, log, or storage.
         showTiger()
+        // Never inject the credential-equivalent packet into another domain.
+        if (tiger.url?.startsWith(tigerUrl) != true) {
+            status.text = "Página do Xtreme indisponível. Volte ao painel e faça login para continuar."
+            return
+        }
         val quoted = org.json.JSONObject.quote(packet)
         val js = """
             (() => {
@@ -246,17 +260,47 @@ class MainActivity : Activity() {
             })()
         """.trimIndent()
         tiger.evaluateJavascript(js) { result ->
-            // Result is NOT broker authentication confirmation.
-            status.text = when (result) {
-                "\"ENVIO_SOLICITADO\"" -> "Envio solicitado. Confira no Xtreme se a CONTA DEMO foi confirmada pelo servidor."
-                "\"LOGIN_NECESSARIO\"" -> "Entre primeiro no Xtreme Tiger e repita o teste. Sessão descartada."
-                else -> "Não foi possível acessar o formulário. Sessão descartada."
+            // A click is NOT proof of broker authentication. Poll confirmation in Xtreme status.
+            when (jsValue(result)) {
+                "ENVIO_SOLICITADO" -> {
+                    capturedPacket = null
+                    transferButton.isEnabled = false
+                    transferButton.visibility = View.GONE
+                    broker.loadUrl("about:blank")
+                    status.text = "Sessão enviada. Aguardando confirmação da conta DEMO pelo servidor..."
+                    checkDemoConfirmation(0)
+                }
+                "LOGIN_NECESSARIO" -> {
+                    status.text = "Entre no PAINEL XTREME primeiro. A sessão demo está disponível para reenviar."
+                }
+                else -> status.text = "Formulário indisponível. Abra o painel e tente novamente pelo botão Enviar sessão."
             }
-            capturedPacket = null
-            transferButton.isEnabled = false
-            transferButton.visibility = View.GONE
-            broker.loadUrl("about:blank")
         }
+    }
+
+    private fun checkDemoConfirmation(attempt: Int) {
+        if (attempt >= 15) {
+            status.text = "Conexão DEMO não confirmada em 30s. Confira o status do Xtreme; não inicie operações."
+            return
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            tiger.evaluateJavascript("""
+                (() => {
+                    const badge = document.getElementById('connection')?.textContent?.trim() || '';
+                    const message = document.getElementById('status')?.textContent || '';
+                    if (badge === 'DEMO CONFIRMADA') return 'CONFIRMADA';
+                    if (badge === 'DESCONECTADO' && /recusada|encerrada|expirada|indisponível|erro|falha/i.test(message)) return 'FALHA';
+                    return 'AGUARDANDO';
+                })()
+            """.trimIndent()) { result ->
+                when (jsValue(result)) {
+                    "CONFIRMADA" -> status.text = "DEMO CONFIRMADA! O SSID desaparece do painel. Teste uma operação manual de 5s antes de iniciar o bot."
+                    "FALHA" -> status.text = "A Pocket Option não confirmou a sessão. Confira a mensagem do Xtreme e tente reconectar pela conta DEMO."
+                    else -> checkDemoConfirmation(attempt + 1)
+                }
+            }
+        }, 2000L)
     }
 
     private fun jsValue(raw: String?): String =
@@ -356,6 +400,7 @@ class MainActivity : Activity() {
     }
 
     private fun clearExperimentalSession() {
+        autoTransferApproved = false
         capturedPacket = null
         transferButton.isEnabled = false
         transferButton.visibility = View.GONE
@@ -375,6 +420,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        autoTransferApproved = false
         capturedPacket = null
         tiger.destroy()
         broker.destroy()
