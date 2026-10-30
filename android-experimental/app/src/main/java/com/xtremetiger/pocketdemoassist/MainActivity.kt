@@ -19,6 +19,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
 import android.net.http.SslError
 import android.widget.Button
 import android.widget.FrameLayout
@@ -41,6 +43,9 @@ class MainActivity : Activity() {
     private lateinit var broker: WebView
     private lateinit var status: TextView
     private lateinit var transferButton: Button
+    private lateinit var connectionIssuePanel: LinearLayout
+    private lateinit var connectionIssueText: TextView
+    private var brokerLoadFailed = false
     // One explicit per-attempt authorization: auto-send only a detected DEMO packet.
     private var autoTransferApproved = false
     private lateinit var brokerState: TextView
@@ -85,13 +90,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V5"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V6"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V5: confirmação nativa e resultado das ordens DEMO no próprio painel."
+            text = "V6: diagnóstico de acesso à Pocket Option; sinais e estratégia sem alterações."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -145,11 +150,48 @@ class MainActivity : Activity() {
         controls.addView(transferButton)
         controls.addView(pair(manual, start))
         controls.addView(pair(stop, discard))
+        connectionIssueText = TextView(this).apply {
+            text = "Não foi possível abrir o site oficial."
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            setPadding(14, 10, 14, 10)
+        }
+        val retryBroker = Button(this).apply {
+            text = "TENTAR NOVAMENTE"
+            setOnClickListener {
+                if (!probeSupported) {
+                    status.text = "Este Android não suporta a integração DEMO."
+                } else {
+                    brokerLoadFailed = false
+                    connectionIssuePanel.visibility = View.GONE
+                    broker.visibility = View.VISIBLE
+                    tiger.visibility = View.GONE
+                    status.text = "Tentando o site oficial novamente. Nenhuma ordem será criada."
+                    broker.loadUrl(brokerUrl)
+                }
+            }
+        }
+        val checkInChrome = Button(this).apply {
+            text = "VERIFICAR NO CHROME"
+            setOnClickListener {
+                autoTransferApproved = false
+                status.text = "Abrindo o site oficial no navegador. O Chrome não conecta automaticamente o bot."
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(brokerUrl)))
+            }
+        }
+        connectionIssuePanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.rgb(34, 29, 26))
+            visibility = View.GONE
+            addView(connectionIssueText)
+            addView(pair(retryBroker, checkInChrome))
+        }
         val frame = FrameLayout(this)
         root.addView(header)
         root.addView(status)
         root.addView(brokerState)
         root.addView(controls)
+        root.addView(connectionIssuePanel)
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
 
@@ -236,11 +278,35 @@ class MainActivity : Activity() {
                 }
             }
             webViewClient = object : WebViewClient() {
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    super.onReceivedError(view, request, error)
+                    if (homeUrl != brokerUrl || request?.isForMainFrame != true) return
+                    val code = error?.errorCode ?: 0
+                    val reason = when (code) {
+                        WebViewClient.ERROR_TIMEOUT -> "A conexão com o site oficial excedeu o tempo limite."
+                        WebViewClient.ERROR_HOST_LOOKUP -> "O Android não conseguiu localizar o domínio oficial."
+                        WebViewClient.ERROR_CONNECT -> "A conexão com o servidor oficial não foi estabelecida."
+                        WebViewClient.ERROR_INTERNET_DISCONNECTED -> "O celular está sem conexão com a internet."
+                        else -> "A página oficial não pôde ser carregada (erro $code)."
+                    }
+                    showBrokerConnectionIssue(reason)
+                }
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
+                    super.onReceivedHttpError(view, request, errorResponse)
+                    if (homeUrl != brokerUrl || request?.isForMainFrame != true) return
+                    val code = errorResponse?.statusCode ?: 0
+                    if (code >= 400) {
+                        showBrokerConnectionIssue("O servidor oficial respondeu HTTP $code. Não tentaremos contornar restrições de acesso.")
+                    }
+                }
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     if (homeUrl == tigerUrl && url?.startsWith(tigerUrl) == true) {
                         val js = assets.open("web-ui-assist.js").bufferedReader().use { it.readText() }
                         view?.evaluateJavascript(js, null)
+                    } else if (homeUrl == brokerUrl && !brokerLoadFailed && url != null &&
+                               approvedBrokerOrigin(Uri.parse(url))) {
+                        connectionIssuePanel.visibility = View.GONE
                     }
                 }
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -259,7 +325,11 @@ class MainActivity : Activity() {
 
                 override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
                     handler?.cancel()
-                    status.text = "Certificado HTTPS não validado. Navegação bloqueada."
+                    if (homeUrl == brokerUrl) {
+                        showBrokerConnectionIssue("O certificado HTTPS não foi validado. A conexão foi bloqueada.")
+                    } else {
+                        status.text = "Certificado HTTPS não validado. Navegação bloqueada."
+                    }
                 }
             }
         }
@@ -268,6 +338,19 @@ class MainActivity : Activity() {
     private fun showTiger() {
         tiger.visibility = View.VISIBLE
         broker.visibility = View.GONE
+    }
+
+    private fun showBrokerConnectionIssue(reason: String) {
+        brokerLoadFailed = true
+        autoTransferApproved = false
+        capturedPacket = null
+        transferButton.isEnabled = false
+        transferButton.visibility = View.GONE
+        connectionIssueText.text = reason + "\nConfira se o site oficial abre no Chrome. Se não abrir, pode haver indisponibilidade da rede, do serviço ou restrição regional. Não tente contornar bloqueios de acesso."
+        connectionIssuePanel.visibility = View.VISIBLE
+        broker.stopLoading()
+        showTiger()
+        status.text = "A Pocket Option não carregou. O painel Xtreme permanece disponível."
     }
 
     private fun confirmBeforeOpeningBroker() {
@@ -284,6 +367,8 @@ class MainActivity : Activity() {
                 capturedPacket = null
                 transferButton.isEnabled = false
                 transferButton.visibility = View.GONE
+                brokerLoadFailed = false
+                connectionIssuePanel.visibility = View.GONE
                 broker.visibility = View.VISIBLE
                 tiger.visibility = View.GONE
                 broker.loadUrl(brokerUrl)
@@ -365,7 +450,7 @@ class MainActivity : Activity() {
                 })()
             """.trimIndent()) { result ->
                 when (jsValue(result)) {
-                    "CONFIRMADA" -> status.text = "DEMO CONFIRMADA! O SSID desaparece do painel. Teste uma operação manual de 5s antes de iniciar o bot."
+                    "CONFIRMADA" -> status.text = "Conta DEMO confirmada pelo servidor. O automático depende dos limites e do estado do painel."
                     "FALHA" -> status.text = "A Pocket Option não confirmou a sessão. Confira a mensagem do Xtreme e tente reconectar pela conta DEMO."
                     else -> checkDemoConfirmation(attempt + 1)
                 }
@@ -450,7 +535,7 @@ class MainActivity : Activity() {
                     }.show()
             } else {
                 status.text = when(answer) {
-                    "VALIDAR" -> "Para iniciar, faça primeiro um teste MANUAL de 5 segundos na conta DEMO e aguarde o resultado. O aplicativo mostrou os controles abaixo do gráfico."
+                    "VALIDAR" -> "O servidor bloqueou a ativação. Confira a seção do automático e eventuais ordens pendentes."
                     "ATIVO" -> "O automático DEMO já está em execução."
                     "DEMO" -> "A conta DEMO não está confirmada. Reconecte."
                     "LOGIN" -> "Entre primeiro no Xtreme Tiger."
