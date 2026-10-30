@@ -44,7 +44,7 @@ def cleanup():
             for uid,c in list(CLIENTS.items()):
                 if time.time()-c['seen']>120:
                     c['broker'].close();del CLIENTS[uid]
-                elif c['broker'].auto and (time.time()-c['broker'].received>3 or (c['broker'].pending and time.time()-c['broker'].pending['sent_at']>30)):
+                elif c['broker'].auto and ((c['broker'].received and time.time()-c['broker'].received>3) or (not c['broker'].received and time.time()-c['broker'].auto_started_at>15) or (c['broker'].pending and time.time()-c['broker'].pending['sent_at']>30)):
                     c['broker'].auto=False;c['broker'].log('Sem preços recentes. Automático pausado.')
 
 class Handler(BaseHTTPRequestHandler):
