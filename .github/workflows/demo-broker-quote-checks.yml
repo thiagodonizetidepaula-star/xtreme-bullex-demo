@@ -5,6 +5,8 @@ on:
     paths:
       - 'broker.py'
       - 'm1_strategy.py'
+      - 'market_radar.py'
+      - 'test_market_radar.py'
       - 'test_broker.py'
       - 'static/app.js'
       - 'static/index.html'
@@ -23,7 +25,7 @@ jobs:
       - name: Install test dependencies
         run: pip install websocket-client==1.8.0
       - name: Run unit tests
-        run: python -m unittest -v test_broker
+        run: python -m unittest -v test_broker test_market_radar
       - name: Check JavaScript syntax
         run: node --check static/app.js
       - name: Verify V10 expiry choices and independent M1/M5 signal engine
@@ -47,4 +49,4 @@ jobs:
           print('PASS: V10 M1/M5 strategy and demo expiries')
           PY
       - name: Compile Python modules
-        run: python -m py_compile broker.py m1_strategy.py server.py
+        run: python -m py_compile broker.py m1_strategy.py market_radar.py server.py
