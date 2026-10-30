@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V10"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V11"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V10: 5s ou M1/M5 com vencimento 30s, 1, 2, 3 ou 5 minutos em conta DEMO."
+            text = "V11: tendência no M5, gatilho no M1 e entrada automática DEMO de 60 segundos."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -139,7 +139,7 @@ class MainActivity : Activity() {
             setOnClickListener { openManualTest() }
         }
         val start = Button(this).apply {
-            text = "SINAIS / M1"
+            text = "M5 → M1"
             setOnClickListener { showSignalPanel() }
         }
         val stop = Button(this).apply {
@@ -520,7 +520,7 @@ class MainActivity : Activity() {
 
     private fun showSignalPanel() {
         showTiger()
-        status.text = "Escolha 5s ou 1 minuto no cartão de sinais. Para prazos M1, aguarde o histórico real e valide o vencimento na DEMO."
+        status.text = "O bot analisa M5 e opera M1 automaticamente após ativar o modo DEMO no cartão azul. Aguarde velas M5 completas."
         tiger.evaluateJavascript("""
             (() => {
                 const panel=document.querySelector('.signal-console');
