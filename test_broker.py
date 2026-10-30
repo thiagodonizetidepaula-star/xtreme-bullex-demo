@@ -213,6 +213,65 @@ class Tests(unittest.TestCase):
   self.assertIsNone(signal([(100+2*i,1.0) for i in range(10)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
   self.assertIsNone(signal([(100+i,1.0) for i in range(9)]+[(109,1.2),(110,1.2)]))
+ def test_pending_timeout_only_logs_once_and_never_retries(self):
+  b=self.broker();b.order('call',1,5);p=b.pending
+  p['sent_at']=time.time()-35
+  events_before=len(b.events)
+  out=b.snapshot()
+  self.assertTrue(out['pending']['timed_out'])
+  self.assertEqual(out['pending']['status'],'RESULTADO_PENDENTE')
+  self.assertFalse(out['auto'])
+  self.assertEqual(len(b.events),events_before+1)
+  self.assertEqual(b.count,1)
+  for _ in range(12):b.snapshot()
+  self.assertEqual(len(b.events),events_before+1)
+  self.assertEqual(len([x for x in b.ws.sent if 'openOrder' in x]),1)
+  with self.assertRaisesRegex(ValueError,'pendente'):b.order('put',1)
+ def test_pending_recovery_requires_explicit_checked_confirmation_and_id(self):
+  b=self.broker();b.order('call',1,5);p=b.pending;p['sent_at']=time.time()-35;b.snapshot()
+  for key,ok in [(p['id'],False),(p['id'],'true'),('wrong-id',True)]:
+   with self.assertRaises(ValueError):b.resolve_unconfirmed_order(key,ok)
+  self.assertIsNotNone(b.pending)
+  self.assertEqual(len(b.history),0)
+ def test_pending_recovery_rejects_open_broker_account_unknown(self):
+  b=self.broker();b.order('call',1,5);p=b.pending;p['sent_at']=time.time()-35;b.snapshot()
+  b.demo_confirmed=False
+  with self.assertRaisesRegex(ValueError,'Conecte'):b.resolve_unconfirmed_order(p['id'],True)
+  self.assertIsNotNone(b.pending)
+ def test_pending_cannot_be_cleared_early(self):
+  b=self.broker();b.order('call',1,5);p=b.pending
+  with self.assertRaisesRegex(ValueError,'Aguarde'):b.resolve_unconfirmed_order(p['id'],True)
+  self.assertIsNotNone(b.pending)
+ def test_explicit_recovery_keeps_audit_and_does_not_restart_auto(self):
+  saved=[]
+  b=self.broker();b.persist=lambda p:saved.append(p.copy())
+  b.order('call',1,5);p=b.pending;pid=p['id'];brokerid='br-1'
+  b.event('successopenOrder',{'id':brokerid,'requestId':p['requestId'],'openPrice':1.1})
+  p['sent_at']=time.time()-35
+  b.snapshot()
+  self.assertTrue(b.resolve_unconfirmed_order(pid,True))
+  self.assertIsNone(b.pending)
+  self.assertFalse(b.auto)
+  self.assertEqual(len(b.history),1)
+  row=b.history[0]
+  self.assertEqual(row['id'],pid)
+  self.assertEqual(row['broker_order_id'],brokerid)
+  self.assertEqual(row['status'],'RESULTADO_DESCONHECIDO')
+  self.assertEqual(saved[-1]['status'],'RESULTADO_DESCONHECIDO')
+  self.assertNotIn('net',row)
+  self.assertEqual(len([x for x in b.ws.sent if 'openOrder' in x]),1)
+  with self.assertRaisesRegex(ValueError,'pendência mudou'):
+   b.resolve_unconfirmed_order(pid,True)
+ def test_direct_close_object_reconciles_only_exact_order_id(self):
+  b=self.broker();b.order('call',1,5);p=b.pending
+  b.event('successopenOrder',{'id':'good-id','requestId':p['requestId'],'openTime':100,'openPrice':1.1})
+  b.event('successcloseOrder',{'id':'other','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':105})
+  self.assertIsNotNone(b.pending)
+  b.event('successcloseOrder',{'id':'good-id','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':105})
+  self.assertIsNone(b.pending)
+  self.assertEqual(len(b.history),1)
+  self.assertEqual(b.history[0]['status'],'WIN')
+  self.assertTrue(b.validated)
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
