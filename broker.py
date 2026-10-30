@@ -223,7 +223,11 @@ class Broker:
             self.pending['broker_order_id']=str(d.get('id',''));self.pending['status']='ABERTA';self.pending['opened']=d
             self.log('Ordem demo aceita. Aguardando resultado oficial.');self.save(self.pending)
         elif name in ('successcloseOrder','updateClosedDeals'):
-            deals=d.get('deals',[]) if isinstance(d,dict) else d
+            # Broker messages can contain either a single close record or
+            # a list under 'deals'. Match only our acknowledged broker order ID.
+            deals=d.get('deals') if isinstance(d,dict) else d
+            if isinstance(d,dict) and deals is None and d.get('id') is not None:
+                deals=[d]
             if not isinstance(deals,list):return
             for deal in deals:
                 if self.pending and str(deal.get('id',''))==self.pending.get('broker_order_id') and self.pending.get('broker_order_id'):
@@ -341,11 +345,41 @@ class Broker:
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
-            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':self.symbol,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None}
+            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':self.symbol,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False}
             self.last_order=time.time();self.count+=1;self.save(self.pending)
             try:self.send('openOrder',{'asset':self.symbol,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
             except Exception:self.auto=False;self.log('Envio sem confirmação. Não repita a ordem; confira na corretora.');raise ValueError('Envio sem confirmação. Automático pausado.') from None
             self.log('Ordem demo enviada; aguardando confirmação.')
+    def resolve_unconfirmed_order(self,pending_id,confirm_no_open_orders):
+        """Explicitly release a stuck DEMO order after user checks broker.
+
+        No automatic reconciliation is claimed, and this does not submit,
+        replay or cancel broker trades. A complete audit row is retained.
+        """
+        with self.lock:
+            p=self.pending
+            if not p or p.get('id')!=pending_id:
+                raise ValueError('A pendência mudou. Atualize a tela antes de liberar.')
+            if type(confirm_no_open_orders) is not bool or not confirm_no_open_orders:
+                raise ValueError('Confirme que verificou na corretora que não existe operação aberta.')
+            if not self.demo_confirmed or not self.connected:
+                raise ValueError('Conecte e confira a conta DEMO antes de liberar a pendência.')
+            if time.time()-p.get('sent_at',time.time())<=30 or not p.get('timed_out'):
+                raise ValueError('Aguarde o prazo de conferência da ordem antes de liberar.')
+            self.auto=False;self.auto_trial=False
+            self.auto_stop_reason='Pendência liberada após conferência manual. Reative o automático quando desejar.'
+            # Never pretend a missing broker close is WIN or LOSS. The
+            # original ID remains in persisted/history audit for examination.
+            p['status']='RESULTADO_DESCONHECIDO'
+            p['result']={'review':'Conferido manualmente no painel: usuário declarou não haver operação DEMO aberta.'}
+            self.history.append(p)
+            self.history=self.history[-300:]
+            self.pending=None
+            self.save(p)
+            self.log('Pendência arquivada como RESULTADO DESCONHECIDO após confirmação do usuário. '
+                     'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
+            return True
+
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
@@ -401,9 +435,12 @@ class Broker:
             elif self.auto and age<=2 and self.feed_lag_warning:
                 self.feed_lag_warning=False
                 self.log('Cotações recuperadas. Automático continua aguardando sinais.')
-            if self.pending and time.time()-self.pending['sent_at']>30:
+            if self.pending and time.time()-self.pending['sent_at']>30 and not self.pending.get('timed_out'):
                 self.auto=False;self.auto_trial=False
+                self.pending['timed_out']=True
+                self.pending['status']='RESULTADO_PENDENTE'
                 self.auto_stop_reason='Ordem sem resultado oficial após 30 segundos. Confira a corretora antes de reiniciar.'
+                self.save(self.pending)
                 self.log(self.auto_stop_reason)
             return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
                     'auto_waiting_prices':bool(self.auto and ((time.time()-self.received)>3 if self.received else (time.time()-self.auto_started_at)>3)),
