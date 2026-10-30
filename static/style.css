@@ -11,3 +11,42 @@
 #marketQuality{background:#162319;border-radius:8px;padding:10px 12px;margin:8px 0 16px}
 .stats strong{font-variant-numeric:tabular-nums}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.stats{gap:16px}.reset-row{flex-direction:column;align-items:stretch}}
+
+/* XTREME SIGNAL: blue mobile-first card, original visual treatment. */
+:root{--lime:#4c9dff;--border:#2b4265}
+body{background:radial-gradient(ellipse at 50% 0%,#0d2551 0,#091323 34%,#070d18 100%);color:#edf4ff}
+header{background:#081b39;border-bottom:1px solid #214e94}
+.brand b,.mark,.eyebrow{color:#7fc3ff}
+.card{background:linear-gradient(145deg,#101c34,#111928);border-color:#26426c}
+.signal-console{margin:22px 0 20px;padding:15px;border:1px solid #355fa2;border-radius:20px;background:linear-gradient(155deg,#173767 0%,#122344 65%,#101a31 100%);box-shadow:0 18px 40px rgba(0,16,66,.38)}
+.signal-tabs{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;font-weight:800;letter-spacing:1.1px;margin:0 0 18px}
+.brand-mini{color:#fff}.brand-mini b{color:#9cd1ff}
+.demo-tag{background:#2479e0;border:1px solid #5eb0ff;padding:8px 12px;border-radius:22px;color:white;white-space:nowrap}
+.signal-fields{display:grid;grid-template-columns:1.4fr .6fr;gap:12px}
+.signal-fields label{font-size:10px;letter-spacing:1px;color:#abc6ed;font-weight:700}
+.signal-fields select{background:#102746;border-color:#3b689d;color:#fff;font-size:15px;font-weight:700;margin:7px 0 12px}
+.load-symbol{width:100%;margin-bottom:18px;background:#21487d;color:#c5e6ff}
+.offer-panel{background:linear-gradient(135deg,#1d355a,#17223e);border:1px solid #43699c;border-radius:18px;padding:20px 16px;box-shadow:inset 0 0 0 1px #173a6e}
+.offer-overline{color:#92b8e9;font-weight:800;font-size:11px;letter-spacing:2px}
+.offer-pair{font-weight:900;letter-spacing:.6px;font-size:21px;margin:13px 0 20px;color:#fff}
+.offer-metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.offer-metrics div{border-radius:13px;background:#12223e;padding:14px}
+.offer-metrics span{display:block;color:#aac3e8;font-size:11px;margin-bottom:7px}
+.offer-metrics strong{font-size:24px;color:#fff;font-variant-numeric:tabular-nums}
+.signal-direction{background:#192b48;border:1px solid #3d5f92;border-radius:15px;text-align:center;padding:24px 10px;font-size:24px;font-weight:900;letter-spacing:1.2px;margin:18px 0 14px;color:#a8c9f4;box-shadow:0 0 26px #163878}
+.signal-direction[data-direction="BUY"]{color:#90f58c;border-color:#47a468;background:#163b33;box-shadow:0 0 28px rgba(61,189,110,.20)}
+.signal-direction[data-direction="SELL"]{color:#ff8c9c;border-color:#b76375;background:#4b2539;box-shadow:0 0 28px rgba(213,78,96,.17)}
+.signal-direction[data-direction="lateral"]{color:#ffd68a;border-color:#ae8a46;background:#3a2e25}
+.signal-meter{height:12px;border-radius:99px;overflow:hidden;background:#15233b;border:1px solid #3f6baa}
+.signal-meter-fill{height:100%;background:linear-gradient(90deg,#4186ff,#91ceff);border-radius:99px;transition:width .3s}
+.signal-meta{color:#a4bee5;font-size:11px;line-height:1.5;margin:13px 0 0}
+.execute-signal{width:100%;margin:16px 0 6px;min-height:69px;border-radius:16px;border:1px solid #9bd0ff;color:#fff;font-size:19px;letter-spacing:.8px;background:linear-gradient(90deg,#1261f4,#2e91ff);box-shadow:0 10px 28px rgba(26,100,237,.4)}
+.execute-signal:disabled{background:#34455f;color:#aab7c9;border-color:#526a8a;box-shadow:none;opacity:.75}
+.signal-status{margin:6px 2px 10px;min-height:25px;color:#bfd8f7}
+.mode-description{padding:12px;background:#10294a;border:1px solid #2e5481;border-radius:12px;margin:12px 0}
+.mode-description strong{font-size:12px;color:#9bd1ff}.mode-description p{margin:7px 0 0}
+#stop{width:100%;margin-top:12px}
+.stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.stats strong{font-size:26px}
+@media(min-width:900px){.signal-console{max-width:800px;margin:24px auto}.offer-panel{padding:25px}.stats{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:420px){.signal-direction{font-size:21px}.offer-pair{font-size:19px}.signal-console{padding:12px}.offer-metrics strong{font-size:21px}}

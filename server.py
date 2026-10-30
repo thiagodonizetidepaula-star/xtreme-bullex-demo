@@ -101,6 +101,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not c:raise ValueError('Conecte a corretora primeiro.')
                 b=c['broker']
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
+                elif path=='/api/order-signal' and post:
+                    b.order_signal(float(body.get('amount',0)),body.get('expiry',5),body.get('symbol',''),
+                                   body.get('pause_after',20),body.get('min_payout',80))
                 elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
                 elif path=='/api/reset-history' and post:
                     if body.get('confirm') is not True:
