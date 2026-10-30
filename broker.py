@@ -63,7 +63,7 @@ class Broker:
         self.connected=False; self.connecting=False; self.demo_confirmed=False; self.balance=None
         self.assets={}; self.symbol=''; self.ticks=deque(maxlen=600); self.received=0; self.price_time=0; self.quote_samples=deque(maxlen=80)
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
-        self.auto=False; self.validated=False; self.validated_expiries=set(); self.auto_expiry=5
+        self.auto=False; self.auto_trial=False; self.auto_started_at=0; self.validated=False; self.validated_expiries=set(); self.auto_expiry=5
         self.validation_message='Valide a expiração desejada com uma operação manual DEMO concluída.'
         self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
         self.last_order=0; self.closed=False; self.binary=None
@@ -180,7 +180,7 @@ class Broker:
                     self.auto=False;self.log('Automático encerrado: limite de operações ou stop atingido.')
                 else:
                     if direction:
-                        try:self.order(direction,self.amount,self.auto_expiry)
+                        try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
                         except ValueError as e:self.auto=False;self.log(str(e))
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
@@ -221,12 +221,15 @@ class Broker:
                     if duration is not None and abs(duration-requested)<=0.5:
                         self.validated_expiries.add(requested)
                         self.validated=True
+                        if self.auto and self.auto_trial and requested==self.auto_expiry:
+                            self.auto_trial=False
+                            self.log('Teste automático DEMO de %ds confirmado pela corretora. Motor seguirá operando somente novos sinais.'%requested)
                         self.validation_message=('Expiração de %ds confirmada pela corretora. '
                                                  'Automático DEMO disponível para esta duração.'%requested)
                     else:
                         # A mismatched or missing close time cannot authorize
                         # automated orders at the requested expiry.
-                        self.auto=False
+                        self.auto=False;self.auto_trial=False
                         self.validated=bool(self.validated_expiries)
                         self.validation_message=('Resultado oficial recebido, mas sem horários suficientes para confirmar '
                                                  'a expiração. Automático bloqueado para %ds.'%requested if duration is None else
@@ -270,7 +273,7 @@ class Broker:
             if self.pending:raise ValueError('Aguarde a resolução da ordem antes de trocar o ativo.')
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
-            self.auto=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
+            self.auto=False;self.auto_trial=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
     def order(self,direction,amount,expiry=5):
@@ -295,20 +298,46 @@ class Broker:
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
-            if expiry not in self.validated_expiries:raise ValueError('Faça uma operação MANUAL demo de %ds e aguarde o fechamento oficial para liberar esta expiração.'%expiry)
-            if not self.connected or not self.demo_confirmed or self.pending:raise ValueError('Conexão demo livre e confirmada necessária.')
-            vals=[float(c.get(k,0)) for k in ('amount','stop_win','stop_loss','min_payout')];limit=int(c.get('limit',0))
-            if not all(math.isfinite(v) for v in vals) or not 1<=vals[0]<=100 or not 1<=vals[1]<=10000 or not 1<=vals[2]<=10000 or not 1<=limit<=100 or not 0<=vals[3]<=100:raise ValueError('Revise os limites do automático.')
-            self.amount,self.stop_win,self.stop_loss,self.min_payout=vals;self.auto_expiry=expiry;self.limit=limit;self.count=0;self.baseline=sum(x.get('net',0) for x in self.history);self.auto=True;self.log('Automático DEMO de %ds ativado. Aguardando novo cruzamento das médias de 3s e 8s.'%expiry)
+            if not self.connected or not self.demo_confirmed or self.pending or self.closed:
+                raise ValueError('Conexão DEMO confirmada e sem ordem pendente necessária.')
+            if self.auto:raise ValueError('O automático DEMO já está ativo.')
+            vals=[float(c.get(k,0)) for k in ('amount','stop_win','stop_loss','min_payout')]
+            limit=int(c.get('limit',0))
+            if not all(math.isfinite(v) for v in vals) or not 1<=vals[0]<=100 or not 1<=vals[1]<=10000 or not 1<=vals[2]<=10000 or not 1<=limit<=100 or not 0<=vals[3]<=100:
+                raise ValueError('Revise os limites do automático.')
+            # A missing duration validation no longer requires a manual order.
+            # Automatically test just ONE demo order of amount 1; never silently
+            # use the full configured stake until official settlement validates
+            # the exact requested expiry.
+            trial=expiry not in self.validated_expiries
+            if trial and vals[0]!=1:
+                raise ValueError('Para o primeiro teste automático de %ds use valor 1 na conta DEMO.'%expiry)
+            desired=c.get('symbol')
+            if not (self.symbol in self.assets and self.assets[self.symbol].get('available') and self.symbol.endswith('_otc')):
+                if isinstance(desired,str) and desired in self.assets and self.assets[desired].get('available') and desired.endswith('_otc'):
+                    chosen=desired
+                else:
+                    candidates=[a for a in self.assets.values() if a.get('available') and a.get('symbol','').endswith('_otc') and a.get('payout',0)>=vals[3]]
+                    if not candidates:raise ValueError('Não há ativos OTC disponíveis com o payout mínimo. Automático não iniciado.')
+                    chosen=max(candidates,key=lambda a:a['payout'])['symbol']
+                self.subscribe(chosen) # Starts the price stream; no order is sent.
+            if self.assets.get(self.symbol,{}).get('payout',0)<vals[3]:
+                raise ValueError('Ativo selecionado abaixo do payout mínimo; escolha outro.')
+            self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
+            self.auto_expiry=expiry;self.limit=limit;self.count=0
+            self.baseline=sum(x.get('net',0) for x in self.history)
+            self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
+            self.log(('Automático DEMO %ds iniciado: primeiro sinal fará teste de valor 1; somente após fechamento oficial seguirá operando.'%expiry) if trial else
+                     ('Automático DEMO %ds ativado. Aguardando um novo cruzamento de 3s e 8s.'%expiry))
     def snapshot(self):
         with self.lock:
-            if self.auto and time.time()-self.received>3:self.auto=False;self.log('Leitura atrasada. Automático pausado.')
+            if self.auto and (self.received and time.time()-self.received>3 or not self.received and time.time()-self.auto_started_at>15):self.auto=False;self.auto_trial=False;self.log('Leitura ausente ou atrasada. Automático pausado.')
             if self.pending and time.time()-self.pending['sent_at']>30:
                 self.auto=False;self.log('Ordem sem resultado confirmado. Automático bloqueado; confira na corretora.')
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,
+            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,
                     'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
-        self.auto=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
+        self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
