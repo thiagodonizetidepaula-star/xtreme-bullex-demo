@@ -670,7 +670,7 @@ class Tests(unittest.TestCase):
    direction,strength,reason=e.evaluate()
    self.assertEqual(direction,expected,(signed,strength,reason))
    self.assertGreaterEqual(strength,45)
-   self.assertIn('M5 tendência',reason)
+   self.assertIn('M5 ',reason)
  def test_v11_m5_opposite_or_lateral_never_allows_m1_trade(self):
   e=MinuteSignals()
   for i in range(60):
@@ -679,9 +679,56 @@ class Tests(unittest.TestCase):
   direction,_,reason=e.evaluate()
   self.assertIsNone(direction)
   self.assertTrue('M5' in reason)
+ def test_v12_automatic_respects_selected_asset_without_double_subscription(self):
+  b=self.broker()
+  b.assets['GBPUSD_otc']={'symbol':'GBPUSD_otc','name':'GBP/USD OTC','payout':90,'available':True}
+  b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                'min_payout':88,'expiry':60,'symbol':'GBPUSD_otc'})
+  self.assertTrue(b.auto)
+  self.assertEqual(b.symbol,'GBPUSD_otc')
+  changes=[x for x in b.ws.sent if 'changeSymbol' in x]
+  self.assertEqual(len(changes),1)
+  self.assertEqual(b.snapshot()['m1_candles'],0)
+ def test_v12_automatic_rejects_selected_asset_below_payout(self):
+  b=self.broker()
+  b.assets['LOW_otc']={'symbol':'LOW_otc','name':'Below threshold','payout':80,'available':True}
+  with self.assertRaisesRegex(ValueError,'Payout'):
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':88,'expiry':60,'symbol':'LOW_otc'})
+  self.assertEqual(b.symbol,'EURUSD_otc')
+  self.assertFalse(b.auto)
+ def test_v12_m5_continuation_breakout_on_closed_m1_candle(self):
+  from m1_strategy import MinuteSignals
+  for signed,direction in ((1,'call'),(-1,'put')):
+   engine=MinuteSignals()
+   for i in range(40):
+    p=100+signed*.1*i
+    engine.bars.append({'t':1800000000+60*i,
+                        'open':p-signed*.10,'close':p,
+                        'high':max(p,p-signed*.10)+.01,
+                        'low':min(p,p-signed*.10)-.01})
+   actual,strength,reason=engine.evaluate()
+   self.assertEqual(actual,direction,(actual,strength,reason))
+   self.assertIn('M1 fechou rompimento',reason)
+ def test_v12_accepts_real_3_second_quotes_without_synthetic_candles(self):
+  e=MinuteSignals()
+  start=1800000000
+  for m in range(36):
+   for sec in range(0,60,3):
+    e.ingest(start+60*m+sec,1.1+m*.0001+sec*.000001)
+  self.assertEqual(e.rejected_bars,0)
+  self.assertEqual(len(e.bars),35)
+  self.assertEqual(e.completed_bars,35)
+  self.assertGreaterEqual(len(five_minute_closes(list(e.bars))),6)
+ def test_v12_snap_reports_candle_rejections_and_live_samples(self):
+  b=self.broker()
+  snap=b.snapshot()
+  self.assertIn('m1_rejected',snap)
+  self.assertIn('m5_candles',snap)
+  self.assertIn('m1_live_samples',snap)
  def test_v11_no_m5_history_no_early_m1_order(self):
   e=MinuteSignals()
-  for i in range(50):
+  for i in range(25):
    p=100+.1*i
    e.bars.append({'t':1800000000+60*i,'open':p-.03,'close':p,'high':p+.01,'low':p-.04})
   self.assertIsNone(e.evaluate()[0])

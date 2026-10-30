@@ -154,11 +154,14 @@ function render(){
  const expiry=Number($('expiry').value), isM1=expiry>=30,
        offer=(isM1?s.long_signal_offer:s.signal_offer)||{};
  $('strategyProfile').textContent=isM1?
-  'Análise principal M5 (EMA 5/9 e RSI 9) → gatilho no M1':
+  'M5 define tendência (EMA 3/5 + RSI 5) → M1 confirma entrada de 60s':
   'Estratégia rápida 3s/8s · cruzamento e continuação';
  $('warmupStatus').textContent=isM1?
-  ('Histórico: '+(s.m1_candles||0)+'/55 velas M1 completas para formar M5 · '+(s.m1_status||'Aguardando cotação')+
-   ' · Vencimento acima de 10s ainda precisa ser comprovado na DEMO.'):
+  ('M5: '+(s.m5_candles||0)+'/6 velas completas · M1: '+(s.m1_candles||0)+'/35 minutos válidos'+
+   ((s.m1_rejected||0)>0?' · Minutos rejeitados: '+s.m1_rejected:'')+
+   ' · '+(s.m1_status||'Aguardando cotações')+
+   ((s.m1_rejected||0)>0&&s.m1_last_gap?' · '+s.m1_last_gap:'')+
+   ' · Amostras no minuto atual: '+(s.m1_live_samples||0)):
   'O perfil rápido usa apenas cotações recentes da corretora.';
  const chosen=$('asset').value;
  const assets=(s.assets||[]).filter(x=>x.available&&x.symbol?.endsWith('_otc')&&x.payout>87).sort((a,b)=>b.payout-a.payout);
@@ -217,7 +220,14 @@ function render(){
  }
  if(offer.cooldown>0)$('offerStatus').textContent='Pausa: '+offer.cooldown.toFixed(1)+'s até próxima entrada possível.';
  if(s.pending?.id){$('offerStatus').textContent='Ordem pendente de resultado oficial; outra entrada bloqueada.'}
- if(s.auto){$('offerStatus').textContent='AUTOMÁTICO ATIVO: o bot executa os sinais BUY/SELL conforme filtros e limites configurados.'}
+ if(s.auto){
+  const blockers=s.pending?.id?'Aguardando resultado oficial da corretora':
+    s.auto_waiting_prices?'COTAÇÃO ATRASADA: aguardando feed real':
+    (s.m5_candles||0)<6?'AGUARDANDO HISTÓRICO M5 REAL: '+(s.m5_candles||0)+'/6 velas completas':
+    Number(s.next_entry_in)>0?'Pausa '+Number(s.next_entry_in).toFixed(1)+'s':
+    (s.m1_status||'Aguardando sinal de fechamento M1');
+  $('offerStatus').textContent='AUTOMÁTICO ATIVO · '+s.symbol+' · '+blockers;
+ }
  $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
  $('pendingRecovery').hidden=!(s.pending?.id&&s.pending?.timed_out);
  if($('pendingRecovery').hidden)$('confirmNoOpen').checked=false;

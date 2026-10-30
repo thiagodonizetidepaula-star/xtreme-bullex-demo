@@ -2,7 +2,7 @@
 import json, math, ssl, threading, time, uuid
 from collections import deque
 import websocket
-from m1_strategy import MinuteSignals
+from m1_strategy import MinuteSignals, five_minute_closes
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -523,19 +523,27 @@ class Broker:
             if trial and vals[0]!=1:
                 raise ValueError('Para o primeiro teste automático de %ds use valor 1 na conta DEMO.'%expiry)
             desired=c.get('symbol')
-            if not (self.symbol in self.assets and self.assets[self.symbol].get('available') and self.symbol.endswith('_otc')):
-                if isinstance(desired,str) and desired in self.assets and self.assets[desired].get('available') and desired.endswith('_otc'):
-                    chosen=desired
-                else:
-                    candidates=[a for a in self.assets.values() if a.get('available') and a.get('symbol','').endswith('_otc') and a.get('payout',0)>=vals[3]]
-                    if not candidates:raise ValueError('Não há ativos OTC disponíveis com o payout mínimo. Automático não iniciado.')
-                    chosen=max(candidates,key=lambda a:a['payout'])['symbol']
-                self.subscribe(chosen) # Starts the price stream; no order is sent.
+            # The selected UI asset is authoritative. Previously an already
+            # subscribed (different) OTC asset silently won over the user's
+            # choice, leaving the bot analyzing the wrong instrument.
+            subscribed=False
+            if isinstance(desired,str) and desired:
+                chosen=self.assets.get(desired,{})
+                if not chosen.get('available') or not desired.endswith('_otc'):
+                    raise ValueError('Ativo escolhido indisponível para a DEMO.')
+                if chosen.get('payout',0)<vals[3]:
+                    raise ValueError('Payout do ativo escolhido abaixo do mínimo configurado.')
+                if desired!=self.symbol:
+                    self.subscribe(desired);subscribed=True
+            elif not (self.symbol in self.assets and self.assets[self.symbol].get('available') and self.symbol.endswith('_otc')):
+                candidates=[a for a in self.assets.values() if a.get('available') and a.get('symbol','').endswith('_otc') and a.get('payout',0)>=vals[3]]
+                if not candidates:raise ValueError('Não há ativos OTC disponíveis com o payout mínimo. Automático não iniciado.')
+                self.subscribe(max(candidates,key=lambda a:a['payout'])['symbol']);subscribed=True
             if self.assets.get(self.symbol,{}).get('payout',0)<vals[3]:
                 raise ValueError('Ativo selecionado abaixo do payout mínimo; escolha outro.')
-            if not self.fresh_quote():
-                # Start/restart the stream for the selected OTC symbol. Startup
-                # grace prevents an idle connection from failing immediately.
+            if not subscribed and not self.fresh_quote():
+                # One subscription only; re-subscribing on every start
+                # otherwise erased genuine M5 candle warmup.
                 self.subscribe(self.symbol)
             self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
@@ -580,6 +588,11 @@ class Broker:
                     'signal_offer':self.signal_status(expiry=5),
                     'long_signal_offer':self.signal_status(expiry=60),
                     'm1_candles':len(self.minute_engine.bars),'m1_status':self.minute_engine.reason,
+                    'm5_candles':len(five_minute_closes(list(self.minute_engine.bars))),
+                    'm1_completed_total':self.minute_engine.completed_bars,
+                    'm1_rejected':self.minute_engine.rejected_bars,
+                    'm1_last_gap':self.minute_engine.last_gap,
+                    'm1_live_samples':len(self.minute_engine.current['sample_seconds']) if self.minute_engine.current else 0,
                     'supported_expiries':list(ALL_EXPIRIES),
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
