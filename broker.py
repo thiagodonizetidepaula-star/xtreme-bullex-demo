@@ -32,8 +32,10 @@ def signal(ticks):
     v=[p for _,p in a]
     previous=sum(v[-4:-1])/3-sum(v[-9:-1])/8
     current=sum(v[-3:])/3-sum(v[-8:])/8
-    if previous<=0 and current>0 and v[-1]>v[-2]:return 'call'
-    if previous>=0 and current<0 and v[-1]<v[-2]:return 'put'
+    # Avoid false nonzero baselines from floating-point roundoff on flat data.
+    epsilon=max(abs(v[-1]),1e-8)*1e-10
+    if previous<=epsilon and current>epsilon and v[-1]>v[-2]:return 'call'
+    if previous>=-epsilon and current<-epsilon and v[-1]<v[-2]:return 'put'
     return None
 
 def parse_expiry(value):
