@@ -4,6 +4,7 @@ on:
     branches: [experiment/android-pocket-demo-assist]
     paths:
       - 'broker.py'
+      - 'm1_strategy.py'
       - 'test_broker.py'
       - 'static/app.js'
       - 'static/index.html'
@@ -25,23 +26,25 @@ jobs:
         run: python -m unittest -v test_broker
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify V9 manual/auto signal panel and DEMO-only actions
+      - name: Verify V10 expiry choices and independent M1/M5 signal engine
         run: |
           python - <<'PY'
           from pathlib import Path
           html=Path('static/index.html').read_text()
-          ids=['tradeMode','manualActions','autoActions','executeSignal','startSignalAuto','stopSignalAuto','autoSignalStatus','signalDirection','signalStrength','signalBar','offerPair','offerStatus','expiry','asset','amount','score','pause_after','resetHistory','stop_win','stop_loss','limit']
+          ids=['strategyProfile','warmupStatus','tradeMode','manualActions','autoActions','executeSignal','startSignalAuto','stopSignalAuto','autoSignalStatus','signalDirection','signalStrength','signalBar','offerPair','offerStatus','expiry','asset','amount','score','pause_after','resetHistory','stop_win','stop_loss','limit']
           assert all(html.count('id="'+i+'"')==1 for i in ids)
           assert 'id="call"' not in html and 'id="put"' not in html
           assert 'id="chart"' not in html and 'id="history"' not in html
+          assert all(('value="'+str(i)+'"') in html for i in (30,60,120,180,300))
           js=Path('static/app.js').read_text()
           assert "api('order-signal',req)" in js
+          assert "s.long_signal_offer" in js
           assert "await api('auto',params)" in js
           assert "await action('stop')" in js
           assert "filter_lateral:true" in js
           assert "setInterval(poll,750)" in js
           assert "api('reset-history',{confirm:true})" in js
-          print('PASS: explicit manual/automatic signal controls')
+          print('PASS: V10 M1/M5 strategy and demo expiries')
           PY
       - name: Compile Python modules
-        run: python -m py_compile broker.py server.py
+        run: python -m py_compile broker.py m1_strategy.py server.py
