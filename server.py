@@ -56,13 +56,16 @@ def cleanup_once(now=None):
             if c.get('was_auto'):
                 c['was_auto']=False
                 c['retain_until']=max(c.get('retain_until',0),now+600)
-            if broker.pending and not broker.pending.get('timed_out'):
-                broker.snapshot()
-                # Do not discard the only live account state while there is
-                # an unresolved DEMO order; await official settlement/timeout.
-                if broker.pending and not broker.pending.get('timed_out'):
-                    continue
-                c['retain_until']=max(c.get('retain_until',0),now+600)
+            if broker.pending:
+                if not broker.pending.get('timed_out'):
+                    broker.snapshot()
+                    # Do not discard unresolved orders before checking their
+                    # official result or the expiry-aware timeout.
+                    if broker.pending and not broker.pending.get('timed_out'):
+                        continue
+                if 'pending_review_since' not in c:
+                    c['pending_review_since']=now
+                    c['retain_until']=max(c.get('retain_until',0),now+600)
             if now>max(c['seen']+120,c.get('retain_until',0)):
                 broker.close()
                 del CLIENTS[uid]
