@@ -422,6 +422,47 @@ class Tests(unittest.TestCase):
    self.assertTrue(x['auto'])
    self.assertFalse(x['auto_waiting_prices'])
    self.assertEqual(b.count,0)
+ def test_v13_m1_auto_stays_armed_during_mobile_feed_gap_without_trading(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,
+                 'min_payout':80,'expiry':60,'pause_after':20})
+   b.received=base;b.price_time=base
+   clock.return_value=base+60
+   out=b.snapshot()
+   self.assertTrue(out['auto'])
+   self.assertFalse(b.fresh_quote())
+   self.assertTrue(out['auto_waiting_prices'])
+   self.assertEqual(b.count,0)
+   self.assertEqual(out['auto_feed_stop_after'],180)
+   clock.return_value=base+179
+   self.assertTrue(b.snapshot()['auto'])
+   self.assertEqual(b.count,0)
+ def test_v13_m1_long_feed_outage_stops_with_reason_and_no_orders(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,
+                 'min_payout':80,'expiry':60})
+   b.received=base;b.price_time=base
+   clock.return_value=base+181
+   out=b.snapshot()
+   self.assertFalse(out['auto'])
+   self.assertIn('180 segundos',out['auto_stop_reason'])
+   self.assertEqual(b.count,0)
+ def test_v13_auto_run_has_explicit_60_minute_stop_even_with_live_quotes(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,
+                 'min_payout':80,'expiry':60})
+   b.received=base+3600;b.price_time=base+3600
+   clock.return_value=base+3601
+   out=b.snapshot()
+   self.assertFalse(out['auto'])
+   self.assertIn('60 minutos',out['auto_stop_reason'])
+   self.assertEqual(b.count,0)
  def test_prolonged_twenty_second_quote_gap_stops_auto_safely(self):
   with patch('broker.time.time') as clock:
    base=1800000000.0;clock.return_value=base
