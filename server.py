@@ -102,6 +102,8 @@ class Handler(BaseHTTPRequestHandler):
                 b=c['broker']
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
                 elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
+                elif path=='/api/resolve-pending' and post:
+                    b.resolve_unconfirmed_order(body.get('pending_id'),body.get('confirm_no_open_orders'))
                 elif path=='/api/auto' and post:b.start_auto(body)
                 elif path=='/api/stop' and post:
                     b.auto=False;b.auto_trial=False
