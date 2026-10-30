@@ -102,7 +102,55 @@ class Tests(unittest.TestCase):
   b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openPrice':1.1})
   b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
   self.assertFalse(b.validated)
-  self.assertIn('sem horários suficientes',b.snapshot()['validation_message'])
+  self.assertIn('não informou horários suficientes',b.snapshot()['validation_message'])
+ def test_official_close_without_timestamps_continues_demo_auto_restricted(self):
+  # Real-world case: successopenOrder + matched successcloseOrder has valid
+  # result, but Pocket Option omits openTime/closeTime from both events.
+  with patch('broker.time.time') as clock:
+   base=1800000000.0
+   clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   self.assertEqual(b.count,1)
+   p=b.pending
+   b.event('successopenOrder',{'id':'auto-one','requestId':p['requestId'],'openPrice':1.1})
+   clock.return_value=base+5
+   b.event('successcloseOrder',{'deals':[{'id':'auto-one','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
+   self.assertEqual(b.history[-1]['status'],'WIN')
+   self.assertIsNone(b.pending)
+   self.assertTrue(b.auto)
+   self.assertTrue(b.auto_trial)
+   self.assertEqual(b.validated_expiries,set())
+   self.assertFalse(b.validated)
+   self.assertIn('NÃO verificada',b.validation_message)
+   self.assertNotIn('5s',str(b.validated_expiries))
+   clock.return_value=base+14.9
+   b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(1,15)])
+   self.assertEqual(b.count,1)
+   clock.return_value=base+15.2
+   b.event('updateStream',[[b.symbol,base+15,1.35]])
+   self.assertEqual(b.count,2)
+   second=[json.loads(q[2:])[1] for q in b.ws.sent if q.startswith('42["openOrder"')][-1]
+   self.assertEqual(second['amount'],1.0)
+   self.assertEqual(second['time'],5)
+   self.assertEqual(second['isDemo'],1)
+   self.assertTrue(b.auto)
+ def test_manual_unknown_duration_does_not_unlock_full_stake_auto(self):
+  b=self.broker();b.order('call',1,5);p=b.pending
+  b.event('successopenOrder',{'id':'m1','requestId':p['requestId'],'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'m1','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
+  self.assertFalse(b.validated)
+  self.assertEqual(b.validated_expiries,set())
+  self.assertFalse(b.auto)
+  with self.assertRaisesRegex(ValueError,'valor 1'):
+   b.start_auto({'amount':5,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+ def test_no_duration_does_not_override_explicit_mismatch(self):
+  b=self.broker();b.order('call',1,5);p=b.pending
+  b.event('successopenOrder',{'id':'m2','requestId':p['requestId'],'openTime':100,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'m2','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':108}]})
+  self.assertEqual(b.validated_expiries,set())
+  self.assertIn('diferente',b.validation_message)
  def test_auto_reuses_verified_manual_order_route(self):
   b=self.settle(.85,1.2)
   self.assertTrue(b.validated)
