@@ -103,7 +103,7 @@ class MinuteSignals:
         strength=round(100*efficiency)
         # M1-only efficiency rejects oscillation and micro-trends which are
         # not strong enough to support a pullback strategy.
-        if efficiency<0.35 or abs(fast-slow)<max(closes[-1]*1e-7,1e-12):
+        if efficiency<0.30 or abs(fast-slow)<max(closes[-1]*1e-7,1e-12):
             return None,strength,'Mercado M1 lateralizado: EMA ou movimento fraco'
         # Bollinger 20/2 regime gate; measured width is a volatility
         # indicator, not an accuracy percentage.
