@@ -110,7 +110,7 @@ class Tests(unittest.TestCase):
    base=1800000000.0
    clock.return_value=base
    b=self.broker();b.symbol=''
-   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5,'pause_after':5})
    b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
    self.assertEqual(b.count,1)
    p=b.pending
@@ -157,6 +157,7 @@ class Tests(unittest.TestCase):
   b.subscribe(b.symbol)
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80})
   b.last_order-=16
+  b.last_closed_at-=25
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-19+i,1.1] for i in range(19)]+[[b.symbol,now,1.2]])
   orders=[json.loads(msg[2:]) for msg in b.ws.sent if msg.startswith('42["openOrder"')]
@@ -197,6 +198,7 @@ class Tests(unittest.TestCase):
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
   self.assertEqual(b.auto_expiry,3)
   b.last_order-=16
+  b.last_closed_at-=25
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
   orders=[json.loads(msg[2:])[1] for msg in b.ws.sent if msg.startswith('42["openOrder"')]
@@ -343,7 +345,7 @@ class Tests(unittest.TestCase):
    base=1800000000.0
    clock.return_value=base
    b=self.broker();b.symbol=''
-   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':3})
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':3,'pause_after':5})
    b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
    packets=lambda:[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
    self.assertEqual(len(packets()),1)
@@ -441,6 +443,42 @@ class Tests(unittest.TestCase):
    b.event('updateStream',[[b.symbol,base+1,1.22]])
    self.assertFalse(b.auto)
    self.assertIn('Limite de 1 operações',b.snapshot()['auto_stop_reason'])
+ def test_sideways_filter_does_not_change_signals(self):
+  from broker import not_lateral
+  zigzag=[(100+i,1.01 if i%2 else 1.0) for i in range(10)]
+  self.assertFalse(not_lateral(zigzag,'call'))
+  self.assertFalse(not_lateral(zigzag,'put'))
+  rising=[(100+i,1.0+i*.001) for i in range(10)]
+  self.assertTrue(not_lateral(rising,'call'))
+  self.assertFalse(not_lateral(rising,'put'))
+ def test_pause_choices_validation(self):
+  for value in (0,12,40,False,'20',20.0):
+   b=self.broker()
+   with self.assertRaisesRegex(ValueError,'pausa'):
+    b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'pause_after':value})
+  for value in (5,10,15,20,30):
+   b=self.broker();b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'pause_after':value})
+   self.assertEqual(b.pause_after,value)
+ def test_after_result_default_twenty_seconds_blocks_second_trade(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   self.assertEqual(b.count,1)
+   p=b.pending
+   b.event('successopenOrder',{'id':'one','requestId':p['requestId'],'openPrice':1.1})
+   clock.return_value=base+5
+   b.event('successcloseOrder',{'deals':[{'id':'one','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
+   self.assertTrue(b.auto)
+   self.assertEqual(b.pause_after,20)
+   clock.return_value=base+16
+   b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(1,17)])
+   self.assertEqual(b.count,1)
+   self.assertGreater(b.snapshot()['next_entry_in'],8)
+   clock.return_value=base+26
+   b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(17,27)])
+   self.assertEqual(b.count,2)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
