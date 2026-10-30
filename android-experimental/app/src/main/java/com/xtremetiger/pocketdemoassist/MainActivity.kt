@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V8"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V9"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V8: sinais em tempo real, um toque para operar na DEMO; sem entradas automáticas."
+            text = "V9: escolha Manual ou Automático; sinais BUY/SELL DEMO, filtros e paradas de segurança."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -139,7 +139,7 @@ class MainActivity : Activity() {
             setOnClickListener { openManualTest() }
         }
         val start = Button(this).apply {
-            text = "VER SINAIS"
+            text = "SINAIS / AUTO"
             setOnClickListener { showSignalPanel() }
         }
         val stop = Button(this).apply {
@@ -520,7 +520,7 @@ class MainActivity : Activity() {
 
     private fun showSignalPanel() {
         showTiger()
-        status.text = "Modo controlado por você: o aplicativo apenas procura sinais. Nenhuma ordem é enviada sem tocar OPERAR SINAL."
+        status.text = "Escolha Manual ou Automático no cartão azul de sinais. O automático só é ativado após tocar em INICIAR AUTOMÁTICO DEMO."
         tiger.evaluateJavascript("""
             (() => {
                 const panel=document.querySelector('.signal-console');
