@@ -262,16 +262,29 @@ class Broker:
                             self.log('Teste automático DEMO de %ds confirmado pela corretora. Motor seguirá operando somente novos sinais.'%requested)
                         self.validation_message=('Expiração de %ds confirmada pela corretora. '
                                                  'Automático DEMO disponível para esta duração.'%requested)
-                    else:
-                        # A mismatched or missing close time cannot authorize
-                        # automated orders at the requested expiry.
-                        self.auto=False;self.auto_trial=False
-                        self.auto_stop_reason=('Fechamento oficial sem horários verificáveis para %ds.'%requested
-                            if duration is None else 'Duração oficial %.2fs não coincide com %ds.'%(duration,requested))
+                    elif duration is None:
+                        # The broker acknowledged this exact order ID and
+                        # delivered a reconciled official close event (prices
+                        # and payout-consistent result). That proves closure,
+                        # but NOT the actual expiry duration. Keep an already
+                        # running DEMO-only auto in a restricted value-1 mode;
+                        # do not mark this expiry as validated or raise stakes.
                         self.validated=bool(self.validated_expiries)
-                        self.validation_message=('Resultado oficial recebido, mas sem horários suficientes para confirmar '
-                                                 'a expiração. Automático bloqueado para %ds.'%requested if duration is None else
-                                                 'Duração %.2fs diferente dos %ds pedidos. Automático bloqueado para esta duração.'%(duration,requested))
+                        self.validation_message=('Resultado oficial da ordem DEMO de %ds confirmado, '
+                                                 'mas a corretora não informou horários suficientes. '
+                                                 'Expiração NÃO verificada; entradas seguintes limitadas a valor 1.'%requested)
+                        if self.auto and requested==self.auto_expiry:
+                            self.auto_trial=True
+                            self.log('Fechamento oficial confirmado sem horários completos. '
+                                     'Automático DEMO continua com valor 1, expiração não verificada e intervalo mínimo de 15s.')
+                    else:
+                        # An explicitly mismatched broker duration is positive
+                        # contrary evidence: stop, rather than guess.
+                        self.auto=False;self.auto_trial=False
+                        self.auto_stop_reason='Duração oficial %.2fs não coincide com %ds.'%(duration,requested)
+                        self.validated=bool(self.validated_expiries)
+                        self.validation_message=('Duração %.2fs diferente dos %ds pedidos. '
+                                                 'Automático bloqueado para esta duração.'%(duration,requested))
                     self.history.append(p);self.history=self.history[-300:];self.pending=None;self.save(p);self.log('Resultado confirmado: '+p['status'])
         elif name.lower()=='notauthorized':
             self.auto=False;self.validated=False
