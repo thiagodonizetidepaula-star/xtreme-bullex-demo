@@ -151,7 +151,15 @@ function render(){
  $('score').textContent=hist.filter(x=>x.status==='WIN').length+' / '+hist.filter(x=>x.status==='LOSS').length;
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
- const expiry=Number($('expiry').value), offer=s.signal_offer||{};
+ const expiry=Number($('expiry').value), isM1=expiry>=30,
+       offer=(isM1?s.long_signal_offer:s.signal_offer)||{};
+ $('strategyProfile').textContent=isM1?
+  'Estratégia M1 + filtro M5 · EMA 9/21 · RSI 9 · Bollinger 20/2':
+  'Estratégia rápida 3s/8s · cruzamento e continuação';
+ $('warmupStatus').textContent=isM1?
+  ('Histórico M1: '+(s.m1_candles||0)+'/26 velas completas · '+(s.m1_status||'Aguardando cotação')+
+   ' · Vencimento acima de 10s ainda precisa ser comprovado na DEMO.'):
+  'O perfil rápido usa apenas cotações recentes da corretora.';
  const chosen=$('asset').value;
  const assets=(s.assets||[]).filter(x=>x.available&&x.symbol?.endsWith('_otc')).sort((a,b)=>b.payout-a.payout);
  const key=JSON.stringify(assets);
@@ -164,7 +172,7 @@ function render(){
  }
  const currentAsset=(s.assets||[]).find(a=>a.symbol===s.symbol);
  $('offerPair').textContent=currentAsset?.name||s.symbol||'Aguardando ativo OTC';
- $('offerExpiry').textContent=expiry+'s';
+ $('offerExpiry').textContent=expiry>=60?(expiry/60)+'min':expiry+'s';
  const strength=Number.isFinite(offer.strength)?Math.max(0,Math.min(100,offer.strength)):null;
  $('signalStrength').textContent=strength===null?'—':strength+'%';
  $('signalBar').style.width=(strength??0)+'%';
@@ -192,7 +200,7 @@ function render(){
    ' operações • '+(s.auto_waiting_prices?'aguardando preços atuais':
       s.pending?.id?'aguardando resultado da corretora':
       Number(s.next_entry_in)>0?'pausa: '+Number(s.next_entry_in).toFixed(1)+'s':
-      'procurando sinal BUY / SELL válido')+
+      'procurando sinal BUY / SELL válido'+(s.auto_expiry>=30?' · '+(s.m1_status||'M1 em aquecimento'):'') )+
    ' • expiração '+s.auto_expiry+'s • filtro lateral ativo.';
  }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
   $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
