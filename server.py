@@ -102,6 +102,26 @@ class Handler(BaseHTTPRequestHandler):
                 b=c['broker']
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
                 elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
+                elif path=='/api/reset-history' and post:
+                    if body.get('confirm') is not True:
+                        raise ValueError('Confirme a exclusão do histórico DEMO.')
+                    with b.lock:
+                        if b.auto or b.pending:
+                            raise ValueError('Pare o bot e resolva qualquer ordem pendente antes de zerar.')
+                        if JOBS.unfinished_tasks:
+                            raise ValueError('Aguarde o salvamento das últimas operações e tente novamente.')
+                        # Scoped to authenticated user's UUID, with JWT + RLS.
+                        # No global deletion; no secret/service-role credential.
+                        endpoint='/rest/v1/pocket_tiger_demo_history?user_id=eq.'+uid
+                        supa(endpoint,token,method='DELETE',extra={'Prefer':'return=minimal'})
+                        remaining=supa(endpoint+'&select=id&limit=1',token)
+                        if remaining:
+                            raise ValueError('O Supabase ainda apresenta registros. Verifique a permissão de exclusão.')
+                        b.history.clear()
+                        b.count=0;b.baseline=0
+                        b.events.clear()
+                        b.log('Placar e histórico DEMO excluídos a pedido do usuário.')
+                        c['storage']='Histórico zerado'
                 elif path=='/api/resolve-pending' and post:
                     b.resolve_unconfirmed_order(body.get('pending_id'),body.get('confirm_no_open_orders'))
                 elif path=='/api/auto' and post:b.start_auto(body)
