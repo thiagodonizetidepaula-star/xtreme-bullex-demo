@@ -9,8 +9,8 @@ android {
         applicationId = "com.xtremetiger.pocketdemoassist"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.11.0-experimental"
+        versionCode = 12
+        versionName = "0.12.0-experimental"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
