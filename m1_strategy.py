@@ -6,8 +6,8 @@ winning strategy. Candle boundaries are aligned to broker quote timestamps.
 import math
 from collections import deque
 
-MINUTE_HISTORY=26
-M5_HISTORY=5
+MINUTE_HISTORY=55
+M5_HISTORY=10
 
 def ema(values,period):
     if len(values)<period: return None
@@ -45,7 +45,7 @@ class MinuteSignals:
         self.direction=None
         self.signal_at=0.
         self.strength=None
-        self.reason='Aguardando histórico de velas M1/M5'
+        self.reason='Aguardando análise M5 e entrada M1'
 
     def ingest(self,ts,price,arrival=None):
         """Return a fresh signal only upon the next minute's first valid quote."""
@@ -77,7 +77,7 @@ class MinuteSignals:
             return None
         self.bars.append({k:v for k,v in finished.items() if k not in ('first_sec','last_sec','sample_seconds')})
         if len(self.bars)<MINUTE_HISTORY:
-            self.reason='Aquecendo M1: %d/%d velas fechadas'%(len(self.bars),MINUTE_HISTORY)
+            self.reason='Aquecendo M5: %d/%d velas M1 completas'%(len(self.bars),MINUTE_HISTORY)
             return None
         direction,strength,reason=self.evaluate()
         self.reason=reason
@@ -88,52 +88,52 @@ class MinuteSignals:
         return direction
 
     def evaluate(self):
+        """M5 determines trend/regime; last *closed* M1 candle times entry.
+
+        One selected Pocket Option DEMO OTC asset only. This is an unvalidated
+        experimental strategy, not a promise of profits or a probability model.
+        """
         bars=list(self.bars)
-        if len(bars)<MINUTE_HISTORY:return None,None,'Aguardando 26 velas completas M1'
+        if len(bars)<MINUTE_HISTORY:
+            return None,None,'Aguardando histórico M5: %d/%d minutos completos'%(len(bars),MINUTE_HISTORY)
         if any(bars[i]['t']-bars[i-1]['t']!=60 for i in range(1,len(bars))):
-            return None,None,'Histórico M1 com lacunas; aguardar recomposição'
-        closes=[b['close'] for b in bars]
-        fast=ema(closes,9);slow=ema(closes,21)
-        fast_before=ema(closes[:-1],9)
-        strength=None
-        movement=[closes[i]-closes[i-1] for i in range(len(closes)-7,len(closes))]
-        gross=sum(abs(z) for z in movement)
-        net=sum(movement)
-        efficiency=abs(net)/gross if gross else 0.
-        strength=round(100*efficiency)
-        # M1-only efficiency rejects oscillation and micro-trends which are
-        # not strong enough to support a pullback strategy.
-        if efficiency<0.30 or abs(fast-slow)<max(closes[-1]*1e-7,1e-12):
-            return None,strength,'Mercado M1 lateralizado: EMA ou movimento fraco'
-        # Bollinger 20/2 regime gate; measured width is a volatility
-        # indicator, not an accuracy percentage.
-        sample=closes[-20:]
-        mean=sum(sample)/20
-        std=math.sqrt(sum((x-mean)**2 for x in sample)/20)
-        old=closes[-25:-5]
-        old_avg=sum(old)/20
-        old_std=math.sqrt(sum((x-old_avg)**2 for x in old)/20)
-        if std<=max(closes[-1]*1e-8,old_std*0.65):
-            return None,strength,'Bandas Bollinger comprimidas: sem entrada'
+            return None,None,'Velas M1 incompletas: não operar'
         m5=five_minute_closes(bars)
         if len(m5)<M5_HISTORY:
-            return None,strength,'Aguardando 5 candles completos M5'
-        latest=m5[-M5_HISTORY:]
-        if any(latest[i][0]-latest[i-1][0]!=300 for i in range(1,len(latest))):
-            return None,strength,'Histórico M5 com lacunas'
-        higher=[x[1] for x in latest]
-        higher_mean=sum(higher)/len(higher)
-        r=rsi(closes,9)
-        prev=closes[-2]; now=closes[-1]
+            return None,None,'Aguardando %d candles M5 fechados (recebidos %d)'%(M5_HISTORY,len(m5))
+        recent=m5[-M5_HISTORY:]
+        if any(recent[i][0]-recent[i-1][0]!=300 for i in range(1,len(recent))):
+            return None,None,'Lacuna no histórico M5: não operar'
+        higher=[v for _,v in recent]
+        fast=ema(higher,5)
+        slow=ema(higher,9)
+        momentum=rsi(higher,9)
+        changes=[higher[i]-higher[i-1] for i in range(1,len(higher))]
+        traveled=sum(abs(v) for v in changes)
+        efficiency=abs(sum(changes))/traveled if traveled else 0.
+        strength=round(100*efficiency)
+        average_move=traveled/len(changes) if changes else 0.
+        if (efficiency<0.45 or average_move<=0 or
+            abs(fast-slow)<max(abs(higher[-1])*1e-7,average_move*0.20)):
+            return None,strength,'M5 lateral ou sem direção consistente; aguardando'
+        # RSI here describes the CLOSED M5 candles. The M1 candles never
+        # override the M5 direction.
+        buy_m5=(fast>slow and higher[-1]>higher[-3] and momentum>=54)
+        sell_m5=(fast<slow and higher[-1]<higher[-3] and momentum<=46)
+        if not buy_m5 and not sell_m5:
+            return None,strength,'Tendência M5 não confirmada por EMA5/9 e RSI9'
+        closes=[b['close'] for b in bars]
+        entry_ema=ema(closes,9)
+        previous_ema=ema(closes[:-1],9)
+        prev=closes[-2]
+        now=closes[-1]
         candle=bars[-1]
-        # Must be close near the edge of completed M1 candle, not a
-        # prediction of an unfinished candle.
-        rng=max(candle['high']-candle['low'],1e-12)
-        location=(now-candle['low'])/rng
-        if (fast>slow and prev<=fast_before and now>fast and 50<=r<=70 and
-            higher[-1]>higher[-3] and higher[-1]>=higher_mean and location>=0.65):
-            return 'call',strength,'M1 EMA9/21 + RSI9 + M5 favoráveis à compra'
-        if (fast<slow and prev>=fast_before and now<fast and 30<=r<=50 and
-            higher[-1]<higher[-3] and higher[-1]<=higher_mean and location<=0.35):
-            return 'put',strength,'M1 EMA9/21 + RSI9 + M5 favoráveis à venda'
-        return None,strength,'Aguardando pullback M1 e confirmação M5/RSI'
+        width=max(candle['high']-candle['low'],1e-12)
+        position=(now-candle['low'])/width
+        # Enter at first quote after a closed M1 reversal/pullback candle.
+        # Never extrapolate an unfinished M1 candle to manufacture a signal.
+        if buy_m5 and prev<=previous_ema and now>entry_ema and now>prev and now>candle['open'] and position>=0.65:
+            return 'call',strength,'M5 tendência de alta confirmada; candle M1 fechou BUY'
+        if sell_m5 and prev>=previous_ema and now<entry_ema and now<prev and now<candle['open'] and position<=0.35:
+            return 'put',strength,'M5 tendência de baixa confirmada; candle M1 fechou SELL'
+        return None,strength,'M5 confirmado; aguardando gatilho M1 de entrada'

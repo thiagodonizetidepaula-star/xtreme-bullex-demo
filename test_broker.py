@@ -658,19 +658,33 @@ class Tests(unittest.TestCase):
    self.assertEqual(wire[0]['time'],60)
    self.assertTrue(b.pending)
    self.assertTrue(b.auto)
- def test_v10_m1_engine_real_bullish_and_bearish_pullback(self):
+ def test_v11_primary_m5_trend_then_m1_buy_and_sell_pullback(self):
   for signed,expected in [(1,'call'),(-1,'put')]:
-   e=MinuteSignals();prices=[100+signed*.1*i for i in range(30)]
-   prices[-2]=100+signed*2.1
-   prices[-1]=100+signed*2.75
+   e=MinuteSignals();prices=[100+signed*.1*i for i in range(60)]
+   prices[-2]=100+signed*5.0 # Completed M1 pullback
+   prices[-1]=100+signed*5.95 # Last completed M1 confirms entry
    for i,p in enumerate(prices):
     op=p-signed*.15
     e.bars.append({'t':1800000000+60*i,'open':op,'close':p,
                    'high':max(op,p)+.05,'low':min(op,p)-.05})
    direction,strength,reason=e.evaluate()
    self.assertEqual(direction,expected,(signed,strength,reason))
-   self.assertGreaterEqual(strength,30)
-   self.assertIn('EMA9/21',reason)
+   self.assertGreaterEqual(strength,45)
+   self.assertIn('M5 tendência',reason)
+ def test_v11_m5_opposite_or_lateral_never_allows_m1_trade(self):
+  e=MinuteSignals()
+  for i in range(60):
+   p=100+(.05 if i%2 else -.05)
+   e.bars.append({'t':1800000000+60*i,'open':p-.02,'close':p,'high':p+.02,'low':p-.04})
+  direction,_,reason=e.evaluate()
+  self.assertIsNone(direction)
+  self.assertTrue('M5' in reason)
+ def test_v11_no_m5_history_no_early_m1_order(self):
+  e=MinuteSignals()
+  for i in range(50):
+   p=100+.1*i
+   e.bars.append({'t':1800000000+60*i,'open':p-.03,'close':p,'high':p+.01,'low':p-.04})
+  self.assertIsNone(e.evaluate()[0])
  def test_v10_m1_engine_ignores_gappy_candles(self):
   e=MinuteSignals()
   for m in range(40):

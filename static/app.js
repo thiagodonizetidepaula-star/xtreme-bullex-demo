@@ -108,7 +108,7 @@ $('resolvePending').onclick=async()=>{
  finally{busy=false;$('resolvePending').disabled=true}
 };
 $('executeSignal').onclick=async()=>{
- const offer=snapshot.signal_offer;
+ const offer=Number($('expiry').value)>=30?snapshot.long_signal_offer:snapshot.signal_offer;
  if(busy||!offer?.ready||snapshot.auto||snapshot.pending?.id)return;
  if(!$('amount').reportValidity()||!$('min_payout').reportValidity())return;
  // The server rechecks a freshly received broker tick, trend filter, cooldown,
@@ -154,14 +154,14 @@ function render(){
  const expiry=Number($('expiry').value), isM1=expiry>=30,
        offer=(isM1?s.long_signal_offer:s.signal_offer)||{};
  $('strategyProfile').textContent=isM1?
-  'Estratégia M1 + filtro M5 · EMA 9/21 · RSI 9 · Bollinger 20/2':
+  'Análise principal M5 (EMA 5/9 e RSI 9) → gatilho no M1':
   'Estratégia rápida 3s/8s · cruzamento e continuação';
  $('warmupStatus').textContent=isM1?
-  ('Histórico M1: '+(s.m1_candles||0)+'/26 velas completas · '+(s.m1_status||'Aguardando cotação')+
+  ('Histórico: '+(s.m1_candles||0)+'/55 velas M1 completas para formar M5 · '+(s.m1_status||'Aguardando cotação')+
    ' · Vencimento acima de 10s ainda precisa ser comprovado na DEMO.'):
   'O perfil rápido usa apenas cotações recentes da corretora.';
  const chosen=$('asset').value;
- const assets=(s.assets||[]).filter(x=>x.available&&x.symbol?.endsWith('_otc')).sort((a,b)=>b.payout-a.payout);
+ const assets=(s.assets||[]).filter(x=>x.available&&x.symbol?.endsWith('_otc')&&x.payout>87).sort((a,b)=>b.payout-a.payout);
  const key=JSON.stringify(assets);
  if($('asset').dataset.key!==key){
   $('asset').dataset.key=key;$('asset').replaceChildren();
@@ -200,7 +200,7 @@ function render(){
    ' operações • '+(s.auto_waiting_prices?'aguardando preços atuais':
       s.pending?.id?'aguardando resultado da corretora':
       Number(s.next_entry_in)>0?'pausa: '+Number(s.next_entry_in).toFixed(1)+'s':
-      'procurando sinal BUY / SELL válido'+(s.auto_expiry>=30?' · '+(s.m1_status||'M1 em aquecimento'):'') )+
+      'analisando M5 e aguardando fechamento M1'+(s.auto_expiry>=30?' · '+(s.m1_status||'M5 em aquecimento'):'') )+
    ' • expiração '+s.auto_expiry+'s • filtro lateral ativo.';
  }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
   $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
