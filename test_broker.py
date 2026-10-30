@@ -603,6 +603,60 @@ class Tests(unittest.TestCase):
    self.assertFalse(b.signal_status()['ready'])
    with self.assertRaisesRegex(ValueError,'pendente|ativo'):
     b.order_signal(1,5,b.symbol,20,80)
+ def test_v10_long_expiries_parse_and_demo_wire(self):
+  for expiry in (30,60,120,180,300):
+   self.assertEqual(parse_expiry(expiry),expiry)
+   b=self.broker();b.order('call',1,expiry)
+   wire=json.loads(b.ws.sent[-1][2:])
+   self.assertEqual(wire[0],'openOrder')
+   self.assertEqual(wire[1]['time'],expiry)
+   self.assertEqual(wire[1]['isDemo'],1)
+   self.assertEqual(b.pending['expiry'],expiry)
+  for invalid in (29,31,59,61,301,600,60.0,'60',True):
+   with self.assertRaises(ValueError):parse_expiry(invalid)
+ def test_v10_long_pending_wont_timeout_before_expiry_plus_grace(self):
+  b=self.broker();b.order('call',1,60)
+  b.pending['sent_at']=time.time()-50
+  b.snapshot()
+  self.assertFalse(b.pending['timed_out'])
+  self.assertEqual(b.pending['status'],'ENVIANDO')
+  with self.assertRaisesRegex(ValueError,'Aguarde'):
+   b.resolve_unconfirmed_order(b.pending['id'],True)
+  b.pending['sent_at']=time.time()-91
+  b.snapshot()
+  self.assertTrue(b.pending['timed_out'])
+  self.assertEqual(b.pending['status'],'RESULTADO_PENDENTE')
+ def test_v10_auto_m1_does_not_use_fast_signal(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000;clock.return_value=now
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':80,'expiry':60,'pause_after':20,'filter_lateral':True})
+   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+   self.assertEqual(b.count,0)
+   self.assertIsNone(b.pending)
+   self.assertTrue(b.auto)
+   self.assertFalse(b.snapshot()['long_signal_offer']['ready'])
+ def test_v10_auto_m1_direction_from_completed_candle_engine(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000;clock.return_value=now
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':80,'expiry':60,'pause_after':20,'filter_lateral':True})
+   def verified_signal(t,p,arrival):
+    b.minute_engine.direction='put'
+    b.minute_engine.signal_at=arrival
+    b.minute_engine.strength=78
+    b.minute_engine.reason='M1/M5 SELL valido'
+    return 'put'
+   b.minute_engine.ingest=verified_signal
+   b.event('updateStream',[[b.symbol,now-9+i,1.2] for i in range(9)]+[[b.symbol,now,1.1]])
+   wire=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+   self.assertEqual(len(wire),1)
+   self.assertEqual(wire[0]['action'],'put')
+   self.assertEqual(wire[0]['time'],60)
+   self.assertTrue(b.pending)
+   self.assertTrue(b.auto)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
