@@ -37,18 +37,43 @@ def storage_worker():
                     time.sleep(.5*(attempt+1))
         JOBS.task_done()
 
+def cleanup_once(now=None):
+    """Clean up idle sessions without disabling an explicitly started DEMO run.
+
+    The run is individually bounded to 60 minutes by Broker.snapshot().
+    After a stop, retain status/reason briefly so a returning mobile client
+    can actually see why it stopped. Pending orders are never retried.
+    """
+    now=time.time() if now is None else now
+    with LOCK:
+        for uid,c in list(CLIENTS.items()):
+            broker=c['broker']
+            if broker.auto:
+                broker.snapshot()
+            if broker.auto:
+                c['was_auto']=True
+                continue
+            if c.get('was_auto'):
+                c['was_auto']=False
+                c['retain_until']=max(c.get('retain_until',0),now+600)
+            if broker.pending:
+                if not broker.pending.get('timed_out'):
+                    broker.snapshot()
+                    # Do not discard unresolved orders before checking their
+                    # official result or the expiry-aware timeout.
+                    if broker.pending and not broker.pending.get('timed_out'):
+                        continue
+                if 'pending_review_since' not in c:
+                    c['pending_review_since']=now
+                    c['retain_until']=max(c.get('retain_until',0),now+600)
+            if now>max(c['seen']+120,c.get('retain_until',0)):
+                broker.close()
+                del CLIENTS[uid]
+
 def cleanup():
     while True:
         time.sleep(10)
-        with LOCK:
-            for uid,c in list(CLIENTS.items()):
-                if time.time()-c['seen']>120:
-                    c['broker'].close();del CLIENTS[uid]
-                elif c['broker'].auto:
-                    # Temporary data gaps must not silently turn off automation.
-                    # Broker.snapshot() handles 20-second loss / ambiguous orders;
-                    # the order path itself rejects any stale quote.
-                    c['broker'].snapshot()
+        cleanup_once()
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
@@ -127,10 +152,14 @@ class Handler(BaseHTTPRequestHandler):
                         c['storage']='Histórico zerado'
                 elif path=='/api/resolve-pending' and post:
                     b.resolve_unconfirmed_order(body.get('pending_id'),body.get('confirm_no_open_orders'))
-                elif path=='/api/auto' and post:b.start_auto(body)
+                elif path=='/api/auto' and post:
+                    b.start_auto(body)
+                    c['was_auto']=True
                 elif path=='/api/stop' and post:
                     b.auto=False;b.auto_trial=False
                     b.auto_stop_reason='Parado pelo usuário.'
+                    c['was_auto']=False
+                    c['retain_until']=time.time()+600
                     b.log('Automático parado pelo usuário. Uma ordem já enviada aguarda resultado.')
                 elif path=='/api/disconnect' and post:
                     if b.pending:raise ValueError('Há ordem pendente. Aguarde ou confira o resultado na corretora.')

@@ -65,6 +65,8 @@ PAUSE_CHOICES=(5,10,15,20,30)
 LONG_EXPIRIES=(30,60,120,180,300)
 ALL_EXPIRIES=tuple(range(3,11))+LONG_EXPIRIES
 MANUAL_SIGNAL_TTL=2.5
+M1_FEED_STOP_SECONDS=180
+AUTO_MAX_SESSION_SECONDS=3600
 
 def not_lateral(ticks,direction):
     """Minimal trend-efficiency check, without altering the signal strategy.
@@ -145,6 +147,7 @@ class Broker:
                 self.last_app_ping=time.time()
                 return True
             except Exception:
+                if self.auto:self.auto_stop_reason='Falha no heartbeat DEMO. Conexão não confiável; reinicie manualmente.'
                 self.auto=False
                 self.log('Falha ao manter conexão DEMO. Confira o estado antes de operar.')
                 return False
@@ -204,6 +207,7 @@ class Broker:
                 elif message.startswith('42'):
                     p=json.loads(message[2:]);self.event(p[0],p[1] if len(p)>1 else {})
         except (ValueError,KeyError,TypeError,IndexError):
+            if self.auto:self.auto_stop_reason='Mensagem da corretora não reconhecida; automático pausado por segurança.'
             self.auto=False; self.log('Mensagem da corretora não reconhecida. Automático pausado.')
     def event(self,name,d):
         if name=='successauth':
@@ -560,10 +564,19 @@ class Broker:
             # Short interruptions must not permanently disable auto; NEVER
             # enter while the quote freshness guard is false. Prolonged loss
             # of data does stop the bot and needs explicit user restart.
-            age=(time.time()-self.received) if self.received else (time.time()-self.auto_started_at)
-            if self.auto and age>20:
+            now=time.time()
+            age=(now-self.received) if self.received else (now-self.auto_started_at)
+            # M5 needs a long continuous observation period; never stop it
+            # because a mobile browser is suspended. Quote freshness remains
+            # mandatory for EVERY order and missing candles are never filled.
+            feed_limit=M1_FEED_STOP_SECONDS if self.auto_expiry>=30 else 20
+            if self.auto and now-self.auto_started_at>=AUTO_MAX_SESSION_SECONDS:
                 self.auto=False;self.auto_trial=False
-                self.auto_stop_reason='Sem cotações por mais de 20 segundos. Reconecte e reinicie o automático.'
+                self.auto_stop_reason='Sessão automática DEMO atingiu 60 minutos; reinício manual obrigatório.'
+                self.log(self.auto_stop_reason)
+            elif self.auto and age>feed_limit:
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason='Sem cotações por mais de %d segundos. Confira a conexão antes de reiniciar.'%feed_limit
                 self.log(self.auto_stop_reason)
             elif self.auto and age>3 and not self.feed_lag_warning:
                 self.feed_lag_warning=True
@@ -595,6 +608,8 @@ class Broker:
                     'm1_live_samples':len(self.minute_engine.current['sample_seconds']) if self.minute_engine.current else 0,
                     'supported_expiries':list(ALL_EXPIRIES),
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
+                    'auto_session_remaining':round(max(0,AUTO_MAX_SESSION_SECONDS-(time.time()-self.auto_started_at)),1) if self.auto else 0,
+                    'auto_feed_stop_after':M1_FEED_STOP_SECONDS if self.auto_expiry>=30 else 20,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
                                                   (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
