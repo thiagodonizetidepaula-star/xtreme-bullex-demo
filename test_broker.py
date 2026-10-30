@@ -550,6 +550,59 @@ class Tests(unittest.TestCase):
    b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(1,21)])
    self.assertGreater(b.snapshot()['signal_offer']['cooldown'],14)
    self.assertFalse(b.snapshot()['signal_offer']['ready'])
+ def test_v9_auto_buy_from_same_server_signal_offer(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':5,'pause_after':20,'filter_lateral':True})
+   self.assertEqual(b.count,0)
+   self.assertTrue(b.auto)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   packets=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+   self.assertEqual(len(packets),1)
+   self.assertEqual(packets[0]['action'],'call')
+   self.assertEqual(packets[0]['isDemo'],1)
+   self.assertEqual(packets[0]['time'],5)
+   self.assertTrue(b.auto)
+   self.assertTrue(b.pending)
+   self.assertEqual(b.count,1)
+   self.assertEqual(b.signal_status()['reason'],'Ordem anterior pendente')
+ def test_v9_auto_sell_from_same_server_signal_offer(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':7,'pause_after':20,'filter_lateral':True})
+   b.event('updateStream',[[b.symbol,base-9+i,1.2] for i in range(9)]+[[b.symbol,base,1.1]])
+   packets=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+   self.assertEqual(len(packets),1)
+   self.assertEqual(packets[0]['action'],'put')
+   self.assertEqual(packets[0]['time'],7)
+   self.assertEqual(packets[0]['isDemo'],1)
+   self.assertTrue(b.auto)
+ def test_v9_auto_does_not_enter_lateral_market(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':5,'pause_after':20,'filter_lateral':True})
+   b.event('updateStream',[[b.symbol,base-9+i,1.01 if i%2 else 1.0] for i in range(10)])
+   self.assertEqual(b.count,0)
+   self.assertIsNone(b.pending)
+   self.assertTrue(b.auto)
+ def test_v9_auto_uses_fresh_offer_but_manual_stays_disabled(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':5,'pause_after':20,'filter_lateral':True})
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   # The automatic engine may consume a current offer; user-click order
+   # never becomes available during an active automated session.
+   self.assertFalse(b.signal_status()['ready'])
+   with self.assertRaisesRegex(ValueError,'ativo'):
+    b.order_signal(1,5,b.symbol,20,80)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
