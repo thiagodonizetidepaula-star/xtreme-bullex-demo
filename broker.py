@@ -18,14 +18,30 @@ def parse_auth(raw):
         raise ValueError('Cole a mensagem auth completa de uma conta DEMO (isDemo: 1).') from None
 
 def signal(ticks):
-    # Use 20 distinct one-second buckets, not variable-rate raw ticks.
-    buckets={int(t):p for t,p in ticks}
-    a=sorted(buckets.items())[-20:]
-    if len(a)<20 or a[-1][0]-a[0][0]>22: return None
-    v=[p for _,p in a]; f=sum(v[-5:])/5; s=sum(v)/20
-    if f>s and v[-1]>v[-4]: return 'call'
-    if f<s and v[-1]<v[-4]: return 'put'
+    """New 3s/8s crossover, based on *distinct seconds* of broker quotes.
+
+    No late signal is returned after the first crossover second. A stream of
+    old prices or irregularly-spaced seconds is not enough evidence.
+    This is an unvalidated experimental indicator, not a win-rate promise.
+    """
+    buckets={int(t):p for t,p in ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
+             and math.isfinite(t) and math.isfinite(p) and p>0}
+    a=sorted(buckets.items())[-10:]
+    if len(a)<10 or a[-1][0]-a[0][0]>11:return None
+    if max(a[i+1][0]-a[i][0] for i in range(9))>2:return None
+    v=[p for _,p in a]
+    previous=sum(v[-4:-1])/3-sum(v[-9:-1])/8
+    current=sum(v[-3:])/3-sum(v[-8:])/8
+    # Avoid false nonzero baselines from floating-point roundoff on flat data.
+    epsilon=max(abs(v[-1]),1e-8)*1e-10
+    if previous<=epsilon and current>epsilon and v[-1]>v[-2]:return 'call'
+    if previous>=-epsilon and current<-epsilon and v[-1]<v[-2]:return 'put'
     return None
+
+def parse_expiry(value):
+    if type(value) is not int or not 3<=value<=10:
+        raise ValueError('Selecione uma expiração inteira de 3 a 10 segundos.')
+    return value
 
 def verified_five_second_duration(start,end):
     """Validate *observed* broker open/close timestamps, not requested expiry.
@@ -47,7 +63,10 @@ class Broker:
         self.connected=False; self.connecting=False; self.demo_confirmed=False; self.balance=None
         self.assets={}; self.symbol=''; self.ticks=deque(maxlen=600); self.received=0; self.price_time=0; self.quote_samples=deque(maxlen=80)
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
-        self.auto=False; self.validated=False; self.validation_message='Aguardando operação manual DEMO com duração oficial de 5s.'; self.last_order=0; self.closed=False; self.binary=None
+        self.auto=False; self.validated=False; self.validated_expiries=set(); self.auto_expiry=5
+        self.validation_message='Valide a expiração desejada com uma operação manual DEMO concluída.'
+        self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
+        self.last_order=0; self.closed=False; self.binary=None
         self.last_seen=time.time(); self.limit=10; self.stop_win=20.; self.stop_loss=20.; self.amount=1.; self.min_payout=80.; self.baseline=0; self.count=0
         self.keepalive_stop=threading.Event()
         self.last_app_ping=0
@@ -81,7 +100,9 @@ class Broker:
     def run(self):
         for url in DEMO_URLS:
             if self.closed: break
-            self.binary=None; self.demo_confirmed=False; self.validated=False; self.validation_message='Nova conexão DEMO: valide uma operação manual de 5s.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear()
+            self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
+            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
+            self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -96,8 +117,9 @@ class Broker:
         self.log('Falha de conexão com a Pocket Option. Sessão expirada, bloqueio de rede ou servidor indisponível.')
     def on_close(self,ws,*args):
         with self.lock:
-            self.connected=False; self.auto=False; self.demo_confirmed=False; self.validated=False
-            self.validation_message='Sessão encerrada: reconecte e valide um novo teste de 5s.'
+            self.connected=False; self.auto=False; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
+            self.last_signal=None;self.last_signal_at=0
+            self.validation_message='Sessão encerrada: reconecte e valide manualmente a expiração escolhida.'
             if self.pending:self.log('Conexão perdida com ordem pendente. Verifique o resultado na corretora antes de reconectar.')
     def on_message(self,ws,message):
         try:
@@ -114,7 +136,7 @@ class Broker:
                     # '41' denotes a Socket.IO namespace disconnect, not proof
                     # by itself that the broker explicitly rejected credentials.
                     self.closed=True;self.connected=False;self.demo_confirmed=False
-                    self.auto=False;self.validated=False;self.keepalive_stop.set()
+                    self.auto=False;self.validated=False;self.validated_expiries.clear();self.keepalive_stop.set()
                     self.log('A Pocket Option encerrou a conexão (código 41). Motivo não informado. Reconecte à conta DEMO.')
                     ws.close()
                 elif message.startswith('451-'):
@@ -142,14 +164,23 @@ class Broker:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
                     if math.isfinite(t) and math.isfinite(p) and p>0 and t>self.price_time:
                         self.ticks.append((t,p));self.received=time.time();self.price_time=t;self.quote_samples.append((t,self.received))
+            # Notify only once per distinct one-second candle, and only for a
+            # new crossover. This prevents a 20-second-old trend being shown
+            # as a brand-new signal.
+            bucket=int(self.price_time) if self.price_time else None
+            direction=None
+            if bucket is not None and bucket!=self.last_signal_bucket and self.fresh_quote():
+                self.last_signal_bucket=bucket
+                direction=signal(self.ticks)
+                if direction:
+                    self.last_signal=direction;self.last_signal_at=time.time()
             if self.auto and not self.pending and time.time()-self.last_order>10:
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
                     self.auto=False;self.log('Automático encerrado: limite de operações ou stop atingido.')
                 else:
-                    direction=signal(self.ticks)
                     if direction:
-                        try:self.order(direction,self.amount)
+                        try:self.order(direction,self.amount,self.auto_expiry)
                         except ValueError as e:self.auto=False;self.log(str(e))
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
@@ -186,15 +217,20 @@ class Broker:
                     opened=p.get('opened',{})
                     start=deal.get('openTime',opened.get('openTime')); end=deal.get('closeTime',opened.get('closeTime'))
                     duration=verified_five_second_duration(start,end)
-                    if duration is not None and 4.5<=duration<=5.5:
+                    requested=p.get('expiry',5)
+                    if duration is not None and abs(duration-requested)<=0.5:
+                        self.validated_expiries.add(requested)
                         self.validated=True
-                        self.validation_message='Duração de 5s confirmada pela corretora. Automático DEMO disponível nesta sessão.'
+                        self.validation_message=('Expiração de %ds confirmada pela corretora. '
+                                                 'Automático DEMO disponível para esta duração.'%requested)
                     else:
-                        self.validated=False
+                        # A mismatched or missing close time cannot authorize
+                        # automated orders at the requested expiry.
                         self.auto=False
-                        self.validation_message=('A corretora confirmou o resultado, mas não informou horário completo de abertura/fechamento. '
-                                                 'Automático bloqueado.' if duration is None else
-                                                 'Duração de %.2fs confirmada (não é 5s). Automático bloqueado.'%duration)
+                        self.validated=bool(self.validated_expiries)
+                        self.validation_message=('Resultado oficial recebido, mas sem horários suficientes para confirmar '
+                                                 'a expiração. Automático bloqueado para %ds.'%requested if duration is None else
+                                                 'Duração %.2fs diferente dos %ds pedidos. Automático bloqueado para esta duração.'%(duration,requested))
                     self.history.append(p);self.history=self.history[-300:];self.pending=None;self.save(p);self.log('Resultado confirmado: '+p['status'])
         elif name.lower()=='notauthorized':
             self.auto=False;self.validated=False
@@ -235,38 +271,44 @@ class Broker:
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
             self.auto=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
+            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
-    def order(self,direction,amount):
+    def order(self,direction,amount,expiry=5):
         with self.lock:
             if direction not in ('call','put'):raise ValueError('Direção inválida.')
+            expiry=parse_expiry(expiry)
             if not isinstance(amount,(int,float)) or not math.isfinite(amount) or not 1<=amount<=100:raise ValueError('Valor demo permitido: 1 a 100.')
             if not self.connected or not self.demo_confirmed:raise ValueError('Saldo de conta demo ainda não confirmado.')
             if self.pending:raise ValueError('Há uma ordem pendente. Não será enviada outra.')
             if time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
             if not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
             asset=self.assets.get(self.symbol,{})
-            if not asset.get('available') or not self.symbol.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para testar 5 segundos.')
+            if not asset.get('available') or not self.symbol.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para operar em DEMO.')
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
-            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':self.symbol,'direction':direction,'amount':amount,'payout':asset['payout'],'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None}
+            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':self.symbol,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None}
             self.last_order=time.time();self.count+=1;self.save(self.pending)
-            try:self.send('openOrder',{'asset':self.symbol,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':5})
+            try:self.send('openOrder',{'asset':self.symbol,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
             except Exception:self.auto=False;self.log('Envio sem confirmação. Não repita a ordem; confira na corretora.');raise ValueError('Envio sem confirmação. Automático pausado.') from None
             self.log('Ordem demo enviada; aguardando confirmação.')
     def start_auto(self,c):
         with self.lock:
-            if not self.validated:raise ValueError('Faça um teste manual: o servidor precisa confirmar uma ordem demo com duração de 5s antes do automático.')
+            expiry=parse_expiry(c.get('expiry',5))
+            if expiry not in self.validated_expiries:raise ValueError('Faça uma operação MANUAL demo de %ds e aguarde o fechamento oficial para liberar esta expiração.'%expiry)
             if not self.connected or not self.demo_confirmed or self.pending:raise ValueError('Conexão demo livre e confirmada necessária.')
             vals=[float(c.get(k,0)) for k in ('amount','stop_win','stop_loss','min_payout')];limit=int(c.get('limit',0))
             if not all(math.isfinite(v) for v in vals) or not 1<=vals[0]<=100 or not 1<=vals[1]<=10000 or not 1<=vals[2]<=10000 or not 1<=limit<=100 or not 0<=vals[3]<=100:raise ValueError('Revise os limites do automático.')
-            self.amount,self.stop_win,self.stop_loss,self.min_payout=vals;self.limit=limit;self.count=0;self.baseline=sum(x.get('net',0) for x in self.history);self.auto=True;self.log('Automático demo ativado. Aguardando alinhamento das médias de 5s e 20s.')
+            self.amount,self.stop_win,self.stop_loss,self.min_payout=vals;self.auto_expiry=expiry;self.limit=limit;self.count=0;self.baseline=sum(x.get('net',0) for x in self.history);self.auto=True;self.log('Automático DEMO de %ds ativado. Aguardando novo cruzamento das médias de 3s e 8s.'%expiry)
     def snapshot(self):
         with self.lock:
             if self.auto and time.time()-self.received>3:self.auto=False;self.log('Leitura atrasada. Automático pausado.')
             if self.pending and time.time()-self.pending['sent_at']>30:
                 self.auto=False;self.log('Ordem sem resultado confirmado. Automático bloqueado; confira na corretora.')
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'validated':self.validated,'validation_message':self.validation_message,'signal':signal(self.ticks) if time.time()-self.received<3 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,
+                    'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
+                    'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
+                    'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
         self.auto=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()

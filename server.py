@@ -98,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not c:raise ValueError('Conecte a corretora primeiro.')
                 b=c['broker']
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
-                elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)))
+                elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
                 elif path=='/api/auto' and post:b.start_auto(body)
                 elif path=='/api/stop' and post:b.auto=False;b.log('Automático parado. Uma ordem já enviada aguarda resultado.')
                 elif path=='/api/disconnect' and post:
