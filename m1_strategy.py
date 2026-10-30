@@ -6,8 +6,8 @@ winning strategy. Candle boundaries are aligned to broker quote timestamps.
 import math
 from collections import deque
 
-MINUTE_HISTORY=55
-M5_HISTORY=10
+MINUTE_HISTORY=35
+M5_HISTORY=6
 
 def ema(values,period):
     if len(values)<period: return None
@@ -46,6 +46,9 @@ class MinuteSignals:
         self.signal_at=0.
         self.strength=None
         self.reason='Aguardando análise M5 e entrada M1'
+        self.rejected_bars=0
+        self.last_gap=''
+        self.completed_bars=0
 
     def ingest(self,ts,price,arrival=None):
         """Return a fresh signal only upon the next minute's first valid quote."""
@@ -73,9 +76,14 @@ class MinuteSignals:
         # distinct quote seconds and near-full-minute coverage for each bar.
         if minute-finished['t']!=60 or len(finished['sample_seconds'])<30 or finished['last_sec']-finished['first_sec']<50:
             self.bars.clear()
-            self.reason='Histórico incompleto: aguardando velas reais, sem preencher lacunas'
+            self.rejected_bars+=1
+            self.last_gap='Minuto %s: %s segundos distintos (cobertura %ss)'%(
+                finished['t'],len(finished['sample_seconds']),
+                finished['last_sec']-finished['first_sec'])
+            self.reason='Histórico incompleto: '+self.last_gap+'; aguardando velas reais'
             return None
         self.bars.append({k:v for k,v in finished.items() if k not in ('first_sec','last_sec','sample_seconds')})
+        self.completed_bars+=1
         if len(self.bars)<MINUTE_HISTORY:
             self.reason='Aquecendo M5: %d/%d velas M1 completas'%(len(self.bars),MINUTE_HISTORY)
             return None
@@ -105,9 +113,9 @@ class MinuteSignals:
         if any(recent[i][0]-recent[i-1][0]!=300 for i in range(1,len(recent))):
             return None,None,'Lacuna no histórico M5: não operar'
         higher=[v for _,v in recent]
-        fast=ema(higher,5)
-        slow=ema(higher,9)
-        momentum=rsi(higher,9)
+        fast=ema(higher,3)
+        slow=ema(higher,5)
+        momentum=rsi(higher,5)
         changes=[higher[i]-higher[i-1] for i in range(1,len(higher))]
         traveled=sum(abs(v) for v in changes)
         efficiency=abs(sum(changes))/traveled if traveled else 0.
@@ -121,7 +129,7 @@ class MinuteSignals:
         buy_m5=(fast>slow and higher[-1]>higher[-3] and momentum>=54)
         sell_m5=(fast<slow and higher[-1]<higher[-3] and momentum<=46)
         if not buy_m5 and not sell_m5:
-            return None,strength,'Tendência M5 não confirmada por EMA5/9 e RSI9'
+            return None,strength,'Tendência M5 não confirmada por EMA3/5 e RSI5'
         closes=[b['close'] for b in bars]
         entry_ema=ema(closes,9)
         previous_ema=ema(closes[:-1],9)
@@ -133,7 +141,18 @@ class MinuteSignals:
         # Enter at first quote after a closed M1 reversal/pullback candle.
         # Never extrapolate an unfinished M1 candle to manufacture a signal.
         if buy_m5 and prev<=previous_ema and now>entry_ema and now>prev and now>candle['open'] and position>=0.65:
-            return 'call',strength,'M5 tendência de alta confirmada; candle M1 fechou BUY'
+            return 'call',strength,'M5 alta confirmada; M1 fechou BUY após recuo'
         if sell_m5 and prev>=previous_ema and now<entry_ema and now<prev and now<candle['open'] and position<=0.35:
-            return 'put',strength,'M5 tendência de baixa confirmada; candle M1 fechou SELL'
-        return None,strength,'M5 confirmado; aguardando gatilho M1 de entrada'
+            return 'put',strength,'M5 baixa confirmada; M1 fechou SELL após recuo'
+        # A second, objective trigger allows a breakout during a strong,
+        # established M5 trend without inventing trades in sideways ranges.
+        # Uses only CLOSED M1 candles, with body/range confirmation and
+        # persistent M5 efficiency, never unfinished or stale quotes.
+        previous=bars[-4:-1]
+        body=abs(now-candle['open'])/width
+        if efficiency>=0.70 and body>=0.60:
+            if buy_m5 and now>max(v['high'] for v in previous) and position>=0.80:
+                return 'call',strength,'M5 alta forte; M1 fechou rompimento BUY'
+            if sell_m5 and now<min(v['low'] for v in previous) and position<=0.20:
+                return 'put',strength,'M5 baixa forte; M1 fechou rompimento SELL'
+        return None,strength,'M5 confirmou tendência; aguardando recuo ou rompimento M1'
