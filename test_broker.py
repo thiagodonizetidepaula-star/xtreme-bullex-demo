@@ -101,7 +101,7 @@ class Tests(unittest.TestCase):
   b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openPrice':1.1})
   b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
   self.assertFalse(b.validated)
-  self.assertIn('não informou horário',b.snapshot()['validation_message'])
+  self.assertIn('sem horários suficientes',b.snapshot()['validation_message'])
  def test_auto_reuses_verified_manual_order_route(self):
   b=self.settle(.85,1.2)
   self.assertTrue(b.validated)
