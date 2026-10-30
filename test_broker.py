@@ -1,6 +1,7 @@
 import json,time,unittest
 from unittest.mock import patch
 from broker import Broker,parse_auth,signal,verified_five_second_duration,parse_expiry
+from m1_strategy import MinuteSignals,five_minute_closes
 class FakeWS:
  def __init__(self):self.sent=[]
  def send(self,v):self.sent.append(v)
@@ -603,6 +604,89 @@ class Tests(unittest.TestCase):
    self.assertFalse(b.signal_status()['ready'])
    with self.assertRaisesRegex(ValueError,'pendente|ativo'):
     b.order_signal(1,5,b.symbol,20,80)
+ def test_v10_long_expiries_parse_and_demo_wire(self):
+  for expiry in (30,60,120,180,300):
+   self.assertEqual(parse_expiry(expiry),expiry)
+   b=self.broker();b.order('call',1,expiry)
+   wire=json.loads(b.ws.sent[-1][2:])
+   self.assertEqual(wire[0],'openOrder')
+   self.assertEqual(wire[1]['time'],expiry)
+   self.assertEqual(wire[1]['isDemo'],1)
+   self.assertEqual(b.pending['expiry'],expiry)
+  for invalid in (29,31,59,61,301,600,60.0,'60',True):
+   with self.assertRaises(ValueError):parse_expiry(invalid)
+ def test_v10_long_pending_wont_timeout_before_expiry_plus_grace(self):
+  b=self.broker();b.order('call',1,60)
+  b.pending['sent_at']=time.time()-50
+  b.snapshot()
+  self.assertFalse(b.pending['timed_out'])
+  self.assertEqual(b.pending['status'],'ENVIANDO')
+  with self.assertRaisesRegex(ValueError,'Aguarde'):
+   b.resolve_unconfirmed_order(b.pending['id'],True)
+  b.pending['sent_at']=time.time()-91
+  b.snapshot()
+  self.assertTrue(b.pending['timed_out'])
+  self.assertEqual(b.pending['status'],'RESULTADO_PENDENTE')
+ def test_v10_auto_m1_does_not_use_fast_signal(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000;clock.return_value=now
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':80,'expiry':60,'pause_after':20,'filter_lateral':True})
+   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+   self.assertEqual(b.count,0)
+   self.assertIsNone(b.pending)
+   self.assertTrue(b.auto)
+   self.assertFalse(b.snapshot()['long_signal_offer']['ready'])
+ def test_v10_auto_m1_direction_from_completed_candle_engine(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000;clock.return_value=now
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':80,'expiry':60,'pause_after':20,'filter_lateral':True})
+   def verified_signal(t,p,arrival):
+    b.minute_engine.direction='put'
+    b.minute_engine.signal_at=arrival
+    b.minute_engine.strength=78
+    b.minute_engine.reason='M1/M5 SELL valido'
+    return 'put'
+   b.minute_engine.ingest=verified_signal
+   b.event('updateStream',[[b.symbol,now-9+i,1.2] for i in range(9)]+[[b.symbol,now,1.1]])
+   wire=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+   self.assertEqual(len(wire),1)
+   self.assertEqual(wire[0]['action'],'put')
+   self.assertEqual(wire[0]['time'],60)
+   self.assertTrue(b.pending)
+   self.assertTrue(b.auto)
+ def test_v10_m1_engine_real_bullish_and_bearish_pullback(self):
+  for signed,expected in [(1,'call'),(-1,'put')]:
+   e=MinuteSignals();prices=[100+signed*.1*i for i in range(30)]
+   prices[-2]=100+signed*2.1
+   prices[-1]=100+signed*2.75
+   for i,p in enumerate(prices):
+    op=p-signed*.15
+    e.bars.append({'t':1800000000+60*i,'open':op,'close':p,
+                   'high':max(op,p)+.05,'low':min(op,p)-.05})
+   direction,strength,reason=e.evaluate()
+   self.assertEqual(direction,expected,(signed,strength,reason))
+   self.assertGreaterEqual(strength,30)
+   self.assertIn('EMA9/21',reason)
+ def test_v10_m1_engine_ignores_gappy_candles(self):
+  e=MinuteSignals()
+  for m in range(40):
+   e.ingest(1800000000+60*m,100+m*.05)
+  self.assertEqual(len(e.bars),0)
+  self.assertIsNone(e.direction)
+  self.assertIn('incompleto',e.reason)
+ def test_v10_m1_engine_accumulates_only_completed_candles(self):
+  e=MinuteSignals();base=1800000000
+  for m in range(3):
+   for second in range(60):
+    e.ingest(base+60*m+second,100+.001*m+.00001*second)
+  self.assertEqual(len(e.bars),2)
+  self.assertEqual(e.current['t'],base+120)
+  self.assertEqual(e.bars[0]['t'],base)
+  self.assertEqual(five_minute_closes(list(e.bars)),[])
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')

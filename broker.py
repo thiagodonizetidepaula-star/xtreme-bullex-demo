@@ -2,6 +2,7 @@
 import json, math, ssl, threading, time, uuid
 from collections import deque
 import websocket
+from m1_strategy import MinuteSignals
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -61,6 +62,8 @@ def continuation_signal(ticks):
 
 AUTO_INTERVAL_SECONDS=15
 PAUSE_CHOICES=(5,10,15,20,30)
+LONG_EXPIRIES=(30,60,120,180,300)
+ALL_EXPIRIES=tuple(range(3,11))+LONG_EXPIRIES
 MANUAL_SIGNAL_TTL=2.5
 
 def not_lateral(ticks,direction):
@@ -87,8 +90,8 @@ def not_lateral(ticks,direction):
 
 
 def parse_expiry(value):
-    if type(value) is not int or not 3<=value<=10:
-        raise ValueError('Selecione uma expiração inteira de 3 a 10 segundos.')
+    if type(value) is not int or value not in ALL_EXPIRIES:
+        raise ValueError('Selecione 3–10, 30, 60, 120, 180 ou 300 segundos.')
     return value
 
 def verified_five_second_duration(start,end):
@@ -124,6 +127,7 @@ class Broker:
         self.last_closed_at=0
         self.lateral_filter=True
         self.market_quality='Aguardando leitura'
+        self.minute_engine=MinuteSignals()
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -156,7 +160,7 @@ class Broker:
             if self.closed: break
             self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
-            self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear()
+            self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -215,11 +219,16 @@ class Broker:
         elif name=='updateAssets' and isinstance(d,list):
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'payout':float(r[5]),'available':bool(r[14])} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str) and isinstance(r[5],(int,float))}
         elif name=='updateStream' and isinstance(d,list):
+            m1_direction=None
             for r in d:
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
                     if math.isfinite(t) and math.isfinite(p) and p>0 and t>self.price_time:
                         self.ticks.append((t,p));self.received=time.time();self.price_time=t;self.quote_samples.append((t,self.received))
+                        # The M1/M5 engine only sees real, ascending broker
+                        # quotes; it never backfills missing candles.
+                        qualified=self.minute_engine.ingest(t,p,self.received)
+                        if qualified: m1_direction=qualified
             # Reevaluate the signal on each new second, not just the first
             # crossover. This permits subsequent entries after the cooldown,
             # but only when the source feed shows current trend evidence.
@@ -234,6 +243,8 @@ class Broker:
                     self.last_signal_kind='cross' if crossed else 'trend'
                     self.last_signal_at=time.time()
             if self.auto:
+                if self.auto_expiry in LONG_EXPIRIES:
+                    direction=m1_direction
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
                     self.auto=False;self.auto_trial=False
@@ -244,7 +255,7 @@ class Broker:
                     # Same server-validated signal offered to the manual button;
                     # never act on a stale quote, sideways market or expired
                     # cooldown. No UI/client-side BUY/SELL direction is trusted.
-                    offer=self.signal_status(allow_auto=True)
+                    offer=self.signal_status(allow_auto=True,expiry=self.auto_expiry)
                     self.market_quality=offer['reason']
                     if offer['ready'] and offer['direction']==direction:
                         try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
@@ -363,7 +374,7 @@ class Broker:
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
             self.auto=False;self.auto_trial=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
-            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
+            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None;self.minute_engine=MinuteSignals()
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
     def order(self,direction,amount,expiry=5):
         with self.lock:
@@ -398,7 +409,7 @@ class Broker:
                 raise ValueError('Confirme que verificou na corretora que não existe operação aberta.')
             if not self.demo_confirmed or not self.connected:
                 raise ValueError('Conecte e confira a conta DEMO antes de liberar a pendência.')
-            if time.time()-p.get('sent_at',time.time())<=30 or not p.get('timed_out'):
+            if time.time()-p.get('sent_at',time.time())<=max(30,p.get('expiry',5)+30) or not p.get('timed_out'):
                 raise ValueError('Aguarde o prazo de conferência da ordem antes de liberar.')
             self.auto=False;self.auto_trial=False
             self.auto_stop_reason='Pendência liberada após conferência manual. Reative o automático quando desejar.'
@@ -415,29 +426,36 @@ class Broker:
                      'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
             return True
 
-    def signal_status(self,allow_auto=False):
+    def signal_status(self,allow_auto=False,expiry=5):
         """Current server-side recommendation, never a claimed win probability."""
         now=time.time()
         fresh=bool(self.demo_confirmed and self.connected and self.fresh_quote())
-        direction=self.last_signal if fresh and self.last_signal_at and now-self.last_signal_at<=MANUAL_SIGNAL_TTL else None
-        quality=bool(direction and not_lateral(self.ticks,direction))
+        long_mode=expiry in LONG_EXPIRIES
+        timestamp=self.minute_engine.signal_at if long_mode else self.last_signal_at
+        direction=(self.minute_engine.direction if long_mode else self.last_signal) if fresh and timestamp and now-timestamp<=MANUAL_SIGNAL_TTL else None
+        # The M1 engine already evaluated completed candles, EMA/RSI, BB
+        # compression and M5 direction; do not apply a tick-only microfilter.
+        quality=bool(direction and (long_mode or not_lateral(self.ticks,direction)))
         asset=self.assets.get(self.symbol,{})
         available=bool(asset.get('available') and self.symbol.endswith('_otc'))
         cooldown=max(0.,max(self.last_order+AUTO_INTERVAL_SECONDS if self.last_order else 0,
                              self.last_closed_at+self.pause_after if self.last_closed_at else 0)-now)
-        # Trend efficiency is a price-path metric, NOT accuracy/win probability.
-        buckets={int(t):p for t,p in self.ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
-                 and math.isfinite(t) and math.isfinite(p) and p>0}
-        prices=[p for _,p in sorted(buckets.items())[-10:]]
-        if len(prices)>=10:
-            gross=sum(abs(prices[i]-prices[i-1]) for i in range(1,len(prices)))
-            strength=round(100*abs(prices[-1]-prices[0])/gross) if gross>0 else 0
-        else: strength=None
+        # Movement efficiency is never a claimed win probability.
+        if long_mode:
+            strength=self.minute_engine.strength
+        else:
+            buckets={int(t):p for t,p in self.ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
+                     and math.isfinite(t) and math.isfinite(p) and p>0}
+            prices=[p for _,p in sorted(buckets.items())[-10:]]
+            if len(prices)>=10:
+                gross=sum(abs(prices[i]-prices[i-1]) for i in range(1,len(prices)))
+                strength=round(100*abs(prices[-1]-prices[0])/gross) if gross>0 else 0
+            else: strength=None
         reason=('Conta DEMO desconectada' if not self.demo_confirmed or not self.connected else
                 'Aguardando preços atuais' if not fresh else
                 'Ordem anterior pendente' if self.pending else
                 'Modo automático ativo; pare-o para executar manualmente' if self.auto and not allow_auto else
-                'Aguardando sinal novo' if not direction else
+                (self.minute_engine.reason if long_mode else 'Aguardando sinal novo') if not direction else
                 'Mercado lateralizado; sinal bloqueado' if not quality else
                 'Ativo OTC indisponível' if not available else
                 'Payout abaixo do mínimo' if asset.get('payout',0)<self.min_payout else
@@ -445,9 +463,9 @@ class Broker:
                 'Sinal pronto para sua decisão')
         ready=bool(direction and quality and available and fresh and not self.pending and (not self.auto or allow_auto)
                    and cooldown==0 and asset.get('payout',0)>=self.min_payout)
-        return {'direction':direction,'kind':self.last_signal_kind if direction else None,
+        return {'direction':direction,'kind':('m1_ema_rsi_m5' if long_mode else self.last_signal_kind) if direction else None,
                 'strength':strength if direction else None,'ready':ready,
-                'reason':reason,'age':round(now-self.last_signal_at,2) if direction else None,
+                'reason':reason,'age':round(now-timestamp,2) if direction else None,
                 'cooldown':round(cooldown,1),'asset':self.symbol,'payout':asset.get('payout',0)}
 
     def order_signal(self,amount,expiry,symbol,pause_after=20,min_payout=80):
@@ -466,15 +484,17 @@ class Broker:
                 raise ValueError('Ativo mudou. Atualize o sinal antes de operar.')
             self.pause_after=pause_after
             self.min_payout=float(min_payout)
-            info=self.signal_status()
+            info=self.signal_status(expiry=expiry)
             if not info['ready']:
                 raise ValueError(info['reason']+'. Nenhuma ordem enviada.')
             direction=info['direction']
             self.order(direction,amount,expiry)
             # Consume this opportunity. Fresh broker ticks must create a new
             # qualified signal before another user-initiated order.
-            self.last_signal=None
-            self.last_signal_at=0
+            if expiry in LONG_EXPIRIES:
+                self.minute_engine.direction=None;self.minute_engine.signal_at=0
+            else:
+                self.last_signal=None;self.last_signal_at=0
             self.log('Entrada DEMO enviada por clique no sinal %s. Nenhuma operação automática iniciada.'%
                      ('BUY' if direction=='call' else 'SELL'))
             return {'direction':direction,'expiry':expiry}
@@ -543,11 +563,11 @@ class Broker:
             elif self.auto and age<=2 and self.feed_lag_warning:
                 self.feed_lag_warning=False
                 self.log('Cotações recuperadas. Automático continua aguardando sinais.')
-            if self.pending and time.time()-self.pending['sent_at']>30 and not self.pending.get('timed_out'):
+            if self.pending and time.time()-self.pending['sent_at']>max(30,self.pending.get('expiry',5)+30) and not self.pending.get('timed_out'):
                 self.auto=False;self.auto_trial=False
                 self.pending['timed_out']=True
                 self.pending['status']='RESULTADO_PENDENTE'
-                self.auto_stop_reason='Ordem sem resultado oficial após 30 segundos. Confira a corretora antes de reiniciar.'
+                self.auto_stop_reason='Ordem sem resultado após expiração e prazo extra de 30s. Confira a corretora antes de reiniciar.'
                 self.save(self.pending)
                 self.log(self.auto_stop_reason)
             return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
@@ -557,7 +577,10 @@ class Broker:
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_kind':self.last_signal_kind if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
-                    'signal_offer':self.signal_status(),
+                    'signal_offer':self.signal_status(expiry=5),
+                    'long_signal_offer':self.signal_status(expiry=60),
+                    'm1_candles':len(self.minute_engine.bars),'m1_status':self.minute_engine.reason,
+                    'supported_expiries':list(ALL_EXPIRIES),
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
                                                   (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
