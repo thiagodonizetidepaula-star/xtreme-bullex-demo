@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V7"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V8"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V7: placar simplificado e visualização da plataforma oficial."
+            text = "V8: sinais em tempo real, um toque para operar na DEMO; sem entradas automáticas."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -139,8 +139,8 @@ class MainActivity : Activity() {
             setOnClickListener { openManualTest() }
         }
         val start = Button(this).apply {
-            text = "INICIAR BOT DEMO"
-            setOnClickListener { startDemoBot() }
+            text = "VER SINAIS"
+            setOnClickListener { showSignalPanel() }
         }
         val stop = Button(this).apply {
             text = "PARAR BOT"
@@ -515,6 +515,22 @@ class MainActivity : Activity() {
                 result == "DEMO" -> "A DEMO desconectou. Toque CONECTAR POCKET DEMO; não precisa de SSID."
                 else -> "Não foi possível carregar as cotações; confira a conexão."
             }
+        }
+    }
+
+    private fun showSignalPanel() {
+        showTiger()
+        status.text = "Modo controlado por você: o aplicativo apenas procura sinais. Nenhuma ordem é enviada sem tocar OPERAR SINAL."
+        tiger.evaluateJavascript("""
+            (() => {
+                const panel=document.querySelector('.signal-console');
+                if(!panel) return 'LOGIN';
+                panel.scrollIntoView({behavior:'smooth',block:'center'});
+                return 'OK';
+            })()
+        """.trimIndent()) { raw ->
+            if (jsValue(raw) == "LOGIN")
+                status.text = "Entre no seu painel Xtreme para ver os sinais DEMO."
         }
     }
 
