@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private var capturedPacket: String? = null  // volatile only; no persistence or logs
     private lateinit var tiger: WebView
     private lateinit var broker: WebView
+    private lateinit var platform: WebView
     private lateinit var status: TextView
     private lateinit var transferButton: Button
     private lateinit var connectionIssuePanel: LinearLayout
@@ -90,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V6"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V7"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V6: diagnóstico de acesso à Pocket Option; sinais e estratégia sem alterações."
+            text = "V7: placar simplificado e visualização da plataforma oficial."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -118,6 +119,10 @@ class MainActivity : Activity() {
         val openBroker = Button(this).apply {
             text = "CONECTAR POCKET DEMO"
             setOnClickListener { confirmBeforeOpeningBroker() }
+        }
+        val viewPlatform = Button(this).apply {
+            text = "VER PLATAFORMA"
+            setOnClickListener { showOfficialPlatform() }
         }
         transferButton = Button(this).apply {
             text = "ENVIAR SESSÃO DEMO PARA O XTREME"
@@ -146,10 +151,10 @@ class MainActivity : Activity() {
             addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        controls.addView(pair(openTiger, openBroker))
-        controls.addView(transferButton)
-        controls.addView(pair(manual, start))
+        controls.addView(pair(openTiger, viewPlatform))
+        controls.addView(pair(openBroker, start))
         controls.addView(pair(stop, discard))
+        controls.addView(transferButton)
         connectionIssueText = TextView(this).apply {
             text = "Não foi possível abrir o site oficial."
             textSize = 13f
@@ -197,9 +202,13 @@ class MainActivity : Activity() {
 
         tiger = configuredWebView(tigerUrl)
         broker = configuredWebView(brokerUrl)
+        // Independent viewer: no demo auth probe or native bridge installed.
+        platform = configuredWebView(brokerUrl)
         frame.addView(tiger, FrameLayout.LayoutParams(-1, -1))
         frame.addView(broker, FrameLayout.LayoutParams(-1, -1))
+        frame.addView(platform, FrameLayout.LayoutParams(-1, -1))
         broker.visibility = View.GONE
+        platform.visibility = View.GONE
 
         probeSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) &&
                 WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
@@ -338,6 +347,20 @@ class MainActivity : Activity() {
     private fun showTiger() {
         tiger.visibility = View.VISIBLE
         broker.visibility = View.GONE
+        platform.visibility = View.GONE
+    }
+
+    private fun showOfficialPlatform() {
+        autoTransferApproved = false
+        broker.visibility = View.GONE
+        tiger.visibility = View.GONE
+        platform.visibility = View.VISIBLE
+        if (platform.url?.startsWith(brokerUrl) != true) {
+            brokerLoadFailed = false
+            connectionIssuePanel.visibility = View.GONE
+            platform.loadUrl(brokerUrl)
+        }
+        status.text = "Visualização do site oficial no Android. Este botão não envia ordens. O acesso depende da rede, disponibilidade e região."
     }
 
     private fun showBrokerConnectionIssue(reason: String) {
@@ -349,6 +372,7 @@ class MainActivity : Activity() {
         connectionIssueText.text = reason + "\nConfira se o site oficial abre no Chrome. Se não abrir, pode haver indisponibilidade da rede, do serviço ou restrição regional. Não tente contornar bloqueios de acesso."
         connectionIssuePanel.visibility = View.VISIBLE
         broker.stopLoading()
+        if (::platform.isInitialized) platform.stopLoading()
         showTiger()
         status.text = "A Pocket Option não carregou. O painel Xtreme permanece disponível."
     }
@@ -371,6 +395,7 @@ class MainActivity : Activity() {
                 connectionIssuePanel.visibility = View.GONE
                 broker.visibility = View.VISIBLE
                 tiger.visibility = View.GONE
+                platform.visibility = View.GONE
                 broker.loadUrl(brokerUrl)
                 status.text = "Abra a Pocket Option em modo DEMO. Assim que a sessão DEMO aparecer, o app tentará conectar ao Xtreme automaticamente."
             }.show()
@@ -594,7 +619,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Legacy back navigation")
     override fun onBackPressed() {
-        if (broker.visibility == View.VISIBLE) showTiger()
+        if (broker.visibility == View.VISIBLE || platform.visibility == View.VISIBLE) showTiger()
         else if (tiger.canGoBack()) tiger.goBack()
         else super.onBackPressed()
     }
@@ -606,6 +631,7 @@ class MainActivity : Activity() {
         capturedPacket = null
         tiger.destroy()
         broker.destroy()
+        platform.destroy()
         super.onDestroy()
     }
 }
