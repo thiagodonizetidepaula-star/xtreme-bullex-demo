@@ -38,7 +38,8 @@ jobs:
           assert 'id="call"' not in html and 'id="put"' not in html
           assert 'id="chart"' not in html and 'id="history"' not in html
           assert '<option value="60" selected>1 minuto (M1)</option>' in html
-          assert '<option value="30">' not in html
+          expiry_options=html.split('<select id="expiry">',1)[1].split('</select>',1)[0]
+          assert expiry_options.count('<option ') == 1
           assert 'AUTOMÁTICO · M5 define, M1 entra' in html
           js=Path('static/app.js').read_text()
           assert "api('order-signal',req)" in js
