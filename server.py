@@ -44,8 +44,11 @@ def cleanup():
             for uid,c in list(CLIENTS.items()):
                 if time.time()-c['seen']>120:
                     c['broker'].close();del CLIENTS[uid]
-                elif c['broker'].auto and ((c['broker'].received and time.time()-c['broker'].received>3) or (not c['broker'].received and time.time()-c['broker'].auto_started_at>15) or (c['broker'].pending and time.time()-c['broker'].pending['sent_at']>30)):
-                    c['broker'].auto=False;c['broker'].log('Sem preços recentes. Automático pausado.')
+                elif c['broker'].auto:
+                    # Temporary data gaps must not silently turn off automation.
+                    # Broker.snapshot() handles 20-second loss / ambiguous orders;
+                    # the order path itself rejects any stale quote.
+                    c['broker'].snapshot()
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
@@ -100,7 +103,10 @@ class Handler(BaseHTTPRequestHandler):
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
                 elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
                 elif path=='/api/auto' and post:b.start_auto(body)
-                elif path=='/api/stop' and post:b.auto=False;b.log('Automático parado. Uma ordem já enviada aguarda resultado.')
+                elif path=='/api/stop' and post:
+                    b.auto=False;b.auto_trial=False
+                    b.auto_stop_reason='Parado pelo usuário.'
+                    b.log('Automático parado pelo usuário. Uma ordem já enviada aguarda resultado.')
                 elif path=='/api/disconnect' and post:
                     if b.pending:raise ValueError('Há ordem pendente. Aguarde ou confira o resultado na corretora.')
                     b.close();del CLIENTS[uid]

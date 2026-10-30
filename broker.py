@@ -93,6 +93,8 @@ class Broker:
         self.last_seen=time.time(); self.limit=10; self.stop_win=20.; self.stop_loss=20.; self.amount=1.; self.min_payout=80.; self.baseline=0; self.count=0
         self.keepalive_stop=threading.Event()
         self.last_app_ping=0
+        self.auto_stop_reason='Automático não iniciado.'
+        self.feed_lag_warning=False
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -140,6 +142,7 @@ class Broker:
         self.log('Falha de conexão com a Pocket Option. Sessão expirada, bloqueio de rede ou servidor indisponível.')
     def on_close(self,ws,*args):
         with self.lock:
+            if self.auto:self.auto_stop_reason='Conexão DEMO encerrada. Reconecte para reativar o automático.'
             self.connected=False; self.auto=False; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0
             self.validation_message='Sessão encerrada: reconecte e valide manualmente a expiração escolhida.'
@@ -160,6 +163,7 @@ class Broker:
                     # by itself that the broker explicitly rejected credentials.
                     self.closed=True;self.connected=False;self.demo_confirmed=False
                     self.auto=False;self.validated=False;self.validated_expiries.clear();self.keepalive_stop.set()
+                    self.auto_stop_reason='Conexão DEMO encerrada pela corretora (41).'
                     self.log('A Pocket Option encerrou a conexão (código 41). Motivo não informado. Reconecte à conta DEMO.')
                     ws.close()
                 elif message.startswith('451-'):
@@ -204,11 +208,16 @@ class Broker:
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
                     self.auto=False;self.auto_trial=False
-                    self.log('Automático encerrado: limite de operações ou stop atingido.')
+                    self.auto_stop_reason=('Limite de %d operações atingido.'%self.limit if self.count>=self.limit else
+                                           'Stop Win atingido.' if pnl>=self.stop_win else 'Stop Loss atingido.')
+                    self.log('Automático encerrado: '+self.auto_stop_reason)
                 elif (direction and not self.pending
                       and time.time()-self.last_order>=AUTO_INTERVAL_SECONDS):
                     try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
-                    except ValueError as e:self.auto=False;self.auto_trial=False;self.log(str(e))
+                    except ValueError as e:
+                        self.auto=False;self.auto_trial=False
+                        self.auto_stop_reason='Entrada automática bloqueada: '+str(e)
+                        self.log(self.auto_stop_reason)
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
             self.pending['broker_order_id']=str(d.get('id',''));self.pending['status']='ABERTA';self.pending['opened']=d
@@ -257,6 +266,8 @@ class Broker:
                         # A mismatched or missing close time cannot authorize
                         # automated orders at the requested expiry.
                         self.auto=False;self.auto_trial=False
+                        self.auto_stop_reason=('Fechamento oficial sem horários verificáveis para %ds.'%requested
+                            if duration is None else 'Duração oficial %.2fs não coincide com %ds.'%(duration,requested))
                         self.validated=bool(self.validated_expiries)
                         self.validation_message=('Resultado oficial recebido, mas sem horários suficientes para confirmar '
                                                  'a expiração. Automático bloqueado para %ds.'%requested if duration is None else
@@ -358,14 +369,31 @@ class Broker:
             self.auto_expiry=expiry;self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
+            self.auto_stop_reason='';self.feed_lag_warning=False
             self.log(('Automático DEMO %ds iniciado. Entrada inicial de valor 1 para validação; depois continuará a cada 15s ou mais se houver sinal válido.'%expiry) if trial else
                      ('Automático DEMO %ds ativado. Operações sequenciais com intervalo mínimo de 15s, apenas com sinais atuais.'%expiry))
     def snapshot(self):
         with self.lock:
-            if self.auto and (self.received and time.time()-self.received>3 or not self.received and time.time()-self.auto_started_at>15):self.auto=False;self.auto_trial=False;self.log('Leitura ausente ou atrasada. Automático pausado.')
+            # Short interruptions must not permanently disable auto; NEVER
+            # enter while the quote freshness guard is false. Prolonged loss
+            # of data does stop the bot and needs explicit user restart.
+            age=(time.time()-self.received) if self.received else (time.time()-self.auto_started_at)
+            if self.auto and age>20:
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason='Sem cotações por mais de 20 segundos. Reconecte e reinicie o automático.'
+                self.log(self.auto_stop_reason)
+            elif self.auto and age>3 and not self.feed_lag_warning:
+                self.feed_lag_warning=True
+                self.log('Leitura temporariamente atrasada. Aguardando novos preços; nenhuma entrada será enviada sem cotação atual.')
+            elif self.auto and age<=2 and self.feed_lag_warning:
+                self.feed_lag_warning=False
+                self.log('Cotações recuperadas. Automático continua aguardando sinais.')
             if self.pending and time.time()-self.pending['sent_at']>30:
-                self.auto=False;self.log('Ordem sem resultado confirmado. Automático bloqueado; confira na corretora.')
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason='Ordem sem resultado oficial após 30 segundos. Confira a corretora antes de reiniciar.'
+                self.log(self.auto_stop_reason)
+            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
+                    'auto_waiting_prices':bool(self.auto and ((time.time()-self.received)>3 if self.received else (time.time()-self.auto_started_at)>3)),
                     'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
@@ -373,5 +401,5 @@ class Broker:
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'next_entry_in':round(max(0,AUTO_INTERVAL_SECONDS-(time.time()-self.last_order)),1) if self.last_order else 0,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
-        self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
+        self.auto_stop_reason='Sessão DEMO encerrada.';self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
