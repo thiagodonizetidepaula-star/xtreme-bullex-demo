@@ -323,6 +323,10 @@ class Broker:
                 self.subscribe(chosen) # Starts the price stream; no order is sent.
             if self.assets.get(self.symbol,{}).get('payout',0)<vals[3]:
                 raise ValueError('Ativo selecionado abaixo do payout mínimo; escolha outro.')
+            if not self.fresh_quote():
+                # Start/restart the stream for the selected OTC symbol. Startup
+                # grace prevents an idle connection from failing immediately.
+                self.subscribe(self.symbol)
             self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
             self.auto_expiry=expiry;self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
