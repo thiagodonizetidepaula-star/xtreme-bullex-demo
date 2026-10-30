@@ -286,7 +286,7 @@ class MainActivity : Activity() {
                         WebViewClient.ERROR_TIMEOUT -> "A conexão com o site oficial excedeu o tempo limite."
                         WebViewClient.ERROR_HOST_LOOKUP -> "O Android não conseguiu localizar o domínio oficial."
                         WebViewClient.ERROR_CONNECT -> "A conexão com o servidor oficial não foi estabelecida."
-                        WebViewClient.ERROR_INTERNET_DISCONNECTED -> "O celular está sem conexão com a internet."
+                        WebViewClient.ERROR_IO -> "O Android não conseguiu concluir a leitura da página oficial."
                         else -> "A página oficial não pôde ser carregada (erro $code)."
                     }
                     showBrokerConnectionIssue(reason)
