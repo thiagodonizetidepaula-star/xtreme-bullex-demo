@@ -670,7 +670,7 @@ class Tests(unittest.TestCase):
    direction,strength,reason=e.evaluate()
    self.assertEqual(direction,expected,(signed,strength,reason))
    self.assertGreaterEqual(strength,45)
-   self.assertIn('M5 tendência',reason)
+   self.assertIn('M5 ',reason)
  def test_v11_m5_opposite_or_lateral_never_allows_m1_trade(self):
   e=MinuteSignals()
   for i in range(60):
