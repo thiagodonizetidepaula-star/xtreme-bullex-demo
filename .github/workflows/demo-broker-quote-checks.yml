@@ -25,19 +25,23 @@ jobs:
         run: python -m unittest -v test_broker
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify manual trade section below live signal
+      - name: Verify clean scoreboard and DEMO controls
         run: |
           python - <<'PY'
           from pathlib import Path
           html=Path('static/index.html').read_text()
-          ids=['expiry','expiryNow','signalFreshness','manual-trade','call','put','auto']
+          ids=['expiry','manual-trade','call','put','auto','score','resetHistory','pause_after','filter_lateral','marketQuality']
           assert all(html.count('id="'+i+'"')==1 for i in ids)
-          assert html.index('id="chart"')<html.index('id="signal"')<html.index('id="manual-trade"')<html.index('Histórico da corretora')
+          assert 'id="chart"' not in html
+          assert 'id="history"' not in html
+          assert 'Histórico da corretora' not in html
           js=Path('static/app.js').read_text()
           assert "body.expiry=Number($('expiry').value)" in js
-          assert "expiry:Number($('expiry').value)" in js
+          assert "body.pause_after=Number($('pause_after').value)" in js
+          assert "body.filter_lateral=$('filter_lateral').checked" in js
+          assert "api('reset-history',{confirm:true})" in js
           assert "setInterval(poll,750)" in js
-          print('PASS: live chart > fresh signal > manual trade 3-10s')
+          print('PASS: compact scoreboard, 5–30s pause, lateral filter, confirmed reset')
           PY
       - name: Compile Python modules
         run: python -m py_compile broker.py server.py
