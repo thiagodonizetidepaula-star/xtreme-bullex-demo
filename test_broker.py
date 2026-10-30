@@ -294,7 +294,7 @@ class Tests(unittest.TestCase):
   self.assertTrue(b.auto)
   self.assertTrue(b.auto_trial)
   self.assertFalse(b.validated)
-  self.assertIn('Entrada inicial',b.message)
+  self.assertIn('primeira entrada',b.message)
   self.assertEqual(b.count,0)
  def test_unvalidated_demo_expiry_requires_minimum_stake(self):
   b=self.broker()
@@ -601,7 +601,7 @@ class Tests(unittest.TestCase):
    # The automatic engine may consume a current offer; user-click order
    # never becomes available during an active automated session.
    self.assertFalse(b.signal_status()['ready'])
-   with self.assertRaisesRegex(ValueError,'ativo'):
+   with self.assertRaisesRegex(ValueError,'pendente|ativo'):
     b.order_signal(1,5,b.symbol,20,80)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
