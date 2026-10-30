@@ -200,7 +200,7 @@ class Tests(unittest.TestCase):
   self.assertTrue(any('changeSymbol' in x for x in b.ws.sent))
   self.assertFalse(any('openOrder' in x for x in b.ws.sent))
  def test_auto_first_demo_order_is_minimum_and_no_duplicates(self):
-  b=self.broker()
+  b=self.broker();b.symbol='' # exercise fresh auto-subscription, not preexisting quote
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':3})
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
@@ -220,7 +220,7 @@ class Tests(unittest.TestCase):
   self.assertFalse(b.auto_trial)
   self.assertIn(3,b.validated_expiries)
  def test_first_automated_demo_order_mismatch_stops_auto(self):
-  b=self.broker();b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':3})
+  b=self.broker();b.symbol='';b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':3})
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
   p=b.pending
