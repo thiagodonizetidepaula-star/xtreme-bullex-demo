@@ -1,11 +1,11 @@
 'use strict';
-const $=id=>document.getElementById(id);let config,session=null,snapshot={},saved=[],busy=false,refreshAt=0,polling=false;
+const $=id=>document.getElementById(id);let config,session=null,snapshot={},busy=false,refreshAt=0,polling=false;
 const money=x=>typeof x==='number'?x.toLocaleString('pt-BR',{maximumFractionDigits:2}):'—';
 function status(t){$('status').textContent=t}
 async function jsonFetch(url,options={}){const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);try{const r=await fetch(url,{...options,signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error_description||d.msg||d.message||d.error||'Solicitação recusada.');return d}finally{clearTimeout(timer)}}
 async function auth(path,body){return jsonFetch(config.url+'/auth/v1/'+path,{method:'POST',headers:{apikey:config.key,'Content-Type':'application/json'},body:JSON.stringify(body)})}
 async function api(path,body){if(!session)throw Error('Entre no aplicativo.');if(Date.now()>refreshAt){session=await auth('token?grant_type=refresh_token',{refresh_token:session.refresh_token});refreshAt=Date.now()+Math.max(60,session.expires_in-120)*1000}return jsonFetch('/api/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})})}
-async function enter(s){session=s;refreshAt=Date.now()+Math.max(60,s.expires_in-120)*1000;$('password').value='';$('login').hidden=true;$('dashboard').hidden=false;await poll();try{saved=await api('history');renderHistory()}catch(e){status(e.message)}}
+async function enter(s){session=s;refreshAt=Date.now()+Math.max(60,s.expires_in-120)*1000;$('password').value='';$('login').hidden=true;$('dashboard').hidden=false;await poll()}
 $('loginForm').onsubmit=async e=>{e.preventDefault();$('loginStatus').textContent='Entrando…';try{await enter(await auth('token?grant_type=password',{email:$('email').value,password:$('password').value}));$('loginStatus').textContent=''}catch(e){$('loginStatus').textContent=e.message}};
 $('signup').onclick=async()=>{if(!$('loginForm').reportValidity())return;try{const d=await auth('signup',{email:$('email').value,password:$('password').value});if(d.access_token)await enter(d);else $('loginStatus').textContent='Cadastro solicitado. Confirme seu e-mail e depois volte para entrar neste app.'}catch(e){$('loginStatus').textContent=e.message}};
 let recoveryToken=null;
@@ -28,7 +28,7 @@ recoveryToken=null;$('newPassword').value='';$('confirmPassword').value='';
 $('resetForm').hidden=true;$('loginForm').hidden=false;
 $('loginStatus').textContent='Senha alterada! Entre usando sua nova senha.'}
 catch(err){$('loginStatus').textContent=err.message}};
-$('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;saved=[];snapshot={};$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
+$('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;snapshot={};$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
 async function action(name,body={}){
  if(busy){
   if(name==='auto')$('autoAction').textContent='Não iniciado: outra solicitação está em andamento. Confira o estado antes de tentar novamente.';
@@ -78,18 +78,34 @@ for(const d of ['call','put'])$(d).onclick=()=>{
  if(!$('amount').reportValidity())return;
  action('order',{direction:d,amount:Number($('amount').value),expiry:Number($('expiry').value)});
 };
-$('auto').onclick=()=>{let body={};for(const k of ['amount','stop_win','stop_loss','limit','min_payout']){if(!$(k).reportValidity())return;body[k]=Number($(k).value)}body.expiry=Number($('expiry').value);body.symbol=$('asset').value;action('auto',body)};
+$('auto').onclick=()=>{let body={};for(const k of ['amount','stop_win','stop_loss','limit','min_payout']){if(!$(k).reportValidity())return;body[k]=Number($(k).value)}body.expiry=Number($('expiry').value);body.symbol=$('asset').value;body.pause_after=Number($('pause_after').value);body.filter_lateral=$('filter_lateral').checked;action('auto',body)};
 $('expiry').onchange=()=>{if(snapshot.pending?.id||snapshot.auto)return;render()};
-function renderHistory(){const map=new Map(saved.map(x=>[x.id,x]));for(const x of snapshot.history||[])map.set(x.id,x);if(snapshot.pending?.id)map.set(snapshot.pending.id,snapshot.pending);let list=[...map.values()].reverse();$('history').replaceChildren();for(const r of list.slice(0,100)){let tr=document.createElement('tr');for(const v of [r.asset,r.direction==='call'?'COMPRA':'VENDA',money(Number(r.amount)),r.status,money(r.net??r.result?.net)]){let td=document.createElement('td');td.textContent=v;tr.append(td)}$('history').append(tr)}$('empty').hidden=!!list.length;return list}
+$('resetHistory').onclick=async()=>{
+ if(busy || snapshot.auto || snapshot.pending?.id)return;
+ if(!confirm('Excluir permanentemente o placar e todo o histórico DEMO desta conta do aplicativo? Isso não cancela nenhuma operação da corretora.'))return;
+ busy=true;$('resetHistory').disabled=true;
+ $('resetMessage').textContent='Excluindo os registros da conta autenticada…';
+ try{
+  await api('reset-history',{confirm:true});
+  snapshot=await api('status');
+  render();
+  $('resetMessage').textContent='Placar e histórico zerados. A contagem começa em 0.';
+ }catch(e){$('resetMessage').textContent='Não foi possível zerar: '+e.message;}
+ finally{busy=false;$('resetHistory').disabled=!!snapshot.auto||!!snapshot.pending?.id}
+};
 function render(){const s=snapshot;status(s.message||'Aguardando conexão.');$('connection').textContent=s.demo_confirmed?'DEMO CONFIRMADA':s.connected?'VALIDANDO DEMO':s.connecting?'CONECTANDO':'DESCONECTADO';$('balance').textContent=money(s.balance);$('age').textContent=s.age==null?'—':s.age+'s';let hist=s.history||[];$('score').textContent=hist.filter(x=>x.status==='WIN').length+' / '+hist.filter(x=>x.status==='LOSS').length;$('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));$('signal').textContent=s.signal==='call'?(s.signal_kind==='trend'?'↑ Tendência de compra confirmada':'↑ Compra · cruzamento agora'):s.signal==='put'?(s.signal_kind==='trend'?'↓ Tendência de venda confirmada':'↓ Venda · cruzamento agora'):'Aguardando sinal atual';
 $('signalFreshness').textContent=s.signal_age!=null?'Sinal detectado há '+Number(s.signal_age).toFixed(1)+'s':'Nenhum sinal novo. Não use um cruzamento antigo.';
 $('expiryNow').textContent=s.auto&&s.auto_expiry?s.auto_expiry:$('expiry').value;$('storage').textContent=s.storage||'Supabase · histórico privado';const selectedExpiry=Number($('expiry').value);
 const expiryValidated=(s.validated_expiries||[]).includes(selectedExpiry);
 $('auto').disabled=!s.demo_confirmed||!!s.pending?.id||s.auto;
 $('auto').textContent=s.auto?(s.auto_trial?'Automático em execução · validando '+s.auto_expiry+'s':'Automático em execução · '+s.auto_expiry+'s'):'INICIAR BOT AUTOMÁTICO DEMO · '+selectedExpiry+'s';
-$('autoStatus').textContent=s.auto?('BOT ATIVO • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações • '+(s.auto_waiting_prices?'aguardando cotação atualizada, sem novas entradas':s.pending?.id?'aguardando resultado oficial':Number(s.next_entry_in)>0?'próxima entrada possível em '+Number(s.next_entry_in).toFixed(1)+'s':'procurando sinal válido')+' • intervalo mínimo de 15s'+(s.auto_trial&&s.auto_count>0?' • Fechamento oficial recebido; duração ainda não comprovada. Apenas valor 1 DEMO.':'')):'BOT PARADO • '+(s.auto_stop_reason||'Ainda não iniciado.')+' • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações.';
+$('autoStatus').textContent=s.auto?('BOT ATIVO • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações • '+(s.auto_waiting_prices?'aguardando cotação atualizada, sem novas entradas':s.pending?.id?'aguardando resultado oficial':Number(s.next_entry_in)>0?'próxima entrada possível em '+Number(s.next_entry_in).toFixed(1)+'s':'procurando sinal válido')+' • pausa '+(s.pause_after||20)+'s após resultado (mínimo 15s entre entradas)'+(s.auto_trial&&s.auto_count>0?' • Fechamento oficial recebido; duração ainda não comprovada. Apenas valor 1 DEMO.':'')):'BOT PARADO • '+(s.auto_stop_reason||'Ainda não iniciado.')+' • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações.';
 if(!s.auto && $('autoAction').textContent.startsWith('Confirmado pelo servidor:')) $('autoAction').textContent='O servidor encerrou o automático: '+(s.auto_stop_reason||s.message||'Consulte Atividade.');
 $('expiry').disabled=!!s.auto;
+$('pause_after').disabled=!!s.auto;
+$('filter_lateral').disabled=!!s.auto;
+$('marketQuality').textContent=s.auto?('Pausa: '+(s.pause_after||20)+'s após resultado oficial • filtro lateral '+(s.filter_lateral?'ATIVO':'desligado')+' • '+(s.market_quality||'Aguardando sinal')):'Pausa e filtro serão aplicados ao iniciar o automático.';
+$('resetHistory').disabled=!!s.auto||!!s.pending?.id;
 $('call').disabled=$('put').disabled=!s.demo_confirmed||!!s.pending?.id||s.age==null||s.age>2;$('connect').disabled=s.connecting;$('subscribe').disabled=!s.connected;$('validation').textContent=expiryValidated?
 'Expiração de '+selectedExpiry+'s confirmada pela corretora nesta sessão. Pode iniciar o automático sem etapa manual.':
 (s.auto&&s.auto_trial?
@@ -99,8 +115,6 @@ const desired=$('asset').value,assets=(s.assets||[]).filter(x=>x.available).sort
 $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
 $('pendingRecovery').hidden=!(s.pending?.id && s.pending?.timed_out);
 if($('pendingRecovery').hidden){$('confirmNoOpen').checked=false;}
-$('resolvePending').disabled=busy||!$('confirmNoOpen').checked||!s.pending?.timed_out;$('progress').max=s.pending?.expiry||Number($('expiry').value);$('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;$('events').replaceChildren();for(const e of (s.events||[]).slice().reverse()){let li=document.createElement('li');li.textContent=new Date(e.time*1000).toLocaleTimeString('pt-BR')+' · '+e.text;$('events').append(li)}renderHistory();draw()}
-function draw(){const c=$('chart'),ctx=c.getContext('2d'),w=c.clientWidth,h=c.clientHeight;c.width=w*devicePixelRatio;c.height=h*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);ctx.strokeStyle='#253039';for(let j=1;j<5;j++){ctx.beginPath();ctx.moveTo(0,j*h/5);ctx.lineTo(w,j*h/5);ctx.stroke()}const ticks=snapshot.ticks||[];if(!ticks.length){ctx.fillStyle='#8f9ea8';ctx.font='13px Arial';ctx.fillText('O gráfico aparecerá ao receber preços reais da conta demo.',12,h/2);return}let map=new Map();for(const [t,p]of ticks){const k=Math.floor(t/5),a=map.get(k);if(a){a.h=Math.max(a.h,p);a.l=Math.min(a.l,p);a.c=p}else map.set(k,{o:p,h:p,l:p,c:p})}const bars=[...map.values()].slice(-50),lo=Math.min(...bars.map(x=>x.l)),hi=Math.max(...bars.map(x=>x.h)),range=hi-lo||.0001,y=p=>h-15-(p-lo)/range*(h-30),step=(w-60)/Math.max(15,bars.length);bars.forEach((b,i)=>{const x=10+i*step;ctx.fillStyle=ctx.strokeStyle=b.c>=b.o?'#c1ee74':'#f48e9b';ctx.beginPath();ctx.moveTo(x,y(b.h));ctx.lineTo(x,y(b.l));ctx.stroke();ctx.fillRect(x-step*.3,Math.min(y(b.o),y(b.c)),Math.max(2,step*.6),Math.max(2,Math.abs(y(b.o)-y(b.c))))});$('price').textContent=ticks.at(-1)[1].toFixed(6)}
+$('resolvePending').disabled=busy||!$('confirmNoOpen').checked||!s.pending?.timed_out;$('progress').max=s.pending?.expiry||Number($('expiry').value);$('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;$('events').replaceChildren();for(const e of (s.events||[]).slice().reverse()){let li=document.createElement('li');li.textContent=new Date(e.time*1000).toLocaleTimeString('pt-BR')+' · '+e.text;$('events').append(li)}}
 async function poll(){if(!session||polling)return;polling=true;try{snapshot=await api('status');render()}catch(e){status(e.message)}finally{polling=false}}
-$('export').onclick=()=>{const rows=renderHistory(),escape=v=>'"'+String(v??'').replaceAll('"','""')+'"';const csv=['id,asset,direction,amount,status,net',...rows.map(r=>[r.id,r.asset,r.direction,r.amount,r.status,r.net??r.result?.net].map(escape).join(','))].join('\n');const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=document.createElement('a');a.href=u;a.download='pocket-tiger-demo.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
-window.addEventListener('resize',draw);setInterval(poll,750);jsonFetch('/config').then(c=>{config=c}).catch(()=>{$('loginStatus').textContent='Servidor indisponível. Recarregue a página.'});
+setInterval(poll,750);jsonFetch('/config').then(c=>{config=c}).catch(()=>{$('loginStatus').textContent='Servidor indisponível. Recarregue a página.'});

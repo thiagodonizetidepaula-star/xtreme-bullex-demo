@@ -60,6 +60,30 @@ def continuation_signal(ticks):
     return None
 
 AUTO_INTERVAL_SECONDS=15
+PAUSE_CHOICES=(5,10,15,20,30)
+
+def not_lateral(ticks,direction):
+    """Minimal trend-efficiency check, without altering the signal strategy.
+
+    Repeated direction changes and weak net travel are signs of congestion.
+    Uses only observed 1-second quote samples; insufficient samples block
+    automatic entries when the optional filter is on.
+    """
+    seconds={int(t):p for t,p in ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
+             and math.isfinite(t) and math.isfinite(p) and p>0}
+    a=sorted(seconds.items())[-10:]
+    if len(a)<10 or a[-1][0]-a[0][0]>12:return False
+    v=[p for _,p in a]
+    changes=[v[i]-v[i-1] for i in range(1,len(v))]
+    travel=sum(abs(z) for z in changes)
+    if travel<=max(v[-1]*1e-8,1e-10):return False
+    net=v[-1]-v[0]
+    if direction=='call' and net<=0:return False
+    if direction=='put' and net>=0:return False
+    efficiency=abs(net)/travel
+    reversals=sum(1 for x,y in zip(changes,changes[1:]) if x*y<0)
+    return efficiency>=0.55 and reversals<=3
+
 
 def parse_expiry(value):
     if type(value) is not int or not 3<=value<=10:
@@ -95,6 +119,10 @@ class Broker:
         self.last_app_ping=0
         self.auto_stop_reason='Automático não iniciado.'
         self.feed_lag_warning=False
+        self.pause_after=20
+        self.last_closed_at=0
+        self.lateral_filter=True
+        self.market_quality='Aguardando leitura'
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -211,13 +239,19 @@ class Broker:
                     self.auto_stop_reason=('Limite de %d operações atingido.'%self.limit if self.count>=self.limit else
                                            'Stop Win atingido.' if pnl>=self.stop_win else 'Stop Loss atingido.')
                     self.log('Automático encerrado: '+self.auto_stop_reason)
-                elif (direction and not self.pending
-                      and time.time()-self.last_order>=AUTO_INTERVAL_SECONDS):
-                    try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
-                    except ValueError as e:
-                        self.auto=False;self.auto_trial=False
-                        self.auto_stop_reason='Entrada automática bloqueada: '+str(e)
-                        self.log(self.auto_stop_reason)
+                elif direction and not self.pending:
+                    wait_until=max(self.last_order+AUTO_INTERVAL_SECONDS,self.last_closed_at+self.pause_after)
+                    if time.time()<wait_until:
+                        self.market_quality='Pausa entre operações'
+                    elif self.lateral_filter and not not_lateral(self.ticks,direction):
+                        self.market_quality='Mercado lateralizado / tendência fraca. Aguardando'
+                    else:
+                        self.market_quality='Tendência aceita pelo filtro'
+                        try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
+                        except ValueError as e:
+                            self.auto=False;self.auto_trial=False
+                            self.auto_stop_reason='Entrada automática bloqueada: '+str(e)
+                            self.log(self.auto_stop_reason)
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
             self.pending['broker_order_id']=str(d.get('id',''));self.pending['status']='ABERTA';self.pending['opened']=d
@@ -289,7 +323,7 @@ class Broker:
                         self.validated=bool(self.validated_expiries)
                         self.validation_message=('Duração %.2fs diferente dos %ds pedidos. '
                                                  'Automático bloqueado para esta duração.'%(duration,requested))
-                    self.history.append(p);self.history=self.history[-300:];self.pending=None;self.save(p);self.log('Resultado confirmado: '+p['status'])
+                    self.history.append(p);self.history=self.history[-300:];self.pending=None;self.last_closed_at=time.time();self.save(p);self.log('Resultado confirmado: '+p['status'])
         elif name.lower()=='notauthorized':
             self.auto=False;self.validated=False
             self.log('Autenticação DEMO recusada pela corretora. Gere uma nova sessão no navegador interno.')
@@ -375,6 +409,7 @@ class Broker:
             self.history.append(p)
             self.history=self.history[-300:]
             self.pending=None
+            self.last_closed_at=time.time()
             self.save(p)
             self.log('Pendência arquivada como RESULTADO DESCONHECIDO após confirmação do usuário. '
                      'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
@@ -383,6 +418,12 @@ class Broker:
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
+            pause=c.get('pause_after',20)
+            if type(pause) is not int or pause not in PAUSE_CHOICES:
+                raise ValueError('Escolha pausa de 5, 10, 15, 20 ou 30 segundos.')
+            filter_lateral=c.get('filter_lateral',True)
+            if type(filter_lateral) is not bool:
+                raise ValueError('Filtro de lateralização inválido.')
             if not self.connected or not self.demo_confirmed or self.pending or self.closed:
                 raise ValueError('Conexão DEMO confirmada e sem ordem pendente necessária.')
             if self.auto:raise ValueError('O automático DEMO já está ativo.')
@@ -413,7 +454,9 @@ class Broker:
                 # grace prevents an idle connection from failing immediately.
                 self.subscribe(self.symbol)
             self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
-            self.auto_expiry=expiry;self.limit=limit;self.count=0
+            self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
+            self.market_quality='Aguardando tendência'
+            self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
             self.auto_stop_reason='';self.feed_lag_warning=False
@@ -443,13 +486,15 @@ class Broker:
                 self.save(self.pending)
                 self.log(self.auto_stop_reason)
             return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
+                    'pause_after':self.pause_after,'filter_lateral':self.lateral_filter,'market_quality':self.market_quality,
                     'auto_waiting_prices':bool(self.auto and ((time.time()-self.received)>3 if self.received else (time.time()-self.auto_started_at)>3)),
                     'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_kind':self.last_signal_kind if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
-                    'next_entry_in':round(max(0,AUTO_INTERVAL_SECONDS-(time.time()-self.last_order)),1) if self.last_order else 0,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+                    'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
+                                                  (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
         self.auto_stop_reason='Sessão DEMO encerrada.';self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
