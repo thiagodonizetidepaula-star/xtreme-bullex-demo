@@ -72,9 +72,11 @@ class MinuteSignals:
         self.current={'t':minute,'open':price,'high':price,'low':price,'close':price,
                       'first_sec':second,'last_sec':second,'sample_seconds':{second}}
         self.direction=None;self.strength=None;self.signal_at=0.
-        # Any data gap invalidates EMA continuity. M1 needs at least 30
-        # distinct quote seconds and near-full-minute coverage for each bar.
-        if minute-finished['t']!=60 or len(finished['sample_seconds'])<30 or finished['last_sec']-finished['first_sec']<50:
+        # A real M1 candle does not need 30 quotes every minute. Some live
+        # DEMO feeds update once every 2–3 seconds; that is enough when the
+        # first and last quotes cover the minute. Gaps still invalidate it.
+        # No synthetic or forwarded prices: every sample came from the broker.
+        if minute-finished['t']!=60 or len(finished['sample_seconds'])<18 or finished['last_sec']-finished['first_sec']<53:
             self.bars.clear()
             self.rejected_bars+=1
             self.last_gap='Minuto %s: %s segundos distintos (cobertura %ss)'%(
