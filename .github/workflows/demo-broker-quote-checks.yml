@@ -28,7 +28,7 @@ jobs:
         run: python -m unittest -v test_broker test_market_radar
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify V10 expiry choices and independent M1/M5 signal engine
+      - name: Verify V11 single-asset M5 analysis and M1 60s DEMO order
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -37,7 +37,9 @@ jobs:
           assert all(html.count('id="'+i+'"')==1 for i in ids)
           assert 'id="call"' not in html and 'id="put"' not in html
           assert 'id="chart"' not in html and 'id="history"' not in html
-          assert all(('value="'+str(i)+'"') in html for i in (30,60,120,180,300))
+          assert '<option value="60" selected>1 minuto (M1)</option>' in html
+          assert '<option value="30">' not in html
+          assert 'AUTOMÁTICO · M5 define, M1 entra' in html
           js=Path('static/app.js').read_text()
           assert "api('order-signal',req)" in js
           assert "s.long_signal_offer" in js
@@ -46,7 +48,7 @@ jobs:
           assert "filter_lateral:true" in js
           assert "setInterval(poll,750)" in js
           assert "api('reset-history',{confirm:true})" in js
-          print('PASS: V10 M1/M5 strategy and demo expiries')
+          print('PASS: V11 M5 analysis / M1 automatic 60s UI')
           PY
       - name: Compile Python modules
         run: python -m py_compile broker.py m1_strategy.py market_radar.py server.py
