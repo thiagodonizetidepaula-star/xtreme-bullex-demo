@@ -61,6 +61,7 @@ def continuation_signal(ticks):
 
 AUTO_INTERVAL_SECONDS=15
 PAUSE_CHOICES=(5,10,15,20,30)
+MANUAL_SIGNAL_TTL=2.5
 
 def not_lateral(ticks,direction):
     """Minimal trend-efficiency check, without altering the signal strategy.
@@ -415,6 +416,70 @@ class Broker:
                      'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
             return True
 
+    def signal_status(self):
+        """Current server-side recommendation, never a claimed win probability."""
+        now=time.time()
+        fresh=bool(self.demo_confirmed and self.connected and self.fresh_quote())
+        direction=self.last_signal if fresh and self.last_signal_at and now-self.last_signal_at<=MANUAL_SIGNAL_TTL else None
+        quality=bool(direction and not_lateral(self.ticks,direction))
+        asset=self.assets.get(self.symbol,{})
+        available=bool(asset.get('available') and self.symbol.endswith('_otc'))
+        cooldown=max(0.,max(self.last_order+AUTO_INTERVAL_SECONDS if self.last_order else 0,
+                             self.last_closed_at+self.pause_after if self.last_closed_at else 0)-now)
+        # Trend efficiency is a price-path metric, NOT accuracy/win probability.
+        buckets={int(t):p for t,p in self.ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
+                 and math.isfinite(t) and math.isfinite(p) and p>0}
+        prices=[p for _,p in sorted(buckets.items())[-10:]]
+        if len(prices)>=10:
+            gross=sum(abs(prices[i]-prices[i-1]) for i in range(1,len(prices)))
+            strength=round(100*abs(prices[-1]-prices[0])/gross) if gross>0 else 0
+        else: strength=None
+        reason=('Conta DEMO desconectada' if not self.demo_confirmed or not self.connected else
+                'Aguardando preços atuais' if not fresh else
+                'Ordem anterior pendente' if self.pending else
+                'Modo automático ativo; pare o automático antes de controlar os sinais' if self.auto else
+                'Aguardando sinal novo' if not direction else
+                'Mercado lateralizado; sinal bloqueado' if not quality else
+                'Ativo OTC indisponível' if not available else
+                'Payout abaixo do mínimo' if asset.get('payout',0)<self.min_payout else
+                'Aguardando pausa após a última operação' if cooldown>0 else
+                'Sinal pronto para sua decisão')
+        ready=bool(direction and quality and available and fresh and not self.pending and not self.auto
+                   and cooldown==0 and asset.get('payout',0)>=self.min_payout)
+        return {'direction':direction,'kind':self.last_signal_kind if direction else None,
+                'strength':strength if direction else None,'ready':ready,
+                'reason':reason,'age':round(now-self.last_signal_at,2) if direction else None,
+                'cooldown':round(cooldown,1),'asset':self.symbol,'payout':asset.get('payout',0)}
+
+    def order_signal(self,amount,expiry,symbol,pause_after=20,min_payout=80):
+        """Single explicit user click; read direction from verified current signal.
+
+        Never trust a client-provided direction or stale signal from a
+        screenshot. No background order placement or automatic restart.
+        """
+        with self.lock:
+            expiry=parse_expiry(expiry)
+            if type(pause_after) is not int or pause_after not in PAUSE_CHOICES:
+                raise ValueError('Escolha pausa de 5, 10, 15, 20 ou 30 segundos.')
+            if not isinstance(min_payout,(int,float)) or isinstance(min_payout,bool) or not 0<=min_payout<=100:
+                raise ValueError('Payout mínimo inválido.')
+            if symbol!=self.symbol:
+                raise ValueError('Ativo mudou. Atualize o sinal antes de operar.')
+            self.pause_after=pause_after
+            self.min_payout=float(min_payout)
+            info=self.signal_status()
+            if not info['ready']:
+                raise ValueError(info['reason']+'. Nenhuma ordem enviada.')
+            direction=info['direction']
+            self.order(direction,amount,expiry)
+            # Consume this opportunity. Fresh broker ticks must create a new
+            # qualified signal before another user-initiated order.
+            self.last_signal=None
+            self.last_signal_at=0
+            self.log('Entrada DEMO enviada por clique no sinal %s. Nenhuma operação automática iniciada.'%
+                     ('BUY' if direction=='call' else 'SELL'))
+            return {'direction':direction,'expiry':expiry}
+
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
@@ -492,6 +557,7 @@ class Broker:
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_kind':self.last_signal_kind if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
+                    'signal_offer':self.signal_status(),
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
                                                   (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
