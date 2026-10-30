@@ -141,6 +141,7 @@ class Tests(unittest.TestCase):
   b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
   b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000003000}]})
   self.assertEqual(b.snapshot()['validated_expiries'],[3])
+  b.subscribe(b.symbol)
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
   self.assertEqual(b.auto_expiry,3)
   b.last_order-=11
