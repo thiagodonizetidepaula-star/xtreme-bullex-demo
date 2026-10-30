@@ -291,6 +291,49 @@ class Tests(unittest.TestCase):
   self.assertEqual(b.count,1)
   b.event('updateStream',[[b.symbol,now+1,1.21]])
   self.assertFalse(b.auto)
+ def test_transient_five_second_quote_gap_keeps_auto_armed(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   self.assertTrue(b.auto)
+   # 5s feed gap: flag waiting, do not turn off auto or place a trade.
+   b.received=base;b.price_time=base;b.last_order=base-100
+   clock.return_value=base+5
+   x=b.snapshot()
+   self.assertTrue(x['auto'])
+   self.assertTrue(x['auto_waiting_prices'])
+   self.assertEqual(b.count,0)
+   self.assertFalse(b.fresh_quote())
+   # Once a good quote arrives, the original run is still armed.
+   clock.return_value=base+6
+   b.event('updateStream',[[b.symbol,base+6,1.1]])
+   x=b.snapshot()
+   self.assertTrue(x['auto'])
+   self.assertFalse(x['auto_waiting_prices'])
+   self.assertEqual(b.count,0)
+ def test_prolonged_twenty_second_quote_gap_stops_auto_safely(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   b.received=base;b.price_time=base
+   clock.return_value=base+21
+   x=b.snapshot()
+   self.assertFalse(x['auto'])
+   self.assertIn('20 segundos',x['auto_stop_reason'])
+   self.assertEqual(b.count,0)
+ def test_auto_stops_with_explicit_configured_max_count_reason(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':1,'min_payout':80,'expiry':5})
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   self.assertEqual(b.count,1)
+   clock.return_value=base+1
+   b.event('updateStream',[[b.symbol,base+1,1.22]])
+   self.assertFalse(b.auto)
+   self.assertIn('Limite de 1 operações',b.snapshot()['auto_stop_reason'])
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
