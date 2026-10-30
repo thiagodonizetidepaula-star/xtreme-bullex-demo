@@ -1,5 +1,5 @@
 import json,time,unittest
-from broker import Broker,parse_auth,signal,verified_five_second_duration
+from broker import Broker,parse_auth,signal,verified_five_second_duration,parse_expiry
 class FakeWS:
  def __init__(self):self.sent=[]
  def send(self,v):self.sent.append(v)
@@ -109,7 +109,7 @@ class Tests(unittest.TestCase):
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80})
   b.last_order-=11
   now=int(time.time())
-  b.event('updateStream',[[b.symbol,now-19+i,1.1+i*.01] for i in range(20)])
+  b.event('updateStream',[[b.symbol,now-19+i,1.1] for i in range(19)]+[[b.symbol,now,1.2]])
   orders=[json.loads(msg[2:]) for msg in b.ws.sent if msg.startswith('42["openOrder"')]
   self.assertEqual(len(orders),2) # one prior manual trade + one automated demo trade
   self.assertEqual(orders[-1][1]['isDemo'],1)
@@ -119,6 +119,47 @@ class Tests(unittest.TestCase):
   b.event('updateStream',[[b.symbol,now+1,1.4]])
   orders=[msg for msg in b.ws.sent if msg.startswith('42["openOrder"')]
   self.assertEqual(len(orders),2) # no duplicate while previous auto order remains pending
+ def test_expiry_restrictions(self):
+  for value in (2,11,3.0,'3',None,True,False):
+   with self.assertRaises(ValueError):parse_expiry(value)
+   with self.assertRaises(ValueError):self.broker().order('call',1,value)
+  for value in range(3,11):self.assertEqual(parse_expiry(value),value)
+ def test_manual_expiry_wire_all_3_to_10(self):
+  for value in range(3,11):
+   b=self.broker();b.order('put',1,value)
+   packet=json.loads(b.ws.sent[-1][2:])
+   self.assertEqual(packet[0],'openOrder')
+   self.assertEqual(packet[1]['time'],value)
+   self.assertEqual(packet[1]['isDemo'],1)
+   self.assertEqual(b.pending['expiry'],value)
+ def test_auto_requires_validation_for_selected_expiry(self):
+  b=self.settle(.85,1.2)
+  self.assertEqual(b.snapshot()['validated_expiries'],[5])
+  with self.assertRaisesRegex(ValueError,'3s'):b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
+ def test_manual_three_second_close_unlocks_three_only(self):
+  b=self.broker();b.order('call',1,3);p=b.pending
+  b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000003000}]})
+  self.assertEqual(b.snapshot()['validated_expiries'],[3])
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
+  self.assertEqual(b.auto_expiry,3)
+  b.last_order-=11
+  now=int(time.time())
+  b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+  orders=[json.loads(msg[2:])[1] for msg in b.ws.sent if msg.startswith('42["openOrder"')]
+  self.assertEqual(len(orders),2)
+  self.assertEqual(orders[-1]['time'],3)
+ def test_expiry_mismatch_does_not_validate(self):
+  b=self.broker();b.order('call',1,3);p=b.pending
+  b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000005000}]})
+  self.assertEqual(b.snapshot()['validated_expiries'],[])
+  self.assertIn('diferente',b.snapshot()['validation_message'])
+ def test_signal_requires_recent_crossover(self):
+  self.assertIsNone(signal([(100+i,1.0) for i in range(10)]))
+  self.assertIsNone(signal([(100+2*i,1.0) for i in range(10)]))
+  self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
+  self.assertIsNone(signal([(100+i,1.0) for i in range(9)]+[(109,1.2),(110,1.2)]))
  def test_stale_blocks(self):
   b=self.broker();b.received-=5
   with self.assertRaises(ValueError):b.order('call',1)
@@ -134,7 +175,10 @@ class Tests(unittest.TestCase):
  def test_auto_requires_duration_validation(self):
   with self.assertRaises(ValueError):self.broker().start_auto({})
  def test_signal_uses_seconds(self):
-  self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]));self.assertEqual(signal([(100+i,1+i*.01) for i in range(20)]),'call')
+  self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
+  self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
+  self.assertEqual(signal([(100+i,2.0) for i in range(9)]+[(109,1.8)]),'put')
+  self.assertIsNone(signal([(100+i,1+i*.01) for i in range(20)])) # old trend not a new cross
  def settle(self,profit,close):
   b=self.broker();b.order('call',1);p=b.pending;b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':100,'closeTime':105,'openPrice':1.1});b.event('successcloseOrder',{'deals':[{'id':'o1','profit':profit,'openPrice':1.1,'closePrice':close,'openTime':100,'closeTime':105}]});return b
  def test_net_win(self):
