@@ -241,13 +241,12 @@ class Broker:
                                            'Stop Win atingido.' if pnl>=self.stop_win else 'Stop Loss atingido.')
                     self.log('Automático encerrado: '+self.auto_stop_reason)
                 elif direction and not self.pending:
-                    wait_until=max(self.last_order+AUTO_INTERVAL_SECONDS,self.last_closed_at+self.pause_after)
-                    if time.time()<wait_until:
-                        self.market_quality='Pausa entre operações'
-                    elif self.lateral_filter and not not_lateral(self.ticks,direction):
-                        self.market_quality='Mercado lateralizado / tendência fraca. Aguardando'
-                    else:
-                        self.market_quality='Tendência aceita pelo filtro'
+                    # Same server-validated signal offered to the manual button;
+                    # never act on a stale quote, sideways market or expired
+                    # cooldown. No UI/client-side BUY/SELL direction is trusted.
+                    offer=self.signal_status(allow_auto=True)
+                    self.market_quality=offer['reason']
+                    if offer['ready'] and offer['direction']==direction:
                         try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
                         except ValueError as e:
                             self.auto=False;self.auto_trial=False
@@ -416,7 +415,7 @@ class Broker:
                      'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
             return True
 
-    def signal_status(self):
+    def signal_status(self,allow_auto=False):
         """Current server-side recommendation, never a claimed win probability."""
         now=time.time()
         fresh=bool(self.demo_confirmed and self.connected and self.fresh_quote())
@@ -437,14 +436,14 @@ class Broker:
         reason=('Conta DEMO desconectada' if not self.demo_confirmed or not self.connected else
                 'Aguardando preços atuais' if not fresh else
                 'Ordem anterior pendente' if self.pending else
-                'Modo automático ativo; pare o automático antes de controlar os sinais' if self.auto else
+                'Modo automático ativo; pare-o para executar manualmente' if self.auto and not allow_auto else
                 'Aguardando sinal novo' if not direction else
                 'Mercado lateralizado; sinal bloqueado' if not quality else
                 'Ativo OTC indisponível' if not available else
                 'Payout abaixo do mínimo' if asset.get('payout',0)<self.min_payout else
                 'Aguardando pausa após a última operação' if cooldown>0 else
                 'Sinal pronto para sua decisão')
-        ready=bool(direction and quality and available and fresh and not self.pending and not self.auto
+        ready=bool(direction and quality and available and fresh and not self.pending and (not self.auto or allow_auto)
                    and cooldown==0 and asset.get('payout',0)>=self.min_payout)
         return {'direction':direction,'kind':self.last_signal_kind if direction else None,
                 'strength':strength if direction else None,'ready':ready,
@@ -525,8 +524,9 @@ class Broker:
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
             self.auto_stop_reason='';self.feed_lag_warning=False
-            self.log(('Automático DEMO %ds iniciado. Entrada inicial de valor 1 para validação; depois continuará a cada 15s ou mais se houver sinal válido.'%expiry) if trial else
-                     ('Automático DEMO %ds ativado. Operações sequenciais com intervalo mínimo de 15s, apenas com sinais atuais.'%expiry))
+            self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
+                     'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
+                     ' Expiração: %ds.'%expiry)
     def snapshot(self):
         with self.lock:
             # Short interruptions must not permanently disable auto; NEVER

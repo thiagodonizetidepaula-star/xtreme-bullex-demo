@@ -50,6 +50,48 @@ $('subscribe').onclick=()=>{
  action('subscribe',{symbol});
 };
 $('stop').onclick=()=>action('stop');
+$('tradeMode').onchange=async()=>{
+ if($('tradeMode').value==='manual'&&snapshot.auto){
+  $('autoSignalStatus').textContent='Parando novas entradas antes de ativar o modo manual…';
+  await action('stop');
+ }
+ render();
+};
+$('startSignalAuto').onclick=async()=>{
+ if(busy||snapshot.auto||snapshot.pending?.id)return;
+ const ids=['amount','min_payout','stop_win','stop_loss','limit'];
+ for(const id of ids){if(!$(id).reportValidity())return}
+ const symbol=$('asset').value;
+ if(!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
+ const params={
+  symbol,expiry:Number($('expiry').value),
+  amount:Number($('amount').value),
+  stop_win:Number($('stop_win').value),
+  stop_loss:Number($('stop_loss').value),
+  limit:Number($('limit').value),
+  min_payout:Number($('min_payout').value),
+  pause_after:Number($('pause_after').value),
+  filter_lateral:true
+ };
+ busy=true;$('startSignalAuto').disabled=true;
+ $('autoSignalStatus').textContent='Solicitando ativação do automático DEMO…';
+ try{
+  await api('auto',params);
+  snapshot=await api('status');
+  render();
+  $('autoSignalStatus').textContent=snapshot.auto?
+   'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.':
+   'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
+ }catch(e){
+  $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
+  status(e.message);
+ }finally{busy=false;render()}
+};
+$('stopSignalAuto').onclick=async()=>{
+ if(busy)return;
+ $('autoSignalStatus').textContent='Parando novas entradas…';
+ await action('stop');
+};
 $('confirmNoOpen').onchange=()=>{
  $('resolvePending').disabled=!$('confirmNoOpen').checked||busy||!snapshot.pending?.timed_out;
 };
@@ -134,15 +176,40 @@ function render(){
  $('signalAge').textContent=offer.age!=null?
   'Sinal atualizado há '+Number(offer.age).toFixed(1)+'s. Força representa eficiência do movimento, não probabilidade de WIN.':
   'Aguardando nova oportunidade. Força do movimento não é taxa de acerto.';
- const ready=Boolean(offer.ready)&&!busy&&!s.auto&&!s.pending?.id&&$('asset').value===offer.asset;
+ // A preexisting active automation (or a launch from another screen) must
+ // never appear hidden behind manual mode.
+ if(s.auto&&$('tradeMode').value!=='automatic')$('tradeMode').value='automatic';
+ const selectedAuto=$('tradeMode').value==='automatic';
+ $('manualActions').hidden=selectedAuto;
+ $('autoActions').hidden=!selectedAuto;
+ const ready=Boolean(offer.ready)&&!busy&&!s.auto&&!s.pending?.id&&$('asset').value===offer.asset&&!selectedAuto;
  $('executeSignal').disabled=!ready;
  $('executeSignal').textContent=ready?'OPERAR '+direction+' • '+expiry+'s':'AGUARDANDO SINAL';
+ $('startSignalAuto').disabled=busy||s.auto||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
+ $('stopSignalAuto').disabled=busy||!s.auto;
+ if(s.auto){
+  $('autoSignalStatus').textContent='BOT ATIVO • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
+   ' operações • '+(s.auto_waiting_prices?'aguardando preços atuais':
+      s.pending?.id?'aguardando resultado da corretora':
+      Number(s.next_entry_in)>0?'pausa: '+Number(s.next_entry_in).toFixed(1)+'s':
+      'procurando sinal BUY / SELL válido')+
+   ' • expiração '+s.auto_expiry+'s • filtro lateral ativo.';
+ }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
+  $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
+    (s.auto_stop_reason?' • '+s.auto_stop_reason:'')+
+    '. Para ativar, escolha valor 1 (primeiro teste demo) e toque em INICIAR.';
+ }
+ $('amount').disabled=!!s.auto;
+ $('expiry').disabled=!!s.auto;
+ $('pause_after').disabled=!!s.auto;
+ $('min_payout').disabled=!!s.auto;
+ for(const id of ['stop_win','stop_loss','limit'])$(id).disabled=!!s.auto;
  if(!busy&&!$('offerStatus').textContent.startsWith('ENTRADA NÃO ENVIADA:')&&!$('offerStatus').textContent.startsWith('Ordem DEMO enviada')){
   $('offerStatus').textContent=offer.reason||'Conecte uma conta DEMO para iniciar a análise.';
  }
  if(offer.cooldown>0)$('offerStatus').textContent='Pausa: '+offer.cooldown.toFixed(1)+'s até próxima entrada possível.';
  if(s.pending?.id){$('offerStatus').textContent='Ordem pendente de resultado oficial; outra entrada bloqueada.'}
- if(s.auto){$('offerStatus').textContent='Automático anterior ativo. Pare-o no painel de segurança antes do modo de confirmação manual.'}
+ if(s.auto){$('offerStatus').textContent='AUTOMÁTICO ATIVO: o bot executa os sinais BUY/SELL conforme filtros e limites configurados.'}
  $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
  $('pendingRecovery').hidden=!(s.pending?.id&&s.pending?.timed_out);
  if($('pendingRecovery').hidden)$('confirmNoOpen').checked=false;

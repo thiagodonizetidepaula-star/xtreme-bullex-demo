@@ -50,3 +50,14 @@ header{background:#081b39;border-bottom:1px solid #214e94}
 .stats strong{font-size:26px}
 @media(min-width:900px){.signal-console{max-width:800px;margin:24px auto}.offer-panel{padding:25px}.stats{grid-template-columns:repeat(4,1fr)}}
 @media(max-width:420px){.signal-direction{font-size:21px}.offer-pair{font-size:19px}.signal-console{padding:12px}.offer-metrics strong{font-size:21px}}
+
+/* V9: intentional mode switch and visible automatic status, while retaining
+   the same blue signal card and the single human-operated order button. */
+.trade-mode{margin:15px 0 10px;padding:12px;background:#112d50;border:1px solid #386daf;border-radius:14px}
+.trade-mode label{display:block;font-size:11px;letter-spacing:1.5px;color:#b4d6ff;font-weight:800;margin-bottom:7px}
+.trade-mode select{width:100%;background:#20497a;color:white;font-size:15px;font-weight:800;border-color:#4b86cf}
+#autoActions{padding:8px 0 3px}
+#autoActions[hidden],#manualActions[hidden]{display:none!important}
+#startSignalAuto{background:linear-gradient(90deg,#196bcb,#20a0f6);border-color:#79baff}
+#stopSignalAuto{width:100%;min-height:54px;border:1px solid #a55f67;color:#ffafb6;background:#482632;border-radius:13px;margin-top:8px}
+#autoSignalStatus{margin:12px 4px 8px;padding:12px;background:#102743;border-left:3px solid #52a6ff;border-radius:8px;line-height:1.6}
