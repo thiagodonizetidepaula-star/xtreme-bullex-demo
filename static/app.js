@@ -55,6 +55,24 @@ $('connect').onclick=async()=>{const ssid=$('ssid').value.trim();$('ssid').value
 // One tap places the DEMO order; there is no browser/native confirmation dialog.
 // The server still verifies demo authentication, fresh quotes, no pending order,
 // available OTC symbol, payout, amount and a 10-second minimum interval.
+$('confirmNoOpen').onchange=()=>{
+ $('resolvePending').disabled= !$('confirmNoOpen').checked || busy || !snapshot.pending?.timed_out;
+};
+$('resolvePending').onclick=async()=>{
+ if(busy || !$('confirmNoOpen').checked || !snapshot.pending?.id || !snapshot.pending.timed_out)return;
+ const pendingId=snapshot.pending.id;
+ busy=true;$('resolvePending').disabled=true;
+ $('pendingRecoveryResult').textContent='Conferindo a pendência no servidor…';
+ try{
+  await api('resolve-pending',{pending_id:pendingId,confirm_no_open_orders:true});
+  $('confirmNoOpen').checked=false;
+  $('pendingRecoveryResult').textContent='Pendência arquivada como resultado desconhecido. Nenhuma nova ordem enviada. Reinicie o automático apenas se quiser.';
+  await poll();
+ }catch(e){
+  $('pendingRecoveryResult').textContent='Não foi possível liberar: '+e.message;
+  status(e.message);
+ }finally{busy=false; $('resolvePending').disabled=!$('confirmNoOpen').checked||!snapshot.pending?.timed_out}
+};
 for(const d of ['call','put'])$(d).onclick=()=>{
  if(busy || !snapshot.demo_confirmed || snapshot.pending?.id || snapshot.age==null || snapshot.age>2 || snapshot.quote_verified===false)return;
  if(!$('amount').reportValidity())return;
@@ -78,7 +96,10 @@ $('call').disabled=$('put').disabled=!s.demo_confirmed||!!s.pending?.id||s.age==
 'Automático DEMO em validação: valor 1 por entrada. Se o fechamento oficial não trouxer horários, continuará apenas com valor 1; a duração permanecerá NÃO verificada.':
 'Não precisa operar manualmente. Toque INICIAR BOT AUTOMÁTICO DEMO com valor 1. A primeira entrada automática valida a expiração escolhida, sem liberar operações reais.');
 const desired=$('asset').value,assets=(s.assets||[]).filter(x=>x.available).sort((a,b)=>b.payout-a.payout),key=JSON.stringify(assets);if($('asset').dataset.key!==key){$('asset').dataset.key=key;$('asset').replaceChildren();if(!assets.length){const o=document.createElement('option');o.textContent='Aguardando catálogo da corretora';o.value='';$('asset').append(o)}for(const a of assets){let o=document.createElement('option');o.value=a.symbol;o.textContent=a.name+' · '+a.payout+'%';$('asset').append(o)}if(assets.some(x=>x.symbol===desired))$('asset').value=desired;else if(s.symbol)$('asset').value=s.symbol}
-$('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';$('progress').max=s.pending?.expiry||Number($('expiry').value);$('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;$('events').replaceChildren();for(const e of (s.events||[]).slice().reverse()){let li=document.createElement('li');li.textContent=new Date(e.time*1000).toLocaleTimeString('pt-BR')+' · '+e.text;$('events').append(li)}renderHistory();draw()}
+$('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
+$('pendingRecovery').hidden=!(s.pending?.id && s.pending?.timed_out);
+if($('pendingRecovery').hidden){$('confirmNoOpen').checked=false;}
+$('resolvePending').disabled=busy||!$('confirmNoOpen').checked||!s.pending?.timed_out;$('progress').max=s.pending?.expiry||Number($('expiry').value);$('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;$('events').replaceChildren();for(const e of (s.events||[]).slice().reverse()){let li=document.createElement('li');li.textContent=new Date(e.time*1000).toLocaleTimeString('pt-BR')+' · '+e.text;$('events').append(li)}renderHistory();draw()}
 function draw(){const c=$('chart'),ctx=c.getContext('2d'),w=c.clientWidth,h=c.clientHeight;c.width=w*devicePixelRatio;c.height=h*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);ctx.strokeStyle='#253039';for(let j=1;j<5;j++){ctx.beginPath();ctx.moveTo(0,j*h/5);ctx.lineTo(w,j*h/5);ctx.stroke()}const ticks=snapshot.ticks||[];if(!ticks.length){ctx.fillStyle='#8f9ea8';ctx.font='13px Arial';ctx.fillText('O gráfico aparecerá ao receber preços reais da conta demo.',12,h/2);return}let map=new Map();for(const [t,p]of ticks){const k=Math.floor(t/5),a=map.get(k);if(a){a.h=Math.max(a.h,p);a.l=Math.min(a.l,p);a.c=p}else map.set(k,{o:p,h:p,l:p,c:p})}const bars=[...map.values()].slice(-50),lo=Math.min(...bars.map(x=>x.l)),hi=Math.max(...bars.map(x=>x.h)),range=hi-lo||.0001,y=p=>h-15-(p-lo)/range*(h-30),step=(w-60)/Math.max(15,bars.length);bars.forEach((b,i)=>{const x=10+i*step;ctx.fillStyle=ctx.strokeStyle=b.c>=b.o?'#c1ee74':'#f48e9b';ctx.beginPath();ctx.moveTo(x,y(b.h));ctx.lineTo(x,y(b.l));ctx.stroke();ctx.fillRect(x-step*.3,Math.min(y(b.o),y(b.c)),Math.max(2,step*.6),Math.max(2,Math.abs(y(b.o)-y(b.c))))});$('price').textContent=ticks.at(-1)[1].toFixed(6)}
 async function poll(){if(!session||polling)return;polling=true;try{snapshot=await api('status');render()}catch(e){status(e.message)}finally{polling=false}}
 $('export').onclick=()=>{const rows=renderHistory(),escape=v=>'"'+String(v??'').replaceAll('"','""')+'"';const csv=['id,asset,direction,amount,status,net',...rows.map(r=>[r.id,r.asset,r.direction,r.amount,r.status,r.net??r.result?.net].map(escape).join(','))].join('\n');const u=URL.createObjectURL(new Blob([csv],{type:'text/csv'})),a=document.createElement('a');a.href=u;a.download='pocket-tiger-demo.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
