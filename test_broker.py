@@ -479,6 +479,77 @@ class Tests(unittest.TestCase):
    clock.return_value=base+26
    b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(17,27)])
    self.assertEqual(b.count,2)
+ def test_signal_offer_no_order_without_user_click(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker();b.subscribe(b.symbol)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   offer=b.snapshot()['signal_offer']
+   self.assertTrue(offer['ready'])
+   self.assertEqual(offer['direction'],'call')
+   self.assertEqual(offer['strength'],100)
+   self.assertFalse(b.auto)
+   self.assertFalse(b.pending)
+   self.assertFalse(any('openOrder' in msg for msg in b.ws.sent))
+ def test_manual_signal_click_uses_broker_direction_and_demo_once(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker();b.subscribe(b.symbol)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   b.order_signal(1,5,b.symbol,20,80)
+   payload=[json.loads(z[2:])[1] for z in b.ws.sent if z.startswith('42["openOrder"')]
+   self.assertEqual(len(payload),1)
+   self.assertEqual(payload[0]['action'],'call')
+   self.assertEqual(payload[0]['isDemo'],1)
+   self.assertEqual(payload[0]['time'],5)
+   self.assertFalse(b.auto)
+   self.assertIsNotNone(b.pending)
+   with self.assertRaisesRegex(ValueError,'pendente'):
+    b.order_signal(1,5,b.symbol,20,80)
+   self.assertEqual(len([z for z in b.ws.sent if 'openOrder' in z]),1)
+ def test_manual_signal_blocks_old_signal_and_wrong_symbol(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker();b.subscribe(b.symbol)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   with self.assertRaisesRegex(ValueError,'Ativo mudou'):
+    b.order_signal(1,5,'GBPUSD_otc',20,80)
+   clock.return_value=base+3
+   with self.assertRaisesRegex(ValueError,'Aguardando preços atuais|Aguardando sinal novo'):
+    b.order_signal(1,5,b.symbol,20,80)
+   self.assertEqual(len([z for z in b.ws.sent if 'openOrder' in z]),0)
+ def test_manual_signal_blocks_lateral_and_low_payout(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker();b.subscribe(b.symbol)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   with self.assertRaisesRegex(ValueError,'Payout abaixo'):
+    b.order_signal(1,5,b.symbol,20,90)
+   self.assertEqual(b.count,0)
+   b.min_payout=80
+   b.ticks.clear()
+   for i in range(10):b.ticks.append((base-9+i,1.01 if i%2 else 1.0))
+   b.last_signal='call';b.last_signal_at=base
+   self.assertFalse(b.snapshot()['signal_offer']['ready'])
+   with self.assertRaisesRegex(ValueError,'lateralizado'):
+    b.order_signal(1,5,b.symbol,20,80)
+   self.assertEqual(b.count,0)
+ def test_manual_signal_uses_chosen_pause_after_close(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker();b.subscribe(b.symbol)
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   b.order_signal(1,5,b.symbol,30,80)
+   self.assertEqual(b.pause_after,30)
+   p=b.pending
+   b.event('successopenOrder',{'requestId':p['requestId'],'id':'order-1','openPrice':1.1})
+   clock.return_value=base+5
+   b.event('successcloseOrder',{'deals':[{'id':'order-1','profit':.85,'openPrice':1.1,'closePrice':1.2}]})
+   self.assertIsNone(b.pending)
+   clock.return_value=base+20
+   b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(1,21)])
+   self.assertGreater(b.snapshot()['signal_offer']['cooldown'],14)
+   self.assertFalse(b.snapshot()['signal_offer']['ready'])
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
