@@ -38,6 +38,29 @@ def signal(ticks):
     if previous>=-epsilon and current<-epsilon and v[-1]<v[-2]:return 'put'
     return None
 
+def continuation_signal(ticks):
+    """Recheck confirmed short-term momentum for recurring DEMO opportunities.
+
+    Distinct recent one-second bars, positive MA separation and two successive
+    changes in the same direction are required. Never treat a flat or broken
+    stream as a continuation signal. Experimental; not a profit prediction.
+    """
+    buckets={int(t):p for t,p in ticks if isinstance(t,(int,float))
+             and isinstance(p,(int,float)) and math.isfinite(t)
+             and math.isfinite(p) and p>0}
+    a=sorted(buckets.items())[-10:]
+    if len(a)<10 or a[-1][0]-a[0][0]>11:return None
+    if max(a[i+1][0]-a[i][0] for i in range(9))>2:return None
+    v=[p for _,p in a]
+    fast=sum(v[-3:])/3
+    slow=sum(v[-8:])/8
+    separation=max(abs(v[-1])*1e-7,(max(v)-min(v))*0.05)
+    if fast-slow>separation and v[-1]>v[-2]>v[-3]:return 'call'
+    if slow-fast>separation and v[-1]<v[-2]<v[-3]:return 'put'
+    return None
+
+AUTO_INTERVAL_SECONDS=15
+
 def parse_expiry(value):
     if type(value) is not int or not 3<=value<=10:
         raise ValueError('Selecione uma expiração inteira de 3 a 10 segundos.')
@@ -65,7 +88,7 @@ class Broker:
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
         self.auto=False; self.auto_trial=False; self.auto_started_at=0; self.validated=False; self.validated_expiries=set(); self.auto_expiry=5
         self.validation_message='Valide a expiração desejada com uma operação manual DEMO concluída.'
-        self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
+        self.last_signal=None;self.last_signal_kind=None;self.last_signal_at=0;self.last_signal_bucket=None
         self.last_order=0; self.closed=False; self.binary=None
         self.last_seen=time.time(); self.limit=10; self.stop_win=20.; self.stop_loss=20.; self.amount=1.; self.min_payout=80.; self.baseline=0; self.count=0
         self.keepalive_stop=threading.Event()
@@ -164,24 +187,28 @@ class Broker:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
                     if math.isfinite(t) and math.isfinite(p) and p>0 and t>self.price_time:
                         self.ticks.append((t,p));self.received=time.time();self.price_time=t;self.quote_samples.append((t,self.received))
-            # Notify only once per distinct one-second candle, and only for a
-            # new crossover. This prevents a 20-second-old trend being shown
-            # as a brand-new signal.
+            # Reevaluate the signal on each new second, not just the first
+            # crossover. This permits subsequent entries after the cooldown,
+            # but only when the source feed shows current trend evidence.
             bucket=int(self.price_time) if self.price_time else None
             direction=None
             if bucket is not None and bucket!=self.last_signal_bucket and self.fresh_quote():
                 self.last_signal_bucket=bucket
-                direction=signal(self.ticks)
+                crossed=signal(self.ticks)
+                direction=crossed or continuation_signal(self.ticks)
                 if direction:
-                    self.last_signal=direction;self.last_signal_at=time.time()
-            if self.auto and not self.pending and time.time()-self.last_order>10:
+                    self.last_signal=direction
+                    self.last_signal_kind='cross' if crossed else 'trend'
+                    self.last_signal_at=time.time()
+            if self.auto:
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
-                    self.auto=False;self.log('Automático encerrado: limite de operações ou stop atingido.')
-                else:
-                    if direction:
-                        try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
-                        except ValueError as e:self.auto=False;self.log(str(e))
+                    self.auto=False;self.auto_trial=False
+                    self.log('Automático encerrado: limite de operações ou stop atingido.')
+                elif (direction and not self.pending
+                      and time.time()-self.last_order>=AUTO_INTERVAL_SECONDS):
+                    try:self.order(direction,1.0 if self.auto_trial else self.amount,self.auto_expiry)
+                    except ValueError as e:self.auto=False;self.auto_trial=False;self.log(str(e))
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
             self.pending['broker_order_id']=str(d.get('id',''));self.pending['status']='ABERTA';self.pending['opened']=d
@@ -331,8 +358,8 @@ class Broker:
             self.auto_expiry=expiry;self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
-            self.log(('Automático DEMO %ds iniciado: primeiro sinal fará teste de valor 1; somente após fechamento oficial seguirá operando.'%expiry) if trial else
-                     ('Automático DEMO %ds ativado. Aguardando um novo cruzamento de 3s e 8s.'%expiry))
+            self.log(('Automático DEMO %ds iniciado. Entrada inicial de valor 1 para validação; depois continuará a cada 15s ou mais se houver sinal válido.'%expiry) if trial else
+                     ('Automático DEMO %ds ativado. Operações sequenciais com intervalo mínimo de 15s, apenas com sinais atuais.'%expiry))
     def snapshot(self):
         with self.lock:
             if self.auto and (self.received and time.time()-self.received>3 or not self.received and time.time()-self.auto_started_at>15):self.auto=False;self.auto_trial=False;self.log('Leitura ausente ou atrasada. Automático pausado.')
@@ -341,7 +368,10 @@ class Broker:
             return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,
                     'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
-                    'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+                    'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
+                    'signal_kind':self.last_signal_kind if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
+                    'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
+                    'next_entry_in':round(max(0,AUTO_INTERVAL_SECONDS-(time.time()-self.last_order)),1) if self.last_order else 0,'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
         self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()

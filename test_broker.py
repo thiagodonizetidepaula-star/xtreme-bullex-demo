@@ -1,4 +1,5 @@
 import json,time,unittest
+from unittest.mock import patch
 from broker import Broker,parse_auth,signal,verified_five_second_duration,parse_expiry
 class FakeWS:
  def __init__(self):self.sent=[]
@@ -107,7 +108,7 @@ class Tests(unittest.TestCase):
   self.assertTrue(b.validated)
   b.subscribe(b.symbol)
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80})
-  b.last_order-=11
+  b.last_order-=16
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-19+i,1.1] for i in range(19)]+[[b.symbol,now,1.2]])
   orders=[json.loads(msg[2:]) for msg in b.ws.sent if msg.startswith('42["openOrder"')]
@@ -147,7 +148,7 @@ class Tests(unittest.TestCase):
   b.subscribe(b.symbol)
   b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
   self.assertEqual(b.auto_expiry,3)
-  b.last_order-=11
+  b.last_order-=16
   now=int(time.time())
   b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
   orders=[json.loads(msg[2:])[1] for msg in b.ws.sent if msg.startswith('42["openOrder"')]
@@ -184,7 +185,7 @@ class Tests(unittest.TestCase):
   self.assertTrue(b.auto)
   self.assertTrue(b.auto_trial)
   self.assertFalse(b.validated)
-  self.assertIn('primeiro sinal',b.message)
+  self.assertIn('Entrada inicial',b.message)
   self.assertEqual(b.count,0)
  def test_unvalidated_demo_expiry_requires_minimum_stake(self):
   b=self.broker()
@@ -230,6 +231,66 @@ class Tests(unittest.TestCase):
   self.assertFalse(b.auto)
   self.assertFalse(b.auto_trial)
   self.assertNotIn(3,b.validated_expiries)
+ def test_continuous_auto_two_entries_15_seconds_apart(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0
+   clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':3})
+   b.event('updateStream',[[b.symbol,base-9+i,1.1] for i in range(9)]+[[b.symbol,base,1.2]])
+   packets=lambda:[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+   self.assertEqual(len(packets()),1)
+   self.assertTrue(b.auto)
+   self.assertEqual(b.snapshot()['next_entry_in'],15.0)
+   p=b.pending
+   b.event('successopenOrder',{'id':'first','requestId':p['requestId'],'openTime':base,'openPrice':1.1})
+   b.event('successcloseOrder',{'deals':[{'id':'first','profit':.85,'openPrice':1.1,'closePrice':1.2,'openTime':base,'closeTime':base+3}]})
+   self.assertTrue(b.auto)
+   self.assertFalse(b.auto_trial)
+   self.assertIsNone(b.pending)
+   clock.return_value=base+14.8
+   b.event('updateStream',[[b.symbol,base+i,1.2+i*.01] for i in range(1,15)])
+   self.assertEqual(len(packets()),1)
+   self.assertTrue(b.auto)
+   self.assertGreater(b.snapshot()['next_entry_in'],0)
+   clock.return_value=base+15.2
+   b.event('updateStream',[[b.symbol,base+15,1.35]])
+   self.assertEqual(len(packets()),2)
+   self.assertEqual(b.count,2)
+   self.assertTrue(b.auto)
+   self.assertEqual(packets()[1]['time'],3)
+   self.assertEqual(packets()[1]['isDemo'],1)
+   self.assertIsNotNone(b.pending)
+   clock.return_value=base+16
+   b.event('updateStream',[[b.symbol,base+16,1.36]])
+   self.assertEqual(len(packets()),2)
+ def test_trend_signal_continues_without_new_crossover(self):
+  from broker import continuation_signal
+  rising=[(100+i,1.1+i*.01) for i in range(10)]
+  self.assertIsNone(signal(rising))
+  self.assertEqual(continuation_signal(rising),'call')
+  falling=[(100+i,1.5-i*.01) for i in range(10)]
+  self.assertEqual(continuation_signal(falling),'put')
+  self.assertIsNone(continuation_signal([(100+i,1.0) for i in range(10)]))
+  self.assertIsNone(continuation_signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]))
+ def test_auto_does_not_force_entry_every_15s_without_signal(self):
+  with patch('broker.time.time') as clock:
+   base=1800000000.0;clock.return_value=base
+   b=self.broker();b.symbol=''
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':10,'min_payout':80,'expiry':5})
+   clock.return_value=base+16
+   b.event('updateStream',[[b.symbol,base+7+i,1.1] for i in range(10)])
+   self.assertEqual(b.count,0)
+   self.assertTrue(b.auto)
+   self.assertEqual(len([x for x in b.ws.sent if x.startswith('42["openOrder"')]),0)
+ def test_auto_stops_at_configured_entry_limit(self):
+  b=self.broker();b.symbol=''
+  b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':1,'min_payout':80,'expiry':3})
+  now=int(time.time())
+  b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+  self.assertEqual(b.count,1)
+  b.event('updateStream',[[b.symbol,now+1,1.21]])
+  self.assertFalse(b.auto)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
