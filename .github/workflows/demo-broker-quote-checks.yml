@@ -7,6 +7,8 @@ on:
       - 'm1_strategy.py'
       - 'market_radar.py'
       - 'test_market_radar.py'
+      - 'test_server.py'
+      - 'server.py'
       - 'test_broker.py'
       - 'static/app.js'
       - 'static/index.html'
@@ -25,7 +27,7 @@ jobs:
       - name: Install test dependencies
         run: pip install websocket-client==1.8.0
       - name: Run unit tests
-        run: python -m unittest -v test_broker test_market_radar
+        run: python -m unittest -v test_broker test_market_radar test_server
       - name: Check JavaScript syntax
         run: node --check static/app.js
       - name: Verify V11 single-asset M5 analysis and M1 60s DEMO order
