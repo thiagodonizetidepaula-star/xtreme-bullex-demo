@@ -132,10 +132,13 @@ class Tests(unittest.TestCase):
    self.assertEqual(packet[1]['time'],value)
    self.assertEqual(packet[1]['isDemo'],1)
    self.assertEqual(b.pending['expiry'],value)
- def test_auto_requires_validation_for_selected_expiry(self):
+ def test_auto_unvalidated_other_expiry_is_trial(self):
   b=self.settle(.85,1.2)
   self.assertEqual(b.snapshot()['validated_expiries'],[5])
-  with self.assertRaisesRegex(ValueError,'3s'):b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':1,'min_payout':80,'expiry':3})
+  self.assertTrue(b.auto)
+  self.assertTrue(b.auto_trial)
+  self.assertEqual(b.auto_expiry,3)
  def test_manual_three_second_close_unlocks_three_only(self):
   b=self.broker();b.order('call',1,3);p=b.pending
   b.event('successopenOrder',{'id':'o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
@@ -173,8 +176,60 @@ class Tests(unittest.TestCase):
   b=Broker({});b.ws=FakeWS();b.event('updateAssets',[]);self.assertFalse(b.connected)
  def test_binary_handshake_balance(self):
   b=Broker({'isDemo':1});b.ws=FakeWS();b.on_message(b.ws,'0{"sid":"fixture"}');self.assertEqual(b.ws.sent[-1],'40');b.on_message(b.ws,'451-["successauth",{"_placeholder":true,"num":0}]');b.on_message(b.ws,b'{}');self.assertTrue(b.connected);self.assertFalse(b.demo_confirmed);b.event('successupdateBalance',{'balance':100,'isDemo':1});self.assertTrue(b.demo_confirmed)
- def test_auto_requires_duration_validation(self):
+ def test_auto_requires_valid_settings(self):
   with self.assertRaises(ValueError):self.broker().start_auto({})
+ def test_auto_demo_starts_without_manual_trade(self):
+  b=self.broker()
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':5,'symbol':'EURUSD_otc'})
+  self.assertTrue(b.auto)
+  self.assertTrue(b.auto_trial)
+  self.assertFalse(b.validated)
+  self.assertIn('primeiro sinal',b.message)
+  self.assertEqual(b.count,0)
+ def test_unvalidated_demo_expiry_requires_minimum_stake(self):
+  b=self.broker()
+  with self.assertRaisesRegex(ValueError,'valor 1'):
+   b.start_auto({'amount':2,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':5})
+  self.assertFalse(b.auto)
+ def test_auto_subscribes_to_selected_otc_and_waits_for_prices(self):
+  b=self.broker();b.symbol='';b.ticks.clear();b.received=0;b.price_time=0
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':5,'symbol':'EURUSD_otc'})
+  self.assertEqual(b.symbol,'EURUSD_otc')
+  self.assertTrue(b.auto)
+  self.assertEqual(b.snapshot()['auto_trial'],True)
+  self.assertTrue(any('changeSymbol' in x for x in b.ws.sent))
+  self.assertFalse(any('openOrder' in x for x in b.ws.sent))
+ def test_auto_first_demo_order_is_minimum_and_no_duplicates(self):
+  b=self.broker()
+  b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':3})
+  now=int(time.time())
+  b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+  orders=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+  self.assertEqual(len(orders),1)
+  self.assertEqual(orders[-1]['isDemo'],1)
+  self.assertEqual(orders[-1]['amount'],1)
+  self.assertEqual(orders[-1]['time'],3)
+  self.assertIsNotNone(b.pending)
+  self.assertTrue(b.auto_trial)
+  b.event('updateStream',[[b.symbol,now+1,1.3]])
+  self.assertEqual(len([x for x in b.ws.sent if x.startswith('42["openOrder"')]),1)
+  p=b.pending
+  b.event('successopenOrder',{'id':'demo-o1','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'demo-o1','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000003000}]})
+  self.assertTrue(b.auto)
+  self.assertFalse(b.auto_trial)
+  self.assertIn(3,b.validated_expiries)
+ def test_first_automated_demo_order_mismatch_stops_auto(self):
+  b=self.broker();b.start_auto({'amount':1,'stop_win':2,'stop_loss':2,'limit':2,'min_payout':80,'expiry':3})
+  now=int(time.time())
+  b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+  p=b.pending
+  self.assertIsNotNone(p)
+  b.event('successopenOrder',{'id':'demo-o2','requestId':p['requestId'],'openTime':1700000000000,'openPrice':1.1})
+  b.event('successcloseOrder',{'deals':[{'id':'demo-o2','profit':.85,'openPrice':1.1,'closePrice':1.2,'closeTime':1700000007000}]})
+  self.assertFalse(b.auto)
+  self.assertFalse(b.auto_trial)
+  self.assertNotIn(3,b.validated_expiries)
  def test_signal_uses_seconds(self):
   self.assertIsNone(signal([(100+i*.001,1+i*.01) for i in range(100)]))
   self.assertEqual(signal([(100+i,1.0) for i in range(9)]+[(109,1.2)]),'call')
