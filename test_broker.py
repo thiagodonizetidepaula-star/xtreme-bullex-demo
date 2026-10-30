@@ -710,6 +710,16 @@ class Tests(unittest.TestCase):
    actual,strength,reason=engine.evaluate()
    self.assertEqual(actual,direction,(actual,strength,reason))
    self.assertIn('M1 fechou rompimento',reason)
+ def test_v12_accepts_real_3_second_quotes_without_synthetic_candles(self):
+  e=MinuteSignals()
+  start=1800000000
+  for m in range(36):
+   for sec in range(0,60,3):
+    e.ingest(start+60*m+sec,1.1+m*.0001+sec*.000001)
+  self.assertEqual(e.rejected_bars,0)
+  self.assertEqual(len(e.bars),35)
+  self.assertEqual(e.completed_bars,35)
+  self.assertGreaterEqual(len(five_minute_closes(list(e.bars))),6)
  def test_v12_snap_reports_candle_rejections_and_live_samples(self):
   b=self.broker()
   snap=b.snapshot()
