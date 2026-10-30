@@ -6,7 +6,7 @@ class FakeWS:
  def close(self):pass
 class Tests(unittest.TestCase):
  def broker(self):
-  b=Broker({'isDemo':1});b.ws=FakeWS();b.connected=True;b.demo_confirmed=True;b.balance=100;b.symbol='EURUSD_otc';b.assets[b.symbol]={'available':True,'payout':85};b.ticks.append((time.time(),1.1));b.received=b.price_time=time.time();return b
+  b=Broker({'isDemo':1});b.ws=FakeWS();b.connected=True;b.demo_confirmed=True;b.balance=100;b.symbol='EURUSD_otc';b.assets[b.symbol]={'symbol':b.symbol,'available':True,'payout':85};b.ticks.append((time.time(),1.1));b.received=b.price_time=time.time();return b
  def test_real_session_blocked(self):
   for v in (0,'1',None):
    with self.assertRaises(ValueError):parse_auth('42'+json.dumps(['auth',{'session':'abcdefghijkl','uid':12,'isDemo':v}]))
