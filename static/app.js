@@ -29,7 +29,28 @@ $('resetForm').hidden=true;$('loginForm').hidden=false;
 $('loginStatus').textContent='Senha alterada! Entre usando sua nova senha.'}
 catch(err){$('loginStatus').textContent=err.message}};
 $('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;saved=[];snapshot={};$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
-async function action(name,body={}){if(busy)return;busy=true;try{await api(name,body);await poll()}catch(e){status(e.message)}finally{busy=false}}
+async function action(name,body={}){
+ if(busy){
+  if(name==='auto')$('autoAction').textContent='Não iniciado: outra solicitação está em andamento. Confira o estado antes de tentar novamente.';
+  return;
+ }
+ busy=true;
+ if(name==='auto')$('autoAction').textContent='Enviando solicitação de início ao servidor DEMO…';
+ try{
+  await api(name,body);
+  // Do not infer a successful start from the WebView button.click() call.
+  // Fetch the actual broker snapshot before reporting the outcome.
+  if(name==='auto'){
+   snapshot=await api('status');render();
+   $('autoAction').textContent=snapshot.auto?
+    'Confirmado pelo servidor: BOT AUTOMÁTICO DEMO ATIVO. Aguarda sinal atual; próximas entradas após pelo menos 15 segundos.':
+    'O servidor aceitou a solicitação, mas o bot está parado: '+(snapshot.auto_stop_reason||snapshot.message||'Confira Atividade.');
+  }else await poll();
+ }catch(e){
+  status(e.message);
+  if(name==='auto')$('autoAction').textContent='NÃO INICIADO: '+e.message;
+ }finally{busy=false}
+}
 $('connect').onclick=async()=>{const ssid=$('ssid').value.trim();$('ssid').value='';await action('connect',{ssid})};$('disconnect').onclick=()=>action('disconnect');$('subscribe').onclick=()=>action('subscribe',{symbol:$('asset').value});$('stop').onclick=()=>action('stop');
 // One tap places the DEMO order; there is no browser/native confirmation dialog.
 // The server still verifies demo authentication, fresh quotes, no pending order,
@@ -48,7 +69,7 @@ $('expiryNow').textContent=s.auto&&s.auto_expiry?s.auto_expiry:$('expiry').value
 const expiryValidated=(s.validated_expiries||[]).includes(selectedExpiry);
 $('auto').disabled=!s.demo_confirmed||!!s.pending?.id||s.auto;
 $('auto').textContent=s.auto?(s.auto_trial?'Automático em execução · validando '+s.auto_expiry+'s':'Automático em execução · '+s.auto_expiry+'s'):'INICIAR BOT AUTOMÁTICO DEMO · '+selectedExpiry+'s';
-$('autoStatus').textContent=s.auto?('BOT ATIVO • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações • intervalo mínimo de 15s • '+(s.pending?.id?'aguardando resultado oficial':Number(s.next_entry_in)>0?'próxima entrada possível em '+Number(s.next_entry_in).toFixed(1)+'s':'procurando sinal válido para a próxima entrada')):'Automático parado. Configure um limite maior que 1 para várias operações seguidas.';
+$('autoStatus').textContent=s.auto?('BOT ATIVO • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações • '+(s.auto_waiting_prices?'aguardando cotação atualizada, sem novas entradas':s.pending?.id?'aguardando resultado oficial':Number(s.next_entry_in)>0?'próxima entrada possível em '+Number(s.next_entry_in).toFixed(1)+'s':'procurando sinal válido')+' • intervalo mínimo de 15s'):'BOT PARADO • '+(s.auto_stop_reason||'Ainda não iniciado.')+' • '+(s.auto_count||0)+' de '+(s.auto_limit||10)+' operações.';
 $('expiry').disabled=!!s.auto;
 $('call').disabled=$('put').disabled=!s.demo_confirmed||!!s.pending?.id||s.age==null||s.age>2;$('connect').disabled=s.connecting;$('subscribe').disabled=!s.connected;$('validation').textContent=expiryValidated?
 'Expiração de '+selectedExpiry+'s confirmada pela corretora nesta sessão. Pode iniciar o automático sem etapa manual.':
