@@ -168,7 +168,7 @@ $('expiryProfile').onchange=()=>{
 $('fastStrategy').onchange=()=>render();
 function selectedQuickStrategy(){
  const n=Number($('expiry').value);
- return ((n===3||n===5)&&$('fastStrategy').value==='exhaustion')?'exhaustion':'trend';
+ return (['zigzag','zigzag_fast'].includes($('expiryProfile').value))?'trend':((n===3||n===5)&&$('fastStrategy').value==='exhaustion')?'exhaustion':'trend';
 }
 $('expiry').onchange=()=>{
  rememberedExpiry[$('expiryProfile').value]=Number($('expiry').value);
@@ -198,7 +198,7 @@ function render(){
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
   $('fastStrategy').value=s.fast_strategy;
  }
- $('fastStrategyWrap').hidden=![3,5].includes(Number($('expiry').value));
+ $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
  status(s.message||'Aguardando conexão DEMO.');
  $('connection').textContent=s.demo_confirmed?'DEMO CONFIRMADA':s.connected?'VALIDANDO DEMO':s.connecting?'CONECTANDO':'DESCONECTADO';
  $('balance').textContent=money(s.balance);
