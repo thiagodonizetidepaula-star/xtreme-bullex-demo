@@ -62,8 +62,13 @@ def continuation_signal(ticks):
 
 AUTO_INTERVAL_SECONDS=15
 PAUSE_CHOICES=(5,10,15,20,30)
-LONG_EXPIRIES=(30,60,120,180,300)
-ALL_EXPIRIES=tuple(range(3,11))+LONG_EXPIRIES
+# These are application-tested integer candidates, NOT a promise the upstream
+# broker accepts every requested duration for a given instrument/account.
+# 1h/4h are intentionally disabled: this in-memory DEMO runner cannot safely
+# reconcile a trade lasting beyond its bounded 60-minute session.
+FAST_EXPIRIES=tuple(range(3,11))+(15,20,30,45)
+LONG_EXPIRIES=(60,90,120,180,300,600,900,1800)
+ALL_EXPIRIES=FAST_EXPIRIES+LONG_EXPIRIES
 MANUAL_SIGNAL_TTL=2.5
 M1_FEED_STOP_SECONDS=180
 AUTO_MAX_SESSION_SECONDS=3600
@@ -93,7 +98,7 @@ def not_lateral(ticks,direction):
 
 def parse_expiry(value):
     if type(value) is not int or value not in ALL_EXPIRIES:
-        raise ValueError('Selecione 3–10, 30, 60, 120, 180 ou 300 segundos.')
+        raise ValueError('Expiração indisponível neste motor. Escolha uma das durações demonstrativas até 30 minutos.')
     return value
 
 def verified_five_second_duration(start,end):
@@ -344,7 +349,11 @@ class Broker:
             self.log('Autenticação DEMO recusada pela corretora. Gere uma nova sessão no navegador interno.')
             self.close()
         elif 'error' in name.lower():
-            self.auto=False;self.log('A corretora recusou a solicitação. Confira a sessão, ativo, valor e duração. Verifique possíveis ordens na corretora.')
+            if self.auto:
+                self.auto_stop_reason=('Corretora retornou erro no perfil %ds. Confira se o ativo oferece esta expiração; '
+                                       'não repetiremos a ordem sem verificar o histórico.'%self.auto_expiry)
+            self.auto=False
+            self.log('A corretora recusou uma solicitação. Confira ativo, valor, vencimento e ordens abertas.')
     def save(self,p):
         # Persist only allowlisted non-sensitive fields.
         row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status')};row['result']=p.get('result',{})
@@ -569,7 +578,7 @@ class Broker:
             # M5 needs a long continuous observation period; never stop it
             # because a mobile browser is suspended. Quote freshness remains
             # mandatory for EVERY order and missing candles are never filled.
-            feed_limit=M1_FEED_STOP_SECONDS if self.auto_expiry>=30 else 20
+            feed_limit=M1_FEED_STOP_SECONDS if self.auto_expiry in LONG_EXPIRIES else 20
             if self.auto and now-self.auto_started_at>=AUTO_MAX_SESSION_SECONDS:
                 self.auto=False;self.auto_trial=False
                 self.auto_stop_reason='Sessão automática DEMO atingiu 60 minutos; reinício manual obrigatório.'
@@ -607,9 +616,11 @@ class Broker:
                     'm1_last_gap':self.minute_engine.last_gap,
                     'm1_live_samples':len(self.minute_engine.current['sample_seconds']) if self.minute_engine.current else 0,
                     'supported_expiries':list(ALL_EXPIRIES),
+                    'expiry_profile':'M5_M1' if self.auto_expiry in LONG_EXPIRIES else 'QUICK_TICKS',
+                    'expiry_support_note':'Prazos configurados para testes DEMO, disponibilidade real depende da corretora e ativo.',
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'auto_session_remaining':round(max(0,AUTO_MAX_SESSION_SECONDS-(time.time()-self.auto_started_at)),1) if self.auto else 0,
-                    'auto_feed_stop_after':M1_FEED_STOP_SECONDS if self.auto_expiry>=30 else 20,
+                    'auto_feed_stop_after':M1_FEED_STOP_SECONDS if self.auto_expiry in LONG_EXPIRIES else 20,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
                                                   (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
