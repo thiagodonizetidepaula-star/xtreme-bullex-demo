@@ -41,7 +41,7 @@ jobs:
           assert 'id="chart"' not in html and 'id="history"' not in html
           assert '<option value="60" selected>1 minuto</option>' in html
           expiry_options=html.split('<select id="expiry">',1)[1].split('</select>',1)[0]
-          assert expiry_options.count('<option ') == 20
+          assert expiry_options.count('<option value=') == 20
           assert all(('value="'+str(i)+'"') in expiry_options for i in (3,4,5,6,7,8,9,10,15,20,30,45,60,90,120,180,300,600,900,1800))
           assert '1 hora · indisponível' in expiry_options and '4 horas · indisponível' in expiry_options
           assert 'AUTOMÁTICO · seguir sinal do perfil' in html
