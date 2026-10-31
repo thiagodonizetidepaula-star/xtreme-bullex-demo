@@ -54,7 +54,8 @@ class FiveSecTests(unittest.TestCase):
         for i,p in enumerate(VALUES[:34]):e.bars.append(bar(i,p))
         self.assertIsNone(e.evaluate(BASE+34*5))
         e.bars.append(bar(34,VALUES[34]))
-        self.assertEqual(e.evaluate(BASE+35*5),'call')
+        with patch('zigzag_5s.candle_psychology',return_value={'ready':True,'reason':'Força confirmada'}):
+            self.assertEqual(e.evaluate(BASE+35*5),'call')
         self.assertEqual(e.trendline['candle_seconds'],5)
         self.assertEqual(e.trendline['state'],'rompimento_confirmado_compra')
         self.assertIsNone(e.evaluate(BASE+35*5))
