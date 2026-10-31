@@ -656,6 +656,58 @@ class Tests(unittest.TestCase):
    self.assertEqual(b.pending['expiry'],expiry)
   for invalid in (2,11,29,31,59,61,301,1801,3600,14400,60.0,'60',True):
    with self.assertRaises(ValueError):parse_expiry(invalid)
+ def test_v16_auto_3s_5s_exhaustion_emits_only_confirmed_reverse_order(self):
+  from test_tick_exhaustion import fixture
+  for expiry in (3,5):
+   with patch('broker.time.time') as clock:
+    base=1800000000.;clock.return_value=base
+    b=self.broker()
+    b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                  'min_payout':80,'expiry':expiry,'fast_strategy':'exhaustion'})
+    self.assertEqual(b.fast_strategy,'exhaustion')
+    for timestamp,price,arrival in fixture(expiry):
+     clock.return_value=arrival
+     b.event('updateStream',[[b.symbol,timestamp,price]])
+    wires=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
+    self.assertEqual(len(wires),1,(expiry,b.exhaustion[expiry].reason))
+    self.assertEqual(wires[0]['action'],'put')
+    self.assertEqual(wires[0]['time'],expiry)
+    self.assertEqual(wires[0]['amount'],1)
+    self.assertEqual(wires[0]['isDemo'],1)
+    self.assertTrue(b.pending)
+    self.assertEqual(b.count,1)
+    self.assertEqual(b.snapshot()['fast_strategy'],'exhaustion')
+ def test_v16_unconfirmed_exhaustion_never_places_demo_order(self):
+  from test_tick_exhaustion import fixture
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker()
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':3,'fast_strategy':'exhaustion'})
+   for timestamp,price,arrival in fixture(3,unfinished=True):
+    clock.return_value=arrival
+    b.event('updateStream',[[b.symbol,timestamp,price]])
+   self.assertEqual(b.count,0)
+   self.assertFalse(b.pending)
+   self.assertEqual([x for x in b.ws.sent if x.startswith('42["openOrder"')],[])
+ def test_v16_expiry_without_micro_strategy_rejects_exhaustion_mode(self):
+  b=self.broker()
+  with self.assertRaisesRegex(ValueError,'Motor de segundos'):
+   b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':4,
+                 'min_payout':80,'expiry':6,'fast_strategy':'exhaustion'})
+ def test_v16_last_breath_manual_offer_is_separate_from_old_trend(self):
+  from test_tick_exhaustion import fixture
+  with patch('broker.time.time') as clock:
+   base=1800000000.;clock.return_value=base
+   b=self.broker()
+   for timestamp,price,arrival in fixture(3):
+    clock.return_value=arrival
+    b.event('updateStream',[[b.symbol,timestamp,price]])
+   info=b.signal_status(expiry=3,fast_strategy='exhaustion')
+   self.assertEqual(info['direction'],'put')
+   self.assertEqual(info['kind'],'tick_exhaustion')
+   self.assertTrue(info['ready'])
+   self.assertIn('tick_exhaustion',b.snapshot()['exhaustion_offer_3']['kind'])
  def test_v14_all_expiry_presets_in_snapshot_match_backend(self):
   from broker import ALL_EXPIRIES,FAST_EXPIRIES,LONG_EXPIRIES
   b=self.broker();v=b.snapshot()['supported_expiries']

@@ -14,6 +14,11 @@
 <option value="9">9 segundos</option><option value="10">10 segundos</option>
 <option value="15">15 segundos</option><option value="20">20 segundos</option>
 <option value="30">30 segundos</option><option value="45">45 segundos</option>
+</select></label>
+<label id="fastStrategyWrap">ENTRADA EM 3s/5s
+<select id="fastStrategy" aria-label="Estratégia das expirações 3 e 5 segundos">
+<option value="exhaustion" selected>ÚLTIMO SUSPIRO · esgotamento</option>
+<option value="trend">TENDÊNCIA · continuação</option>
 </select></label></div>
 <button id="subscribe" class="secondary load-symbol">ACOMPANHAR ESTE ATIVO</button>
 <div class="offer-panel">
@@ -43,6 +48,6 @@
 <label>Payout mínimo %<input id="min_payout" type="number" value="88" min="88" max="100"></label>
 <div class="fields"><label>Stop Win<input id="stop_win" type="number" value="20" min="1" max="10000"></label><label>Stop Loss<input id="stop_loss" type="number" value="20" min="1" max="10000"></label><label>Máx. operações<input id="limit" type="number" value="10" min="1" max="100"></label></div>
 <label>Pausa após resultado oficial<select id="pause_after"><option value="5">5 segundos</option><option value="10">10 segundos</option><option value="15">15 segundos</option><option value="20" selected>20 segundos</option><option value="30">30 segundos</option></select></label>
-<div class="mode-description"><strong>Filtro contra lateralização: ATIVO</strong><p>Motor rápido: tendências de segundos com filtro de lateralização. Motor M5/M1: tendências EMA 3/5, RSI 5 no M5, e gatilho confirmado no M1. Ambas as modalidades exigem cotação recente, payout mínimo 88%, uma ordem pendente por vez, pausas e stops. Prazos maiores que 30 minutos não são seguros para este servidor.</p></div>
+<div class="mode-description"><strong>Filtro contra lateralização: ATIVO</strong><p>Para 3s/5s, escolha ÚLTIMO SUSPIRO para buscar uma vela esticada e só entrar quando ela começar a recuar, após confirmar ticks reais. TENDÊNCIA mantém a estratégia anterior. Motor M5/M1: tendências EMA 3/5, RSI 5 no M5, e gatilho confirmado no M1. Ambas as modalidades exigem cotação recente, payout mínimo 88%, uma ordem pendente por vez, pausas e stops. Prazos maiores que 30 minutos não são seguros para este servidor.</p></div>
 <details><summary>Segurança e manutenção</summary><button id="stop" class="danger">PARAR TODAS AS ENTRADAS AUTOMÁTICAS</button><p>Parar impede novas ordens; uma operação enviada continua aguardando o resultado da corretora.</p></details>
 </div></aside></div><footer>Plano gratuito do Render: pode suspender por inatividade. Não é um serviço garantido 24h. Estratégia experimental; resultados demo não garantem desempenho futuro.</footer></div></main></body></html>

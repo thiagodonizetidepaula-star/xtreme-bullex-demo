@@ -3,6 +3,7 @@ import json, math, ssl, threading, time, uuid
 from collections import deque
 import websocket
 from m1_strategy import MinuteSignals, five_minute_closes
+from tick_exhaustion import TickExhaustion,EXHAUSTION_EXPIRIES
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -135,6 +136,8 @@ class Broker:
         self.lateral_filter=True
         self.market_quality='Aguardando leitura'
         self.minute_engine=MinuteSignals()
+        self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
+        self.fast_strategy='trend'  # backward compatibility for existing runs
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -168,7 +171,7 @@ class Broker:
             if self.closed: break
             self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
-            self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals()
+            self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals(); self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -229,6 +232,7 @@ class Broker:
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'payout':float(r[5]),'available':bool(r[14])} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str) and isinstance(r[5],(int,float))}
         elif name=='updateStream' and isinstance(d,list):
             m1_direction=None
+            exhaustion_direction=None
             for r in d:
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
@@ -238,6 +242,13 @@ class Broker:
                         # quotes; it never backfills missing candles.
                         qualified=self.minute_engine.ingest(t,p,self.received)
                         if qualified: m1_direction=qualified
+                        # Preserve sub-second quote timestamps and tick counts,
+                        # rather than collapsing them to one quote per second.
+                        for duration,engine in self.exhaustion.items():
+                            seen=engine.ingest(t,p,self.received)
+                            if (self.auto and self.fast_strategy=='exhaustion' and
+                                self.auto_expiry==duration and seen):
+                                exhaustion_direction=seen
             # Reevaluate the signal on each new second, not just the first
             # crossover. This permits subsequent entries after the cooldown,
             # but only when the source feed shows current trend evidence.
@@ -254,6 +265,8 @@ class Broker:
             if self.auto:
                 if self.auto_expiry in LONG_EXPIRIES:
                     direction=m1_direction
+                elif self.auto_expiry in EXHAUSTION_EXPIRIES and self.fast_strategy=='exhaustion':
+                    direction=exhaustion_direction
                 pnl=sum(x.get('net',0) for x in self.history)-self.baseline
                 if self.count>=self.limit or pnl>=self.stop_win or pnl<=-self.stop_loss:
                     self.auto=False;self.auto_trial=False
@@ -387,7 +400,7 @@ class Broker:
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
             self.auto=False;self.auto_trial=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
-            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None;self.minute_engine=MinuteSignals()
+            self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None;self.minute_engine=MinuteSignals();self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
     def order(self,direction,amount,expiry=5):
         with self.lock:
@@ -439,22 +452,30 @@ class Broker:
                      'Nenhuma ordem foi enviada ou cancelada. Automático permanece parado.')
             return True
 
-    def signal_status(self,allow_auto=False,expiry=5):
+    def signal_status(self,allow_auto=False,expiry=5,fast_strategy=None):
         """Current server-side recommendation, never a claimed win probability."""
         now=time.time()
         fresh=bool(self.demo_confirmed and self.connected and self.fresh_quote())
         long_mode=expiry in LONG_EXPIRIES
-        timestamp=self.minute_engine.signal_at if long_mode else self.last_signal_at
-        direction=(self.minute_engine.direction if long_mode else self.last_signal) if fresh and timestamp and now-timestamp<=MANUAL_SIGNAL_TTL else None
-        # The M1 engine already evaluated completed candles, EMA/RSI, BB
-        # compression and M5 direction; do not apply a tick-only microfilter.
-        quality=bool(direction and (long_mode or not_lateral(self.ticks,direction)))
+        active_strategy=fast_strategy if fast_strategy is not None else self.fast_strategy
+        micro=self.exhaustion.get(expiry) if expiry in EXHAUSTION_EXPIRIES and active_strategy=='exhaustion' else None
+        timestamp=micro.signal_at if micro else self.minute_engine.signal_at if long_mode else self.last_signal_at
+        direction=(micro.direction if micro else self.minute_engine.direction if long_mode else self.last_signal) if fresh and timestamp and now-timestamp<=MANUAL_SIGNAL_TTL else None
+        # Reversals must NOT pass a trend-continuation microfilter, which would
+        # reject an opposite-direction tick exhaustion by construction. The
+        # independent tick engine requires a measured late stretch, retracement,
+        # multiple reverse ticks and an unexpired live source bucket.
+        quality=bool(direction and (
+            micro.ready(now,self.price_time) if micro else
+            long_mode or not_lateral(self.ticks,direction)))
         asset=self.assets.get(self.symbol,{})
         available=bool(asset.get('available') and self.symbol.endswith('_otc'))
         cooldown=max(0.,max(self.last_order+AUTO_INTERVAL_SECONDS if self.last_order else 0,
                              self.last_closed_at+self.pause_after if self.last_closed_at else 0)-now)
         # Movement efficiency is never a claimed win probability.
-        if long_mode:
+        if micro:
+            strength=micro.strength
+        elif long_mode:
             strength=self.minute_engine.strength
         else:
             buckets={int(t):p for t,p in self.ticks if isinstance(t,(int,float)) and isinstance(p,(int,float))
@@ -468,20 +489,20 @@ class Broker:
                 'Aguardando preços atuais' if not fresh else
                 'Ordem anterior pendente' if self.pending else
                 'Modo automático ativo; pare-o para executar manualmente' if self.auto and not allow_auto else
-                (self.minute_engine.reason if long_mode else 'Aguardando sinal novo') if not direction else
-                'Mercado lateralizado; sinal bloqueado' if not quality else
+                (micro.reason if micro else self.minute_engine.reason if long_mode else 'Aguardando sinal novo') if not direction else
+                ('Sinal de esgotamento expirado ou incompleto' if micro else 'Mercado lateralizado; sinal bloqueado') if not quality else
                 'Ativo OTC indisponível' if not available else
                 'Payout abaixo do mínimo' if asset.get('payout',0)<self.min_payout else
                 'Aguardando pausa após a última operação' if cooldown>0 else
                 'Sinal pronto para sua decisão')
         ready=bool(direction and quality and available and fresh and not self.pending and (not self.auto or allow_auto)
                    and cooldown==0 and asset.get('payout',0)>=self.min_payout)
-        return {'direction':direction,'kind':('m1_ema_rsi_m5' if long_mode else self.last_signal_kind) if direction else None,
+        return {'direction':direction,'kind':('tick_exhaustion' if micro else 'm1_ema_rsi_m5' if long_mode else self.last_signal_kind) if direction else None,
                 'strength':strength if direction else None,'ready':ready,
                 'reason':reason,'age':round(now-timestamp,2) if direction else None,
                 'cooldown':round(cooldown,1),'asset':self.symbol,'payout':asset.get('payout',0)}
 
-    def order_signal(self,amount,expiry,symbol,pause_after=20,min_payout=80):
+    def order_signal(self,amount,expiry,symbol,pause_after=20,min_payout=80,fast_strategy='trend'):
         """Single explicit user click; read direction from verified current signal.
 
         Never trust a client-provided direction or stale signal from a
@@ -489,6 +510,8 @@ class Broker:
         """
         with self.lock:
             expiry=parse_expiry(expiry)
+            if fast_strategy not in ('trend','exhaustion') or (fast_strategy=='exhaustion' and expiry not in EXHAUSTION_EXPIRIES):
+                raise ValueError('Modo de ticks inválido para o vencimento escolhido.')
             if type(pause_after) is not int or pause_after not in PAUSE_CHOICES:
                 raise ValueError('Escolha pausa de 5, 10, 15, 20 ou 30 segundos.')
             if not isinstance(min_payout,(int,float)) or isinstance(min_payout,bool) or not 0<=min_payout<=100:
@@ -497,14 +520,16 @@ class Broker:
                 raise ValueError('Ativo mudou. Atualize o sinal antes de operar.')
             self.pause_after=pause_after
             self.min_payout=float(min_payout)
-            info=self.signal_status(expiry=expiry)
+            info=self.signal_status(expiry=expiry,fast_strategy=fast_strategy)
             if not info['ready']:
                 raise ValueError(info['reason']+'. Nenhuma ordem enviada.')
             direction=info['direction']
             self.order(direction,amount,expiry)
             # Consume this opportunity. Fresh broker ticks must create a new
             # qualified signal before another user-initiated order.
-            if expiry in LONG_EXPIRIES:
+            if fast_strategy=='exhaustion':
+                self.exhaustion[expiry].clear_signal()
+            elif expiry in LONG_EXPIRIES:
                 self.minute_engine.direction=None;self.minute_engine.signal_at=0
             else:
                 self.last_signal=None;self.last_signal_at=0
@@ -515,6 +540,9 @@ class Broker:
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
+            fast_strategy=c.get('fast_strategy','trend')
+            if fast_strategy not in ('trend','exhaustion') or (fast_strategy=='exhaustion' and expiry not in EXHAUSTION_EXPIRIES):
+                raise ValueError('Motor de segundos inválido para a expiração selecionada.')
             pause=c.get('pause_after',20)
             if type(pause) is not int or pause not in PAUSE_CHOICES:
                 raise ValueError('Escolha pausa de 5, 10, 15, 20 ou 30 segundos.')
@@ -560,6 +588,7 @@ class Broker:
                 self.subscribe(self.symbol)
             self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
+            self.fast_strategy=fast_strategy
             self.market_quality='Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
@@ -609,6 +638,11 @@ class Broker:
                     'signal_kind':self.last_signal_kind if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_offer':self.signal_status(expiry=5),
                     'long_signal_offer':self.signal_status(expiry=60),
+                    'exhaustion_offer_3':self.signal_status(expiry=3,fast_strategy='exhaustion'),
+                    'exhaustion_offer_5':self.signal_status(expiry=5,fast_strategy='exhaustion'),
+                    'exhaustion_3':self.exhaustion[3].status(),
+                    'exhaustion_5':self.exhaustion[5].status(),
+                    'fast_strategy':self.fast_strategy,
                     'm1_candles':len(self.minute_engine.bars),'m1_status':self.minute_engine.reason,
                     'm5_candles':len(five_minute_closes(list(self.minute_engine.bars))),
                     'm1_completed_total':self.minute_engine.completed_bars,
