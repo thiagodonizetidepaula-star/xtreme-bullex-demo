@@ -1,5 +1,24 @@
 # Xtreme Tiger Pocket 5s
 
+## V20 — Usar velas anteriores da Pocket Option antes de buscar sinais
+
+Instead of waiting to construct 22 new chart candles after every start, the
+DEMO scanner requests past quote/candle history from Pocket Option through
+`loadHistoryPeriod` and can ingest independently identified
+`updateHistoryNewFast` history. Responses are validated per asset, timeframe,
+time alignment, OHLC bounds, recent source clock, real quote coverage, and
+closed-candle continuity. **No invented candles, stale signals, or orders
+based solely on historical data.** History primes indicators, and a new
+live **closed** 5-second or M1 candle is still required for a trade.
+
+History requests are throttled across subscribed open assets; only a live
+verified feed allows seeding. The UI shows the number of assets with genuine
+historical data and ready indicator context. If the unofficial adapter does
+not return verifiable history for an asset, that asset safely builds candles
+from actual incoming quotes and cannot instantly trigger a signal.
+Historical-candle reception and genuine demo order execution still need to
+be verified with a real demo session; unit tests are synthetic and network-free.
+
 ## V19 — ZigZag/Fractal/Linha QUICK 5s (DEMO only)
 
 A new **ZIGZAG + FRACTAL + LINHA · 5s RÁPIDO** profile is available *alongside* the original 60-second/M1 profile in the same Android WebView and Render service. Do not confuse expiry (the option closes after 5 seconds) with chart timeframe (each real, completely observed candle is also five seconds).
