@@ -117,7 +117,8 @@ class Tests(unittest.TestCase):
         self.assertEqual(e.last_high_t,123)
         e.bars.pop()
         e.bars.append({'t':NOW,'open':100.2,'high':100.3,'low':99.4,'close':99.6})
-        with patch.object(ZigZagFractalTrend,'evaluate',return_value='put'):
+        with patch.object(ZigZagFractalTrend,'evaluate',return_value='put'), \
+             patch('zigzag_5s.candle_psychology',return_value={'ready':True,'reason':'Força confirmada'}):
             self.assertEqual(e.evaluate(NOW),'put')
 
     def test_render_has_three_expiries_and_price_action_description(self):
