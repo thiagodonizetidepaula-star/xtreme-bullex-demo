@@ -1,5 +1,17 @@
 # Xtreme Tiger Pocket 5s
 
+## V21 — ZigZag + Fractal + Linha M2 com expiração M1/M2/M3 (DEMO)
+
+A new independent chart-analysis profile **ZIGZAG + FRACTAL + LINHA · ANÁLISE M2** is added to the existing Android WebView. It builds **120-second closed candles** from authenticated Pocket Option DEMO tick streams, or requests and validates prior broker history with `period=120`. It uses the same confirmed fractal peaks/lows, closed ZigZag reversal, two descending fractal highs for resistance, and breakout confirmation rules used by the existing modes. **The expiration is independently selected as 60, 120 or 180 seconds** (M1/M2/M3). Choosing M1 expiry never changes the M2 analysis candles.
+
+- The bot scans open regular/OTC assets only when fresh per-asset DEMO broker quotes exist, and cannot manufacture missing candles or execute historical signals.
+- Technical context is primed from verified prior closed M2 candles when the unofficial broker history interface supplies them. Missing verifiable history means the bot waits for actual complete candles; it never skips pivot/fractal confirmation.
+- Signals only arise on the next LIVE completed M2 candle after all confirmations, never from a still-repainting ZigZag tip.
+- M1 (60s ZigZag), 5s fast ZigZag, and existing tick/M5 profiles remain available and are not replaced.
+- Initial test is limited to amount 1 DEMO for any new requested expiry until the broker result and duration are validated. Min payout, max operations, stops, one pending order, and cooldown are retained.
+
+This strategy is experimental, not validated to be profitable. The unofficial broker history service may fail or provide incomplete data, which must not be interpreted as permission to trade with missing confirmation. All testing in CI uses deterministic synthetic prices, never a user account or real orders.
+
 ## V20 — Usar velas anteriores da Pocket Option antes de buscar sinais
 
 Instead of waiting to construct 22 new chart candles after every start, the
