@@ -198,7 +198,7 @@ function render(){
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
   $('fastStrategy').value=s.fast_strategy;
  }
- $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
+
  status(s.message||'Aguardando conexão DEMO.');
  $('connection').textContent=s.demo_confirmed?'DEMO CONFIRMADA':s.connected?'VALIDANDO DEMO':s.connecting?'CONECTANDO':'DESCONECTADO';
  $('balance').textContent=money(s.balance);
@@ -209,6 +209,7 @@ function render(){
  $('storage').textContent=s.storage||'Histórico DEMO privado';
  const expiry=Number($('expiry').value),isM1=expiry>=60;
  const isZigzag=['zigzag','zigzag_fast'].includes($('expiryProfile').value);
+ $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
  const radar=s.radar||{};
  const exhaustionActive=[3,5].includes(expiry)&&selectedQuickStrategy()==='exhaustion';
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
