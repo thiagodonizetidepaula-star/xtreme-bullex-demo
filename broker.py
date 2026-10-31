@@ -430,7 +430,11 @@ class Broker:
         while self.scan_queue:
             symbol=self.scan_queue.popleft()
             if symbol not in self.radar.eligible or symbol in self.radar.subscribed:continue
-            try:self.send('subfor',symbol)
+            try:
+                # subscribeSymbol requests price ticks; subfor alone is a
+                # sentiment subscription on newer Pocket Option clients.
+                self.send('subscribeSymbol',symbol)
+                self.send('changeSymbol',{'asset':symbol,'period':60})
             except Exception:
                 self.auto=False;self.auto_trial=False
                 self.auto_stop_reason='Falha ao solicitar feed de varredura OTC; reconecte manualmente.'
