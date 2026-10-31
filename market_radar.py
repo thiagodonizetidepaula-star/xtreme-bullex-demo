@@ -7,6 +7,7 @@ import math
 import time
 from collections import deque
 from m1_strategy import MinuteSignals
+from historical_bars import extract_closed_history,merge_historical_bars
 
 RADAR_PAYOUT_FLOOR=88
 
@@ -19,6 +20,9 @@ class Watch:
         self.last_signal=None
         self.signal_received=0
         self.quote_count=0
+        self.historical_loaded=0
+        self.historical_source=''
+        self.history_rejected=0
 
     def ingest(self,stamp,price,now):
         if isinstance(stamp,bool) or isinstance(price,bool):
@@ -45,6 +49,22 @@ class Watch:
             self.last_signal=direction
             self.signal_received=now
         return direction
+
+    def load_history(self,raw,source='broker'):
+        # Require an independently verified recent market stream first.
+        # History itself cannot count as evidence of fresh tradeable prices.
+        if not self.fresh(time.time()):
+            self.history_rejected+=1
+            return 0
+        period=getattr(self.engine,'bar_seconds',60)
+        valid=extract_closed_history(raw,period,self.price_time)
+        added=merge_historical_bars(self.engine,valid,self.price_time)
+        if added:
+            self.historical_loaded=added
+            self.historical_source=source
+        else:
+            self.history_rejected+=1
+        return added
 
     def fresh(self,now):
         if not self.received or not 0<=now-self.received<=2:
@@ -92,10 +112,17 @@ class Radar:
             self.last_signal_time=now
         return direction
 
+    def load_history(self,symbol,raw,source='broker'):
+        watch=self.watches.get(symbol)
+        if not watch or symbol not in self.eligible:
+            return 0
+        return watch.load_history(raw,source)
+
     def status(self,now=None):
         now=time.time() if now is None else now
         fresh=[s for s,w in self.watches.items() if w.fresh(now)]
         warmed=sum(len(w.engine.bars)>=getattr(w.engine,'warmup_bars',26) for w in self.watches.values())
+        historical_ready=sum(bool(w.historical_loaded) for w in self.watches.values())
         samples=sorted(self.eligible.values(),key=lambda a:(-a['payout'],a['symbol']))
         # Display one *actual* completed-candle series for a visible resistance
         # chart; never imply that every requested asset is streaming quotes.
@@ -110,6 +137,7 @@ class Radar:
                'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None}
         return {'candle_seconds':getattr(next(iter(self.watches.values())).engine,'bar_seconds',60) if self.watches else 60,
                 'eligible':len(self.eligible),'subscribed':len(self.subscribed),
+                'history_loaded_assets':historical_ready,
                 'receiving':len(fresh),'warmed':warmed,
                 'last_symbol':self.last_symbol,'last_direction':self.last_direction,
                 'last_signal_age':round(now-self.last_signal_time,1) if self.last_signal_time else None,
@@ -119,6 +147,7 @@ class Radar:
                            'payout':a['payout'],'receiving':a['symbol'] in fresh,
                            'm1_bars':len(self.watches[a['symbol']].engine.bars),
                             'completed_bars':len(self.watches[a['symbol']].engine.bars),
+                           'historical_loaded':self.watches[a['symbol']].historical_loaded,
                            'reason':self.watches[a['symbol']].engine.reason,
                             'line_state':(getattr(self.watches[a['symbol']].engine,'trendline',None) or {}).get('state','sem linha')}
                           for a in samples[:20]]}
