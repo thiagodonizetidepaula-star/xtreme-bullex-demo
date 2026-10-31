@@ -61,3 +61,10 @@ header{background:#081b39;border-bottom:1px solid #214e94}
 #startSignalAuto{background:linear-gradient(90deg,#196bcb,#20a0f6);border-color:#79baff}
 #stopSignalAuto{width:100%;min-height:54px;border:1px solid #a55f67;color:#ffafb6;background:#482632;border-radius:13px;margin-top:8px}
 #autoSignalStatus{margin:12px 4px 8px;padding:12px;background:#102743;border-left:3px solid #52a6ff;border-radius:8px;line-height:1.6}
+
+/* Actual completed M1 candles; descending resistance from confirmed fractals. */
+.trendline-panel{margin:13px 0 18px;padding:12px 11px;background:#0c171c;border:1px solid #31484c;border-radius:10px}
+.trendline-panel .row{gap:8px;flex-wrap:wrap}
+.trendline-panel strong{color:#b6e9bd;font-size:11px;letter-spacing:.5px}
+#trendlineChart{display:block;width:100%;height:188px;margin:8px 0 0;background:#111c24;border-radius:7px}
+#trendlineDiagnostic{margin:7px 2px 0;line-height:1.45}
