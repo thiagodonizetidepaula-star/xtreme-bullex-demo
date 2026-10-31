@@ -127,7 +127,40 @@ $('executeSignal').onclick=async()=>{
   status(e.message);
  }finally{busy=false;render()}
 };
-$('expiry').onchange=()=>render();
+// Native Android selects scroll to the selected option. Keep the quick and
+// M5/M1 menus physically separate so 3s, 5s, 6s, 7s and 10s are visible.
+const expiryChoices={
+ fast:[[3,'3 segundos'],[4,'4 segundos'],[5,'5 segundos'],[6,'6 segundos'],
+       [7,'7 segundos'],[8,'8 segundos'],[9,'9 segundos'],[10,'10 segundos'],
+       [15,'15 segundos'],[20,'20 segundos'],[30,'30 segundos'],[45,'45 segundos']],
+ m5:[[60,'1 minuto'],[90,'1min 30s'],[120,'2 minutos'],[180,'3 minutos'],
+     [300,'5 minutos'],[600,'10 minutos'],[900,'15 minutos'],[1800,'30 minutos']]
+};
+const rememberedExpiry={fast:5,m5:60};
+function populateExpiry(preferred=null){
+ const profile=$('expiryProfile').value;
+ const values=expiryChoices[profile];
+ const allowed=values.map(entry=>entry[0]);
+ const desired=preferred==null?rememberedExpiry[profile]:Number(preferred);
+ const selected=allowed.includes(Number(desired))?Number(desired):allowed[0];
+ const select=$('expiry');
+ select.replaceChildren();
+ for(const [secs,name] of values){
+  const option=document.createElement('option');
+  option.value=String(secs);option.textContent=name;
+  select.append(option);
+ }
+ select.value=String(selected);
+ rememberedExpiry[profile]=selected;
+}
+$('expiryProfile').onchange=()=>{
+ if(snapshot.auto)return;
+ populateExpiry();render();
+};
+$('expiry').onchange=()=>{
+ rememberedExpiry[$('expiryProfile').value]=Number($('expiry').value);
+ render();
+};
 $('pause_after').onchange=()=>render();
 $('min_payout').onchange=()=>render();
 $('resetHistory').onclick=async()=>{
@@ -143,6 +176,11 @@ $('resetHistory').onclick=async()=>{
 };
 function render(){
  const s=snapshot||{};
+ // Reopen the same active strategy even if the Android WebView refreshed.
+ if(s.auto&&Number(s.auto_expiry)!==Number($('expiry').value)){
+  $('expiryProfile').value=Number(s.auto_expiry)>=60?'m5':'fast';
+  populateExpiry(Number(s.auto_expiry));
+ }
  status(s.message||'Aguardando conexão DEMO.');
  $('connection').textContent=s.demo_confirmed?'DEMO CONFIRMADA':s.connected?'VALIDANDO DEMO':s.connecting?'CONECTANDO':'DESCONECTADO';
  $('balance').textContent=money(s.balance);
@@ -212,6 +250,7 @@ function render(){
  }
  $('amount').disabled=!!s.auto;
  $('expiry').disabled=!!s.auto;
+ $('expiryProfile').disabled=!!s.auto;
  $('pause_after').disabled=!!s.auto;
  $('min_payout').disabled=!!s.auto;
  for(const id of ['stop_win','stop_loss','limit'])$(id).disabled=!!s.auto;
