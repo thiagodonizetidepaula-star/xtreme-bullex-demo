@@ -1,5 +1,19 @@
 # Xtreme Tiger Pocket 5s
 
+## V22 — ZigZag + Fractal + Linha + PRICE ACTION, candle 5s / expiração 3s, 5s ou 60s
+
+The **same existing 5s ZigZag scanner** now offers three DEMO expiration settings: **3 seconds**, **5 seconds** and **60 seconds (one minute)**. The signal timeframe always stays **5-second CLOSED candles**, regardless of the chosen expiration. This is not the tick-only 3s strategy nor the M1 indicator. The rest of the M1 and M2 profiles are unchanged.
+
+Signal criteria use the existing two-confirmed-fractal down-sloping resistance line and completed ZigZag reversal, plus price-action candle confirmation:
+
+- **BUY / CALL:** green fractal trough confirmed; two real 5s closes beyond a descending resistance line; and the latest *closed* 5s candle is bullish and its close exceeds the **previous candle's high**.
+- **SELL / PUT:** confirmed red fractal at the closed rising ZigZag leg; resistance remains intact; and the latest *closed* 5s candle is bearish and its close falls **below the previous candle's low**.
+- **WAIT:** wick-only break, not enough real candles/history, stale per-asset feed, lateral/ambiguous price action or unconfirmed fractal/ZigZag tip.
+
+**3s latency rule:** discard any 5s signal or market feed more than **one second old** before placing a short-duration order; still check all other payout, DEMO, pending order and risk guards. Expiration is sent as the selected 3/5/60 integer seconds, not inferred from the chart timeframe. For every previously unverified expiration, use **demo amount 1** initially and validate settlement returned by broker.
+
+This is a tighter *hypothesis* and could reduce the frequency of signals. It is not a proven increase in trading accuracy; a 5s bar and especially 3s expiry are highly sensitive to price noise and network delay. Synthetic unit tests cannot prove actual broker fill time, profitability, historical data availability or compatibility. Never enable real-money trading.
+
 ## V21 — ZigZag + Fractal + Linha M2 com expiração M1/M2/M3 (DEMO)
 
 A new independent chart-analysis profile **ZIGZAG + FRACTAL + LINHA · ANÁLISE M2** is added to the existing Android WebView. It builds **120-second closed candles** from authenticated Pocket Option DEMO tick streams, or requests and validates prior broker history with `period=120`. It uses the same confirmed fractal peaks/lows, closed ZigZag reversal, two descending fractal highs for resistance, and breakout confirmation rules used by the existing modes. **The expiration is independently selected as 60, 120 or 180 seconds** (M1/M2/M3). Choosing M1 expiry never changes the M2 analysis candles.
