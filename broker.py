@@ -5,7 +5,7 @@ import websocket
 from m1_strategy import MinuteSignals, five_minute_closes
 from tick_exhaustion import TickExhaustion,EXHAUSTION_EXPIRIES
 from market_radar import Radar
-from zigzag_fractal import ZigZagFractalSell
+from zigzag_trendline import ZigZagFractalTrend
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -141,7 +141,7 @@ class Broker:
         self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
         self.fast_strategy='trend'  # backward compatibility for existing runs
         self.auto_strategy='standard'
-        self.radar=Radar(ZigZagFractalSell)
+        self.radar=Radar(ZigZagFractalTrend)
         self.scan_queue=deque()
         self.scan_last_subscribe=0
         self.scan_signals=0
@@ -181,7 +181,7 @@ class Broker:
             self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals(); self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
-            self.radar=Radar(ZigZagFractalSell);self.scan_queue.clear()
+            self.radar=Radar(ZigZagFractalTrend);self.scan_queue.clear()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -256,7 +256,7 @@ class Broker:
                         watch=self.radar.watches.get(r[0])
                         if watch and watch.fresh(time.time()):
                             self.scan_last_verified_at=time.time()
-                        if seen=='put':scan_candidates.append(r[0])
+                        if seen in ('put','call'):scan_candidates.append(r[0])
                     except (ValueError,TypeError,OverflowError):
                         pass
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
@@ -445,7 +445,7 @@ class Broker:
             return
 
     def try_scan_order(self,candidates):
-        """One 60-second DEMO PUT only on a fresh, newly confirmed pivot."""
+        """One 60-second DEMO BUY/SELL only after a verified, newly confirmed M1 pattern."""
         now=time.time()
         if (not candidates or self.pending or not self.demo_confirmed or
             now-self.last_order<10 or
@@ -453,12 +453,12 @@ class Broker:
         for symbol in sorted(set(candidates),key=lambda s:-self.assets.get(s,{}).get('payout',0)):
             watch=self.radar.watches.get(symbol)
             asset=self.assets.get(symbol,{})
-            if not (watch and watch.last_signal=='put' and
+            if not (watch and watch.last_signal in ('put','call') and
                     0<=now-watch.signal_received<=MANUAL_SIGNAL_TTL and watch.fresh(now) and
                     asset.get('available') and asset.get('payout',0)>=self.min_payout):
                 continue
             self.market_quality=watch.engine.reason
-            try:self.order('put',1.0 if self.auto_trial else self.amount,60,symbol=symbol)
+            try:self.order(watch.last_signal,1.0 if self.auto_trial else self.amount,60,symbol=symbol)
             except ValueError as e:
                 self.auto=False;self.auto_trial=False
                 self.auto_stop_reason='Varredura DEMO bloqueada: '+str(e)
@@ -466,7 +466,7 @@ class Broker:
                 return
             watch.last_signal=None;watch.signal_received=0
             self.scan_signals+=1
-            self.log('VENDA DEMO 60s: '+symbol+' · Fractal 2 vermelho confirmado após fechamento ZigZag 5/12/3.')
+            self.log(('COMPRA DEMO 60s: ' if watch.last_signal=='call' else 'VENDA DEMO 60s: ')+symbol+' · '+watch.engine.reason)
             return
 
     def subscribe(self,symbol):
@@ -657,7 +657,7 @@ class Broker:
             # choice, leaving the bot analyzing the wrong instrument.
             subscribed=False
             if strategy=='zigzag_fractal':
-                radar=Radar(ZigZagFractalSell)
+                radar=Radar(ZigZagFractalTrend)
                 radar.sync(self.assets,vals[3])
                 if not radar.eligible:
                     raise ValueError('Nenhum ativo OTC DEMO aberto com payout mínimo para varredura.')
@@ -683,7 +683,7 @@ class Broker:
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
             self.fast_strategy=fast_strategy
             self.auto_strategy=strategy
-            self.market_quality='Aguardando confirmação ZigZag/Fractal' if strategy=='zigzag_fractal' else 'Aguardando tendência'
+            self.market_quality='Aguardando confirmação ZigZag/Fractal + linha de tendência' if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
@@ -696,7 +696,7 @@ class Broker:
                 self.scan_last_verified_at=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log('VARREDURA DEMO ZigZag 5/12/3 + Fractal 2: %d ativos OTC elegíveis; apenas VENDA 60s com velas M1 fechadas.'%len(radar.eligible))
+                self.log('VARREDURA DEMO ZigZag + Fractal + resistência: %d ativos OTC elegíveis; COMPRA por rompimento confirmado ou VENDA por topo confirmado abaixo da linha, 60s.'%len(radar.eligible))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
