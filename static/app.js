@@ -143,7 +143,7 @@ const expiryChoices={
  m5:[[60,'1 minuto'],[90,'1min 30s'],[120,'2 minutos'],[180,'3 minutos'],
      [300,'5 minutos'],[600,'10 minutos'],[900,'15 minutos'],[1800,'30 minutos']],
  zigzag:[[60,'1 minuto · BUY/SELL após confirmação']],
- zigzag_fast:[[5,'5 segundos · BUY/SELL após confirmação']],
+ zigzag_fast:[[3,'3 segundos · ZigZag + PA rompimento'],[5,'5 segundos · ZigZag + PA rompimento'],[60,'1 minuto · ZigZag + PA rompimento']],
  zigzag_m2:[[60,'M1 · expiração 1 minuto'],[120,'M2 · expiração 2 minutos'],[180,'M3 · expiração 3 minutos']]
 };
 const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120};
@@ -220,7 +220,7 @@ function render(){
  const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
  $('strategyProfile').textContent=isZigzag?
-  'VARREDURA · ZigZag + Fractal 2 + Linha · gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
+  'VARREDURA · ZigZag + Fractal 2 + Linha + '+(chartTf===5?'PRICE ACTION · ':'')+'gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
   isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
@@ -311,7 +311,7 @@ function render(){
    (radar.receiving||0)+' recebendo cotações · '+
    (s.pending?.id?'ordem pendente de resultado oficial':
     s.auto_waiting_prices?'SEM FEED ATUAL · não operar':
-    'aguardando SELL com linha intacta ou BUY após 2 fechamentos '+chartTfLabel+' acima da resistência · sem entrada antecipada');
+    'aguardando fractais e ZigZag confirmados; '+(chartTf===5?'Price Action requer candle 5s fechado rompendo a máxima/mínima anterior':'BUY exige 2 fechamentos '+chartTfLabel+' acima da resistência')+' · sem entrada antecipada');
  }else if(s.auto){
   const blockers=s.pending?.id?'Aguardando resultado oficial da corretora':
     s.auto_waiting_prices?'COTAÇÃO ATRASADA: aguardando feed real':
