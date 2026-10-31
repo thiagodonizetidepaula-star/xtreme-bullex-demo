@@ -73,3 +73,46 @@ class ZigZagFractalTrend5s(ZigZagFractalTrend):
         self.collector=FiveSecondBars()
         self.bars=self.collector.bars
         self.reason='Aguardando 22 velas reais de 5 segundos, ZigZag/Fractal e resistência'
+
+    def evaluate(self,now):
+        """Price Action: a fresh finished 5s candle must BREAK candle structure.
+
+        Base engine confirms ZigZag closed pivot + Fractal 2 + trendline.
+        Then require the last *closed* candle to break the previous candle's
+        high (BUY) or low (SELL), with a directional close, never a wick-only
+        breakout. An incomplete candle, fake bounce or merely touching the
+        line cannot authorize an entry. No historical candles trigger orders.
+        """
+        old_buy=self.last_buy_line
+        old_sell=self.last_high_t
+        result=super().evaluate(now)
+        if result not in ('call','put'):
+            return None
+        bars=list(self.bars)
+        if len(bars)<2:
+            result=None
+        else:
+            current,prior=bars[-1],bars[-2]
+            if result=='call':
+                valid=(current['close']>current['open'] and
+                       current['close']>prior['high'])
+            else:
+                valid=(current['close']<current['open'] and
+                       current['close']<prior['low'])
+            if not valid:result=None
+        if result is None:
+            # Base ZigZag consumes confirmed pivots on recognition. Undo that
+            # consumption when PA refuses the trade so our state reflects the
+            # fact no qualified entry was emitted.
+            self.last_buy_line=old_buy
+            self.last_high_t=old_sell
+            self.direction=None
+            self.signal_at=0.
+            self.strength=None
+            self.reason='Price Action: aguardando fechamento 5s ROMPENDO máxima/mínima anterior; sem compra ou venda'
+            if self.trendline:
+                self.trendline['state']='aguardando_rompimento_price_action'
+            return None
+        self.reason += '; Price Action: candle 5s fechado rompeu estrutura anterior'
+        return result
+
