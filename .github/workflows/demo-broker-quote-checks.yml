@@ -43,7 +43,7 @@ jobs:
           assert 'id="expiryProfile"' in html
           assert 'RÁPIDA · 3 a 45 segundos' in html
           assert 'M5 → M1 · 1 a 30 minutos' in html
-          expiry_options=html.split('<select id="expiry">',1)[1].split('</select>',1)[0]
+          expiry_options=html.split('<select id="expiry"',1)[1].split('</select>',1)[0]
           assert expiry_options.count('<option value=') == 12
           assert all(('value="'+str(i)+'"') in expiry_options for i in (3,4,5,6,7,8,9,10,15,20,30,45))
           assert 'value="60"' not in expiry_options
