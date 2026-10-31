@@ -97,13 +97,25 @@ class Radar:
         fresh=[s for s,w in self.watches.items() if w.fresh(now)]
         warmed=sum(len(w.engine.bars)>=getattr(w.engine,'warmup_bars',26) for w in self.watches.values())
         samples=sorted(self.eligible.values(),key=lambda a:(-a['payout'],a['symbol']))
+        # Display one *actual* completed-candle series for a visible resistance
+        # chart; never imply that every requested asset is streaming quotes.
+        chart_symbol,chart_watch=max(self.watches.items(),
+            key=lambda item:(int(item[1].fresh(now)),len(item[1].engine.bars),item[1].received),
+            default=(None,None))
+        if self.last_symbol in self.watches and self.watches[self.last_symbol].fresh(now):
+            chart_symbol=self.last_symbol;chart_watch=self.watches[self.last_symbol]
+        chart={'symbol':chart_symbol or '',
+               'candles':list(chart_watch.engine.bars)[-45:] if chart_watch else [],
+               'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None}
         return {'eligible':len(self.eligible),'subscribed':len(self.subscribed),
                 'receiving':len(fresh),'warmed':warmed,
                 'last_symbol':self.last_symbol,'last_direction':self.last_direction,
                 'last_signal_age':round(now-self.last_signal_time,1) if self.last_signal_time else None,
-                'last_reason':self.watches[self.last_symbol].engine.reason if self.last_symbol in self.watches else '',
+                'last_reason':self.watches[self.last_symbol].engine.reason if self.last_symbol in self.watches else (chart_watch.engine.reason if chart_watch else ''),
+                'chart':chart,
                 'assets':[{'symbol':a['symbol'],'name':a['name'],
                            'payout':a['payout'],'receiving':a['symbol'] in fresh,
                            'm1_bars':len(self.watches[a['symbol']].engine.bars),
-                           'reason':self.watches[a['symbol']].engine.reason}
+                           'reason':self.watches[a['symbol']].engine.reason,
+                            'line_state':(getattr(self.watches[a['symbol']].engine,'trendline',None) or {}).get('state','sem linha')}
                           for a in samples[:20]]}
