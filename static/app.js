@@ -220,7 +220,7 @@ function render(){
  const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
  $('strategyProfile').textContent=isZigzag?
-  'VARREDURA · ZigZag + Fractal 2 + Linha + '+(chartTf===5?'PRICE ACTION · ':'')+'gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
+  'VARREDURA · ZigZag + Fractal 2 + Linha + '+(chartTf===5?'PRICE ACTION + PSICOLOGIA · ':'')+'gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
   isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
@@ -345,6 +345,14 @@ function drawTrendlineChart(radar){
  const canvas=$('trendlineChart');if(!canvas)return;
  const series=radar?.chart||{}, bars=Array.isArray(series.candles)?series.candles:[];
  const line=series.trendline||null;
+ const psychology=series.candle_quality||null;
+ const diagnostic=$('candlePsychology');
+ if(diagnostic){
+  diagnostic.hidden=Number(series.candle_seconds||60)!==5;
+  diagnostic.textContent=psychology?
+   ('PSICOLOGIA '+(psychology.ready?'CONFIRMADA':'BLOQUEADA')+' · '+psychology.same_color_3+'/3 velas na mesma cor · corpo '+psychology.body_pct+'% · eficiência '+psychology.efficiency+' · '+psychology.reason):
+   'PSICOLOGIA DE CANDLES: aguardando velas reais de 5 segundos fechadas';
+ }
  $('trendlineSymbol').textContent=series.symbol||'Aguardando ativo OTC real';
  $('trendlineDiagnostic').textContent=!bars.length?
   'Aguardando velas reais '+({5:'5s',60:'M1',120:'M2'}[series.candle_seconds]||'M1')+', fechadas e sem lacunas. Nenhum preço artificial é utilizado.':
