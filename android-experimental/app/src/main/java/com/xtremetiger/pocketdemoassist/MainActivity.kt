@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V16"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V17"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V16 DEMO: novo Último Suspiro em 3s e 5s, com contagem de ticks, esticada e confirmação de reação."
+            text = "V17 DEMO: varredura OTC, ZigZag 5/12/3 + Fractal 2 confirmado, somente VENDA M1 60s."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -139,7 +139,7 @@ class MainActivity : Activity() {
             setOnClickListener { openManualTest() }
         }
         val start = Button(this).apply {
-            text = "M5 → M1 / V12"
+            text = "ZIGZAG + FRACTAL / V17"
             setOnClickListener { showSignalPanel() }
         }
         val stop = Button(this).apply {
