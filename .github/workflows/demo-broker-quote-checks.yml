@@ -5,6 +5,8 @@ on:
     paths:
       - 'broker.py'
       - 'm1_strategy.py'
+      - 'tick_exhaustion.py'
+      - 'test_tick_exhaustion.py'
       - 'market_radar.py'
       - 'test_market_radar.py'
       - 'test_server.py'
@@ -27,10 +29,10 @@ jobs:
       - name: Install test dependencies
         run: pip install websocket-client==1.8.0
       - name: Run unit tests
-        run: python -m unittest -v test_broker test_market_radar test_server
+        run: python -m unittest -v test_broker test_market_radar test_server test_tick_exhaustion
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify V15 Android separate quick/long expiry controls
+      - name: Verify V16 tick exhaustion manual/auto UX for 3s and 5s
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -41,6 +43,8 @@ jobs:
           assert 'id="chart"' not in html and 'id="history"' not in html
           assert '<option value="5" selected>5 segundos</option>' in html
           assert 'id="expiryProfile"' in html
+          assert 'id="fastStrategy"' in html
+          assert 'ÚLTIMO SUSPIRO · esgotamento' in html
           assert 'RÁPIDA · 3 a 45 segundos' in html
           assert 'M5 → M1 · 1 a 30 minutos' in html
           expiry_options=html.split('<select id="expiry"',1)[1].split('</select>',1)[0]
@@ -54,6 +58,9 @@ jobs:
           assert "m5:[[60,'1 minuto']" in js
           assert "[1800,'30 minutos']" in js
           assert "populateExpiry()" in js
+          assert "s.exhaustion_offer_3" in js
+          assert "s.exhaustion_offer_5" in js
+          assert "fast_strategy:selectedQuickStrategy()" in js
           assert "'expiryProfile').disabled=!!s.auto" in js
           assert "s.long_signal_offer" in js
           assert "await api('auto',params)" in js
@@ -61,7 +68,7 @@ jobs:
           assert "filter_lateral:true" in js
           assert "setInterval(poll,750)" in js
           assert "api('reset-history',{confirm:true})" in js
-          print('PASS: V15 quick 3-45s visible separately from M5/M1 60s-30min on Android')
+          print('PASS: V16 3s/5s tick stretch reversal and fallback trend UI, 60s+ M5/M1 untouched')
           PY
       - name: Compile Python modules
-        run: python -m py_compile broker.py m1_strategy.py market_radar.py server.py
+        run: python -m py_compile broker.py m1_strategy.py tick_exhaustion.py market_radar.py server.py
