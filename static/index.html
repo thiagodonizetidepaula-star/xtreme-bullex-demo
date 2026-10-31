@@ -1,13 +1,19 @@
 <!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Xtreme Tiger · Sinais DEMO</title><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script></head><body><header><div class="brand"><span class="mark">◈</span> XTREME <b>TIGER</b><small>SINAIS / DEMO</small></div><span class="badge">CONTA DEMO</span></header><main><section id="login" class="login card"><div class="eyebrow">SEU CENTRO DE OPERAÇÕES</div><h1>Entre no <em>ritmo do mercado.</em></h1><p>Conecte sua conta demo da Pocket Option. Sinais em tempo real e execução por um toque, somente na conta DEMO.</p><form id="loginForm"><label>E-mail do aplicativo<input id="email" type="email" autocomplete="username" required></label><label>Senha do aplicativo<input id="password" type="password" minlength="6" autocomplete="current-password" required></label><button type="submit">Entrar</button><button id="signup" type="button" class="secondary">Criar conta</button><button id="forgot" type="button" class="secondary">Esqueci minha senha</button></form><form id="resetForm" hidden><h2>Definir nova senha</h2><label>Nova senha<input id="newPassword" type="password" minlength="8" autocomplete="new-password" required></label><label>Confirme a nova senha<input id="confirmPassword" type="password" minlength="8" autocomplete="new-password" required></label><button type="submit">Salvar nova senha</button></form><p class="hint">Este login protege seu painel. É separado da conta da Pocket Option. Se já tem um login no projeto Mesa Trader, use-o aqui.</p><p id="loginStatus" role="status"></p></section><div id="dashboard" hidden><div class="intro"><div><div class="eyebrow">POCKET OPTION · CONEXÃO DIRETA DEMO</div><h1>Xtreme Tiger · Sinais DEMO</h1><p>Escolha: executar o sinal com um toque ou deixar o bot operar automaticamente na conta DEMO.</p></div><button id="logout" class="secondary">Sair</button></div><div id="status" class="status" role="status">Conecte sua sessão demo.</div><div class="grid"><section><div class="card"><div class="row"><h2>Placar e status</h2><span id="connection" class="badge neutral">DESCONECTADO</span></div><div class="stats"><div><small>Saldo demo</small><strong id="balance">—</strong></div><div><small>Wins / Losses · sessão</small><strong id="score">0 / 0</strong></div><div><small>Resultado · sessão</small><strong id="net">—</strong></div><div><small>Último tick</small><strong id="age">—</strong></div></div><div class="signal-console">
 <div class="signal-tabs"><span class="brand-mini">XTREME <b>TIGER</b></span><span class="demo-tag">OTC · DEMO</span></div>
 <div class="signal-fields"><label>ATIVO OTC <select id="asset"><option value="">Conecte a corretora</option></select></label>
-<label>EXPIRAÇÃO <select id="expiry">
-<optgroup label="Rápida · sinais por ticks">
-<option value="3">3 segundos</option><option value="4">4 segundos</option><option value="5">5 segundos</option><option value="6">6 segundos</option><option value="7">7 segundos</option><option value="8">8 segundos</option><option value="9">9 segundos</option><option value="10">10 segundos</option><option value="15">15 segundos</option><option value="20">20 segundos</option><option value="30">30 segundos</option><option value="45">45 segundos</option>
-</optgroup><optgroup label="M5 tendência · M1 gatilho">
-<option value="60" selected>1 minuto</option><option value="90">1min 30s</option><option value="120">2 minutos</option><option value="180">3 minutos</option><option value="300">5 minutos</option><option value="600">10 minutos</option><option value="900">15 minutos</option><option value="1800">30 minutos</option>
-</optgroup>
-<optgroup label="Prazo longo não validado neste motor"><option disabled>1 hora · indisponível</option><option disabled>4 horas · indisponível</option></optgroup>
+<label>TIPO DE ANÁLISE
+<select id="expiryProfile" aria-label="Tipo de análise">
+<option value="fast" selected>RÁPIDA · 3 a 45 segundos</option>
+<option value="m5">M5 → M1 · 1 a 30 minutos</option>
+</select></label>
+<label>EXPIRAÇÃO
+<select id="expiry" aria-label="Expiração da ordem DEMO">
+<option value="3">3 segundos</option><option value="4">4 segundos</option>
+<option value="5" selected>5 segundos</option><option value="6">6 segundos</option>
+<option value="7">7 segundos</option><option value="8">8 segundos</option>
+<option value="9">9 segundos</option><option value="10">10 segundos</option>
+<option value="15">15 segundos</option><option value="20">20 segundos</option>
+<option value="30">30 segundos</option><option value="45">45 segundos</option>
 </select></label></div>
 <button id="subscribe" class="secondary load-symbol">ACOMPANHAR ESTE ATIVO</button>
 <div class="offer-panel">
@@ -16,7 +22,7 @@
 <div class="offer-metrics"><div><span>Expiração</span><strong id="offerExpiry">5s</strong></div><div><span>Força do movimento</span><strong id="signalStrength">—</strong></div></div>
 <div id="signalDirection" class="signal-direction">AGUARDANDO SINAL</div>
 <div class="signal-meter"><div id="signalBar" class="signal-meter-fill" style="width:0%"></div></div>
-<p id="signalAge" class="signal-meta">Somente sinais atuais. Força não representa taxa de acerto.</p><p id="warmupStatus" class="signal-meta" role="status">Aguarde pelo menos 6 velas M5 fechadas. O diagnóstico mostra cotações e motivo de cada bloqueio.</p>
+<p id="signalAge" class="signal-meta">Somente sinais atuais. Força não representa taxa de acerto.</p><p id="warmupStatus" class="signal-meta" role="status">No modo rápido, selecione 3, 5, 6, 7 ou 10 segundos diretamente. Para prazos maiores, escolha M5 → M1.</p>
 </div>
 <div class="trade-mode"><label for="tradeMode">MODO DE OPERAÇÃO</label><select id="tradeMode" aria-label="Modo de operação"><option value="manual">MANUAL · Eu decido</option><option value="automatic" selected>AUTOMÁTICO · seguir sinal do perfil</option></select></div>
 <div id="manualActions"><button id="executeSignal" class="execute-signal" disabled>AGUARDANDO SINAL</button></div>
