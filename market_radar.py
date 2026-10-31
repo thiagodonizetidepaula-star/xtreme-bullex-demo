@@ -134,7 +134,8 @@ class Radar:
         chart={'symbol':chart_symbol or '',
                'candle_seconds':getattr(chart_watch.engine,'bar_seconds',60) if chart_watch else 60,
                'candles':list(chart_watch.engine.bars)[-45:] if chart_watch else [],
-               'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None}
+               'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None,
+               'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None}
         return {'candle_seconds':getattr(next(iter(self.watches.values())).engine,'bar_seconds',60) if self.watches else 60,
                 'eligible':len(self.eligible),'subscribed':len(self.subscribed),
                 'history_loaded_assets':historical_ready,
@@ -149,5 +150,6 @@ class Radar:
                             'completed_bars':len(self.watches[a['symbol']].engine.bars),
                            'historical_loaded':self.watches[a['symbol']].historical_loaded,
                            'reason':self.watches[a['symbol']].engine.reason,
-                            'line_state':(getattr(self.watches[a['symbol']].engine,'trendline',None) or {}).get('state','sem linha')}
+                            'line_state':(getattr(self.watches[a['symbol']].engine,'trendline',None) or {}).get('state','sem linha'),
+                            'candle_quality':getattr(self.watches[a['symbol']].engine,'candle_quality',None)}
                           for a in samples[:20]]}
