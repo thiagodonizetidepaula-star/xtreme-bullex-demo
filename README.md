@@ -1,5 +1,17 @@
 # Xtreme Tiger Pocket 5s
 
+## V23 — Filtro de psicologia de candles (5s ZigZag + Fractal + Linha + Price Action)
+
+The 5-second ZigZag strategy now has a **mandatory closed-candle psychology veto** after all its existing confirmations, to avoid trading congestion and indecision. It NEVER creates a signal on its own. Directional candlestick quality rules for the last 12 fully completed **5s** OHLC bars:
+
+- BUY requires a green breakout candle; SELL a red breakout candle. The candle's body must be **at least 60%** of its range; the close must be within the direction's nearest **24% of range**, opposing wick at most 26%.
+- Count last **3 closed candles**; at least **2 must match the entry direction**. The current body must be **at least 110% of the previous 11-candle median body**, and its whole high-low range at least 78% of the recent median range. This is a descriptive candle-strength metric, **not a win-rate percentage**.
+- Sideways veto: the ten-candle high/low span must exceed **2.5×** the previous median candle range, and directional close-to-close efficiency over seven candles must be **at least 0.29**. Veto excessively extended candles when range exceeds **3.25×** the median.
+- Failed checks abort the signal and restore the unconsumed ZigZag pivot state. The dashboard displays the count (e.g. `2/3`), body percentage, directional efficiency and why a signal was blocked.
+- M1 and M2 ZigZag strategies remain unchanged. The 5-second candle analysis still allows **3-second**, **5-second**, and **60-second** DEMO expiry, with stale-3s-signal rejection, verified live feeds, user-controlled demo risk stops and one pending order maximum.
+
+The thresholds are experimental and can reject valid moves or admit losing trades. **No trading indicator can guarantee an absence of sideways losses or a high win rate.** Regression tests use synthetic price histories; broker-integrated live DEMO behavior and profitability are not established by CI tests.
+
 ## V22 — ZigZag + Fractal + Linha + PRICE ACTION, candle 5s / expiração 3s, 5s ou 60s
 
 The **same existing 5s ZigZag scanner** now offers three DEMO expiration settings: **3 seconds**, **5 seconds** and **60 seconds (one minute)**. The signal timeframe always stays **5-second CLOSED candles**, regardless of the chosen expiration. This is not the tick-only 3s strategy nor the M1 indicator. The rest of the M1 and M2 profiles are unchanged.
