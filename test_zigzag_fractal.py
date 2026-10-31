@@ -30,6 +30,23 @@ class ZigZagTests(unittest.TestCase):
         self.assertIsNone(e.evaluate(BASE+15*60))
         self.assertEqual(e.last_high_t,BASE+12*60)
 
+    def test_confirmed_red_fractal_waits_until_zigzag_leg_actually_closes(self):
+        e=ZigZagFractalSell()
+        values=VALUES[:13]+[3.9,3.8,2.3]
+        for i,v in enumerate(values[:15]):e.bars.append(bar(i,v))
+        self.assertIsNone(e.evaluate(BASE+15*60))
+        self.assertIn('aguardando recuo',e.reason)
+        e.bars.append(bar(15,values[15]))
+        self.assertEqual(e.evaluate(BASE+16*60),'put')
+        self.assertEqual(e.last_high_t,BASE+12*60)
+
+    def test_new_higher_high_invalidates_old_fractal(self):
+        e=ZigZagFractalSell()
+        values=VALUES[:13]+[3.9,3.8,4.5]
+        for i,v in enumerate(values):e.bars.append(bar(i,v))
+        self.assertIsNone(e.evaluate(BASE+16*60))
+        self.assertIsNone(e.direction)
+
     def test_fractal_alone_without_zigzag_leg_never_sells(self):
         e=ZigZagFractalSell()
         for i,v in enumerate([2.0]*6+[2.0,2.0,2.0,2.0,2.0,2.0,4.0,3.2,2.6]):
