@@ -151,18 +151,18 @@ function render(){
  $('score').textContent=hist.filter(x=>x.status==='WIN').length+' / '+hist.filter(x=>x.status==='LOSS').length;
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
- const expiry=Number($('expiry').value), isM1=expiry>=30,
+ const expiry=Number($('expiry').value), isM1=expiry>=60,
        offer=(isM1?s.long_signal_offer:s.signal_offer)||{};
  $('strategyProfile').textContent=isM1?
-  'M5 define tendência (EMA 3/5 + RSI 5) → M1 confirma entrada de 60s':
-  'Estratégia rápida 3s/8s · cruzamento e continuação';
+  'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
+  'PERFIL RÁPIDO · ticks atuais + filtro lateral · saída pelo vencimento selecionado';
  $('warmupStatus').textContent=isM1?
   ('M5: '+(s.m5_candles||0)+'/6 velas completas · M1: '+(s.m1_candles||0)+'/35 minutos válidos'+
    ((s.m1_rejected||0)>0?' · Minutos rejeitados: '+s.m1_rejected:'')+
    ' · '+(s.m1_status||'Aguardando cotações')+
    ((s.m1_rejected||0)>0&&s.m1_last_gap?' · '+s.m1_last_gap:'')+
    ' · Amostras no minuto atual: '+(s.m1_live_samples||0)):
-  'O perfil rápido usa apenas cotações recentes da corretora.';
+  'PERFIL RÁPIDO: sinais por ticks; não necessita histórico M5, mas exige preços recentes e tendência válida.';
  const chosen=$('asset').value;
  const assets=(s.assets||[]).filter(x=>x.available&&x.symbol?.endsWith('_otc')&&x.payout>87).sort((a,b)=>b.payout-a.payout);
  const key=JSON.stringify(assets);
@@ -175,7 +175,7 @@ function render(){
  }
  const currentAsset=(s.assets||[]).find(a=>a.symbol===s.symbol);
  $('offerPair').textContent=currentAsset?.name||s.symbol||'Aguardando ativo OTC';
- $('offerExpiry').textContent=expiry>=60?(expiry/60)+'min':expiry+'s';
+ $('offerExpiry').textContent=expiry>=60?Math.floor(expiry/60)+'min'+(expiry%60?' '+(expiry%60)+'s':''):expiry+'s';
  const strength=Number.isFinite(offer.strength)?Math.max(0,Math.min(100,offer.strength)):null;
  $('signalStrength').textContent=strength===null?'—':strength+'%';
  $('signalBar').style.width=(strength??0)+'%';
@@ -203,8 +203,8 @@ function render(){
    ' operações • '+(s.auto_waiting_prices?'aguardando preços atuais':
       s.pending?.id?'aguardando resultado da corretora':
       Number(s.next_entry_in)>0?'pausa: '+Number(s.next_entry_in).toFixed(1)+'s':
-      'analisando M5 e aguardando fechamento M1'+(s.auto_expiry>=30?' · '+(s.m1_status||'M5 em aquecimento'):'') )+
-   ' • expiração '+s.auto_expiry+'s • filtro lateral ativo.';
+      (s.auto_expiry>=60?'analisando M5 e aguardando M1 · '+(s.m1_status||'M5 em aquecimento'):'procurando sinal rápido em ticks atuais') )+
+   ' • expiração '+s.auto_expiry+'s'+(s.auto_trial?' • prazo ainda não verificado (valor 1 DEMO)':'')+' • filtro lateral ativo.';
  }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
   $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
     (s.auto_stop_reason?' • '+s.auto_stop_reason:'')+
@@ -223,10 +223,11 @@ function render(){
  if(s.auto){
   const blockers=s.pending?.id?'Aguardando resultado oficial da corretora':
     s.auto_waiting_prices?'COTAÇÃO ATRASADA: aguardando feed real':
-    (s.m5_candles||0)<6?'AGUARDANDO HISTÓRICO M5 REAL: '+(s.m5_candles||0)+'/6 velas completas':
+    (s.auto_expiry>=60&&(s.m5_candles||0)<6)?'AGUARDANDO HISTÓRICO M5 REAL: '+(s.m5_candles||0)+'/6 velas completas':
     Number(s.next_entry_in)>0?'Pausa '+Number(s.next_entry_in).toFixed(1)+'s':
-    (s.m1_status||'Aguardando sinal de fechamento M1');
-  $('offerStatus').textContent='AUTOMÁTICO ATIVO · '+s.symbol+' · '+blockers;
+    (s.auto_expiry>=60?(s.m1_status||'Aguardando sinal de fechamento M1'):'Aguardando sinal rápido de ticks e filtro lateral');
+  $('offerStatus').textContent='AUTOMÁTICO ATIVO · '+s.symbol+' · '+blockers+
+   (s.auto_trial?' · PRIMEIRA ENTRADA RESTRITA A 1 DEMO até validar duração':'');
  }
  $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
  $('pendingRecovery').hidden=!(s.pending?.id&&s.pending?.timed_out);
