@@ -62,10 +62,10 @@ class ZigZagFractalTrend(ZigZagFractalSell):
         self.strength = None
         self.trendline = None
         if len(bars) < self.warmup_bars:
-            self.reason = 'Aguardando candles M1 reais: %d/%d' % (len(bars), self.warmup_bars)
+            self.reason = 'Aguardando candles %s reais: %d/%d' % (self.timeframe, len(bars), self.warmup_bars)
             return None
-        if any(bars[i]['t'] - bars[i - 1]['t'] != 60 for i in range(1, len(bars))):
-            self.reason = 'Lacuna entre velas M1: aguardar histórico contínuo'
+        if any(bars[i]['t'] - bars[i - 1]['t'] != self.bar_seconds for i in range(1, len(bars))):
+            self.reason = 'Lacuna entre velas %s: aguardar histórico contínuo' % self.timeframe
             return None
         point = self.price_point(bars)
         if not point:
@@ -88,6 +88,7 @@ class ZigZagFractalTrend(ZigZagFractalSell):
             'left_price': round(line['left_price'], 9),
             'right_price': round(line['right_price'], 9),
             'slope_per_minute': round(line['slope_per_minute'], 12),
+            'candle_seconds':self.bar_seconds,
             'projected_now': round(last_line, 9),
             'last_close': last, 'buffer': round(buffer, 9),
             'state': 'abaixo' if last < last_line - buffer else 'teste/rompimento',
@@ -107,7 +108,7 @@ class ZigZagFractalTrend(ZigZagFractalSell):
             self.strength = round(min(100, max(0, (last - last_line) / max(atr, point) * 50)))
             self.trendline['state'] = 'rompimento_confirmado_compra'
             self.reason = ('COMPRA DEMO: rompeu resistência descendente e sustentou 2 fechamentos M1 '
-                           'acima; fundo fractal verde confirmado')
+                           'acima; fundo fractal verde confirmado em %s' % self.timeframe)
             return 'call'
         if last >= last_line - buffer:
             self.reason = ('Teste/possível rompimento da resistência: '
