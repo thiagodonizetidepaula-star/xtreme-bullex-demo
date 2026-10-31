@@ -145,6 +145,7 @@ class Broker:
         self.scan_queue=deque()
         self.scan_last_subscribe=0
         self.scan_signals=0
+        self.scan_last_verified_at=0
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -251,8 +252,11 @@ class Broker:
                     isinstance(r,list) and len(r)>=3 and isinstance(r[0],str)):
                     try:
                         stamp=float(r[1]);price=float(r[2])
-                        if self.radar.ingest(r[0],stamp,price,time.time())=='put':
-                            scan_candidates.append(r[0])
+                        seen=self.radar.ingest(r[0],stamp,price,time.time())
+                        watch=self.radar.watches.get(r[0])
+                        if watch and watch.fresh(time.time()):
+                            self.scan_last_verified_at=time.time()
+                        if seen=='put':scan_candidates.append(r[0])
                     except (ValueError,TypeError,OverflowError):
                         pass
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
@@ -685,6 +689,7 @@ class Broker:
                 self.scan_queue=deque(sorted(radar.eligible,key=lambda s:(-radar.eligible[s]['payout'],s)))
                 self.scan_last_subscribe=0
                 self.scan_signals=0
+                self.scan_last_verified_at=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
                 self.log('VARREDURA DEMO ZigZag 5/12/3 + Fractal 2: %d ativos OTC elegíveis; apenas VENDA 60s com velas M1 fechadas.'%len(radar.eligible))
@@ -700,8 +705,7 @@ class Broker:
             now=time.time()
             if self.auto and self.auto_strategy=='zigzag_fractal':
                 self.subscribe_scan_batch(now)
-                newest=max((w.received for w in self.radar.watches.values()),default=0)
-                age=now-newest if newest else now-self.auto_started_at
+                age=now-(self.scan_last_verified_at or self.auto_started_at)
             else:
                 age=(now-self.received) if self.received else (now-self.auto_started_at)
             # M5 needs a long continuous observation period; never stop it

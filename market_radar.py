@@ -29,10 +29,17 @@ class Watch:
             return None
         stamp=stamp/1000 if stamp>1e12 else stamp
         if stamp<=self.price_time:return None
+        # A bulk replay can contain real old broker prices but is NOT a live
+        # stream. Require a current source timestamp or observed progression
+        # across separate arrival times before building any M1 candle.
+        credible=abs(now-stamp)<=3 or (abs(now-stamp)<=12*3600 and any(
+            0.8<=now-arrival<=5 and 0.25<=stamp-source<=now-arrival+3
+            for source,arrival in self.samples))
         self.price_time=stamp
         self.received=now
         self.samples.append((stamp,now))
         self.quote_count+=1
+        if not credible:return None
         direction=self.engine.ingest(stamp,price,now)
         if direction:
             self.last_signal=direction

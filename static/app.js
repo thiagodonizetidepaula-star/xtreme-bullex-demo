@@ -110,6 +110,10 @@ $('resolvePending').onclick=async()=>{
  finally{busy=false;$('resolvePending').disabled=true}
 };
 $('executeSignal').onclick=async()=>{
+ if($('expiryProfile').value==='zigzag'){
+  $('offerStatus').textContent='ZigZag/Fractal em varredura é exclusivo do automático DEMO; não usar o sinal M5 antigo.';
+  return;
+ }
  const offer=Number($('expiry').value)>=30?snapshot.long_signal_offer:snapshot.signal_offer;
  if(busy||!offer?.ready||snapshot.auto||snapshot.pending?.id)return;
  if(!$('amount').reportValidity()||!$('min_payout').reportValidity())return;

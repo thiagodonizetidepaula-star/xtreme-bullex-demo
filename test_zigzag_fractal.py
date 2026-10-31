@@ -57,6 +57,15 @@ class ZigZagTests(unittest.TestCase):
         self.assertEqual(e.collector.rejected_bars,0)
         self.assertEqual(len(e.bars),15)
 
+    def test_bulk_replay_does_not_create_fake_live_candles(self):
+        r=Radar(ZigZagFractalSell)
+        r.sync({'A_otc':{'symbol':'A_otc','name':'A','payout':90,'available':True}})
+        for i in range(16):
+            for sec in range(0,60,3):
+                r.ingest('A_otc',BASE-3600+i*60+sec,100+VALUES[i]/10,BASE)
+        self.assertEqual(len(r.watches['A_otc'].engine.bars),0)
+        self.assertEqual(r.status(BASE)['receiving'],0)
+
     def test_separate_asset_feeds_never_share_candles(self):
         r=Radar(ZigZagFractalSell)
         assets={s:{'symbol':s,'name':s,'payout':90,'available':True}
