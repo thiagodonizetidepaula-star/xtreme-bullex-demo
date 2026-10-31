@@ -1,20 +1,18 @@
-"""Market-wide M5 analysis / M1 entry radar, DEMO only.
+"""Market-wide OTC DEMO radar. One independent real-quote M1 stream per asset.
 
-Each OTC asset has a separate, never-backfilled candle stream. 'Subscribed'
-is NOT proof of receiving a price feed: only actual broker updateStream ticks
-qualify. This radar never synthesizes prices or labels a quoted payout as real
-unless present in the live asset catalog.
+A subscription request is not proof that the broker actually sends that feed.
+The watch is tradeable only with verified fresh quote timestamps.
 """
 import math
 import time
 from collections import deque
 from m1_strategy import MinuteSignals
 
-RADAR_PAYOUT_FLOOR=87
+RADAR_PAYOUT_FLOOR=88
 
 class Watch:
-    def __init__(self):
-        self.engine=MinuteSignals()
+    def __init__(self,engine_factory=MinuteSignals):
+        self.engine=engine_factory()
         self.price_time=0
         self.received=0
         self.samples=deque(maxlen=16)
@@ -53,7 +51,8 @@ class Watch:
                    for source,arrival in self.samples)
 
 class Radar:
-    def __init__(self):
+    def __init__(self,engine_factory=MinuteSignals):
+        self.engine_factory=engine_factory
         self.watches={}
         self.eligible={}
         self.subscribed=set()
@@ -61,16 +60,17 @@ class Radar:
         self.last_direction=None
         self.last_signal_time=0
 
-    def sync(self,assets):
+    def sync(self,assets,min_payout=RADAR_PAYOUT_FLOOR):
+        floor=max(RADAR_PAYOUT_FLOOR,min_payout)
         eligible={name:asset for name,asset in assets.items()
                   if name.endswith('_otc') and asset.get('available') and
                   isinstance(asset.get('payout'),(int,float)) and not isinstance(asset.get('payout'),bool) and
-                  math.isfinite(asset['payout']) and asset['payout']>RADAR_PAYOUT_FLOOR}
+                  math.isfinite(asset['payout']) and asset['payout']>=floor}
         newly=set(eligible)-set(self.eligible)
         self.eligible=eligible
         for sym in list(self.watches):
             if sym not in eligible:self.watches.pop(sym,None)
-        for sym in newly:self.watches[sym]=Watch()
+        for sym in newly:self.watches[sym]=Watch(self.engine_factory)
         self.subscribed.intersection_update(eligible)
         return sorted(newly)
 
@@ -88,12 +88,13 @@ class Radar:
     def status(self,now=None):
         now=time.time() if now is None else now
         fresh=[s for s,w in self.watches.items() if w.fresh(now)]
-        warmed=sum(len(w.engine.bars)>=26 for w in self.watches.values())
+        warmed=sum(len(w.engine.bars)>=getattr(w.engine,'warmup_bars',26) for w in self.watches.values())
         samples=sorted(self.eligible.values(),key=lambda a:(-a['payout'],a['symbol']))
         return {'eligible':len(self.eligible),'subscribed':len(self.subscribed),
                 'receiving':len(fresh),'warmed':warmed,
                 'last_symbol':self.last_symbol,'last_direction':self.last_direction,
                 'last_signal_age':round(now-self.last_signal_time,1) if self.last_signal_time else None,
+                'last_reason':self.watches[self.last_symbol].engine.reason if self.last_symbol in self.watches else '',
                 'assets':[{'symbol':a['symbol'],'name':a['name'],
                            'payout':a['payout'],'receiving':a['symbol'] in fresh,
                            'm1_bars':len(self.watches[a['symbol']].engine.bars),

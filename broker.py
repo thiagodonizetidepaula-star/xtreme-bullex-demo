@@ -4,6 +4,8 @@ from collections import deque
 import websocket
 from m1_strategy import MinuteSignals, five_minute_closes
 from tick_exhaustion import TickExhaustion,EXHAUSTION_EXPIRIES
+from market_radar import Radar
+from zigzag_fractal import ZigZagFractalSell
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -138,6 +140,11 @@ class Broker:
         self.minute_engine=MinuteSignals()
         self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
         self.fast_strategy='trend'  # backward compatibility for existing runs
+        self.auto_strategy='standard'
+        self.radar=Radar(ZigZagFractalSell)
+        self.scan_queue=deque()
+        self.scan_last_subscribe=0
+        self.scan_signals=0
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -163,6 +170,7 @@ class Broker:
         while not self.keepalive_stop.wait(20):
             if self.closed: return
             self.send_keepalive()
+            with self.lock:self.subscribe_scan_batch()
     def send(self,event,data=None):
         if not self.ws: raise ValueError('Conexão indisponível.')
         self.ws.send('42'+json.dumps([event] if data is None else [event,data],separators=(',',':')))
@@ -172,6 +180,7 @@ class Broker:
             self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals(); self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
+            self.radar=Radar(ZigZagFractalSell);self.scan_queue.clear()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -230,10 +239,22 @@ class Broker:
             if self.demo_confirmed and not previously_demo:self.log('Conta demo confirmada. Selecione um ativo para receber preços.')
         elif name=='updateAssets' and isinstance(d,list):
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'payout':float(r[5]),'available':bool(r[14])} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str) and isinstance(r[5],(int,float))}
+            if self.auto and self.auto_strategy=='zigzag_fractal':
+                for sym in self.radar.sync(self.assets,self.min_payout):
+                    if sym not in self.scan_queue:self.scan_queue.append(sym)
         elif name=='updateStream' and isinstance(d,list):
             m1_direction=None
             exhaustion_direction=None
+            scan_candidates=[]
             for r in d:
+                if (self.auto and self.auto_strategy=='zigzag_fractal' and
+                    isinstance(r,list) and len(r)>=3 and isinstance(r[0],str)):
+                    try:
+                        stamp=float(r[1]);price=float(r[2])
+                        if self.radar.ingest(r[0],stamp,price,time.time())=='put':
+                            scan_candidates.append(r[0])
+                    except (ValueError,TypeError,OverflowError):
+                        pass
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:
                     t,p=float(r[1]),float(r[2]);t=t/1000 if t>1e12 else t
                     if math.isfinite(t) and math.isfinite(p) and p>0 and t>self.price_time:
@@ -273,6 +294,8 @@ class Broker:
                     self.auto_stop_reason=('Limite de %d operações atingido.'%self.limit if self.count>=self.limit else
                                            'Stop Win atingido.' if pnl>=self.stop_win else 'Stop Loss atingido.')
                     self.log('Automático encerrado: '+self.auto_stop_reason)
+                elif self.auto_strategy=='zigzag_fractal':
+                    if not self.pending:self.try_scan_order(scan_candidates)
                 elif direction and not self.pending:
                     # Same server-validated signal offered to the manual button;
                     # never act on a stale quote, sideways market or expired
@@ -394,15 +417,60 @@ class Broker:
                 return True
         return False
 
+    def subscribe_scan_batch(self,now=None,force=False):
+        """Request one OTC feed at a time; never claim subscription equals live data."""
+        now=time.time() if now is None else now
+        if not self.auto or self.auto_strategy!='zigzag_fractal' or not self.connected:
+            return
+        if not force and now-self.scan_last_subscribe<1.0:return
+        while self.scan_queue:
+            symbol=self.scan_queue.popleft()
+            if symbol not in self.radar.eligible or symbol in self.radar.subscribed:continue
+            try:self.send('subfor',symbol)
+            except Exception:
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason='Falha ao solicitar feed de varredura OTC; reconecte manualmente.'
+                self.log(self.auto_stop_reason)
+                return
+            self.radar.subscribed.add(symbol)
+            self.scan_last_subscribe=now
+            return
+
+    def try_scan_order(self,candidates):
+        """One 60-second DEMO PUT only on a fresh, newly confirmed pivot."""
+        now=time.time()
+        if (not candidates or self.pending or not self.demo_confirmed or
+            now-self.last_order<10 or
+            now<self.last_closed_at+self.pause_after):return
+        for symbol in sorted(set(candidates),key=lambda s:-self.assets.get(s,{}).get('payout',0)):
+            watch=self.radar.watches.get(symbol)
+            asset=self.assets.get(symbol,{})
+            if not (watch and watch.last_signal=='put' and
+                    0<=now-watch.signal_received<=MANUAL_SIGNAL_TTL and watch.fresh(now) and
+                    asset.get('available') and asset.get('payout',0)>=self.min_payout):
+                continue
+            self.market_quality=watch.engine.reason
+            try:self.order('put',1.0 if self.auto_trial else self.amount,60,symbol=symbol)
+            except ValueError as e:
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason='Varredura DEMO bloqueada: '+str(e)
+                self.log(self.auto_stop_reason)
+                return
+            watch.last_signal=None;watch.signal_received=0
+            self.scan_signals+=1
+            self.log('VENDA DEMO 60s: '+symbol+' · Fractal 2 vermelho confirmado após fechamento ZigZag 5/12/3.')
+            return
+
     def subscribe(self,symbol):
         with self.lock:
+            if self.auto:raise ValueError('Pare o automático antes de trocar o ativo.')
             if self.pending:raise ValueError('Aguarde a resolução da ordem antes de trocar o ativo.')
             if not self.connected:raise ValueError('Conecte a corretora primeiro.')
             if symbol not in self.assets or not self.assets[symbol]['available']:raise ValueError('Ativo indisponível.')
             self.auto=False;self.auto_trial=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None;self.minute_engine=MinuteSignals();self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
-    def order(self,direction,amount,expiry=5):
+    def order(self,direction,amount,expiry=5,symbol=None):
         with self.lock:
             if direction not in ('call','put'):raise ValueError('Direção inválida.')
             expiry=parse_expiry(expiry)
@@ -410,15 +478,22 @@ class Broker:
             if not self.connected or not self.demo_confirmed:raise ValueError('Saldo de conta demo ainda não confirmado.')
             if self.pending:raise ValueError('Há uma ordem pendente. Não será enviada outra.')
             if time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
-            if not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
-            asset=self.assets.get(self.symbol,{})
-            if not asset.get('available') or not self.symbol.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para operar em DEMO.')
+            target=self.symbol if symbol is None else symbol
+            if symbol is not None:
+                if not self.auto or self.auto_strategy!='zigzag_fractal':
+                    raise ValueError('Ativo externo permitido somente na varredura DEMO ativa.')
+                watch=self.radar.watches.get(symbol)
+                if not watch or not watch.fresh(time.time()):
+                    raise ValueError('Feed do ativo de varredura ausente ou atrasado.')
+            elif not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
+            asset=self.assets.get(target,{})
+            if not asset.get('available') or not target.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para operar em DEMO.')
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
-            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':self.symbol,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False}
+            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':target,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False}
             self.last_order=time.time();self.count+=1;self.save(self.pending)
-            try:self.send('openOrder',{'asset':self.symbol,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
+            try:self.send('openOrder',{'asset':target,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
             except Exception:self.auto=False;self.log('Envio sem confirmação. Não repita a ordem; confira na corretora.');raise ValueError('Envio sem confirmação. Automático pausado.') from None
             self.log('Ordem demo enviada; aguardando confirmação.')
     def resolve_unconfirmed_order(self,pending_id,confirm_no_open_orders):
@@ -540,6 +615,11 @@ class Broker:
     def start_auto(self,c):
         with self.lock:
             expiry=parse_expiry(c.get('expiry',5))
+            strategy=c.get('strategy','standard')
+            if strategy not in ('standard','zigzag_fractal'):
+                raise ValueError('Estratégia DEMO desconhecida.')
+            if strategy=='zigzag_fractal' and (expiry!=60 or c.get('scan_all') is not True):
+                raise ValueError('ZigZag/Fractal exige varredura OTC explícita e expiração de 60 segundos.')
             fast_strategy=c.get('fast_strategy','trend')
             if fast_strategy not in ('trend','exhaustion') or (fast_strategy=='exhaustion' and expiry not in EXHAUSTION_EXPIRIES):
                 raise ValueError('Motor de segundos inválido para a expiração selecionada.')
@@ -568,7 +648,12 @@ class Broker:
             # subscribed (different) OTC asset silently won over the user's
             # choice, leaving the bot analyzing the wrong instrument.
             subscribed=False
-            if isinstance(desired,str) and desired:
+            if strategy=='zigzag_fractal':
+                radar=Radar(ZigZagFractalSell)
+                radar.sync(self.assets,vals[3])
+                if not radar.eligible:
+                    raise ValueError('Nenhum ativo OTC DEMO aberto com payout mínimo para varredura.')
+            elif isinstance(desired,str) and desired:
                 chosen=self.assets.get(desired,{})
                 if not chosen.get('available') or not desired.endswith('_otc'):
                     raise ValueError('Ativo escolhido indisponível para a DEMO.')
@@ -580,20 +665,30 @@ class Broker:
                 candidates=[a for a in self.assets.values() if a.get('available') and a.get('symbol','').endswith('_otc') and a.get('payout',0)>=vals[3]]
                 if not candidates:raise ValueError('Não há ativos OTC disponíveis com o payout mínimo. Automático não iniciado.')
                 self.subscribe(max(candidates,key=lambda a:a['payout'])['symbol']);subscribed=True
-            if self.assets.get(self.symbol,{}).get('payout',0)<vals[3]:
+            if strategy!='zigzag_fractal' and self.assets.get(self.symbol,{}).get('payout',0)<vals[3]:
                 raise ValueError('Ativo selecionado abaixo do payout mínimo; escolha outro.')
-            if not subscribed and not self.fresh_quote():
+            if strategy!='zigzag_fractal' and not subscribed and not self.fresh_quote():
                 # One subscription only; re-subscribing on every start
                 # otherwise erased genuine M5 candle warmup.
                 self.subscribe(self.symbol)
             self.amount,self.stop_win,self.stop_loss,self.min_payout=vals
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
             self.fast_strategy=fast_strategy
-            self.market_quality='Aguardando tendência'
+            self.auto_strategy=strategy
+            self.market_quality='Aguardando confirmação ZigZag/Fractal' if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
             self.auto_stop_reason='';self.feed_lag_warning=False
+            if strategy=='zigzag_fractal':
+                self.radar=radar
+                self.scan_queue=deque(sorted(radar.eligible,key=lambda s:(-radar.eligible[s]['payout'],s)))
+                self.scan_last_subscribe=0
+                self.scan_signals=0
+                self.subscribe_scan_batch(force=True)
+                if not self.auto:raise ValueError(self.auto_stop_reason)
+                self.log('VARREDURA DEMO ZigZag 5/12/3 + Fractal 2: %d ativos OTC elegíveis; apenas VENDA 60s com velas M1 fechadas.'%len(radar.eligible))
+                return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
                      ' Expiração: %ds.'%expiry)
@@ -603,7 +698,12 @@ class Broker:
             # enter while the quote freshness guard is false. Prolonged loss
             # of data does stop the bot and needs explicit user restart.
             now=time.time()
-            age=(now-self.received) if self.received else (now-self.auto_started_at)
+            if self.auto and self.auto_strategy=='zigzag_fractal':
+                self.subscribe_scan_batch(now)
+                newest=max((w.received for w in self.radar.watches.values()),default=0)
+                age=now-newest if newest else now-self.auto_started_at
+            else:
+                age=(now-self.received) if self.received else (now-self.auto_started_at)
             # M5 needs a long continuous observation period; never stop it
             # because a mobile browser is suspended. Quote freshness remains
             # mandatory for EVERY order and missing candles are never filled.
@@ -629,9 +729,11 @@ class Broker:
                 self.auto_stop_reason='Ordem sem resultado após expiração e prazo extra de 30s. Confira a corretora antes de reiniciar.'
                 self.save(self.pending)
                 self.log(self.auto_stop_reason)
-            return {'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
+            radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
+            return {'auto_strategy':self.auto_strategy,'radar':radar_status,'scan_signals':self.scan_signals,
+                    'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
                     'pause_after':self.pause_after,'filter_lateral':self.lateral_filter,'market_quality':self.market_quality,
-                    'auto_waiting_prices':bool(self.auto and ((time.time()-self.received)>3 if self.received else (time.time()-self.auto_started_at)>3)),
+                    'auto_waiting_prices':bool(self.auto and age>3),
                     'validated':self.validated,'validated_expiries':sorted(self.validated_expiries),'validation_message':self.validation_message,
                     'signal':self.last_signal if self.fresh_quote() and time.time()-self.last_signal_at<=1.5 else None,
                     'signal_age':round(time.time()-self.last_signal_at,2) if self.last_signal_at and time.time()-self.last_signal_at<=1.5 else None,
