@@ -107,7 +107,7 @@ class ZigZagFractalTrend(ZigZagFractalSell):
             self.signal_at = now
             self.strength = round(min(100, max(0, (last - last_line) / max(atr, point) * 50)))
             self.trendline['state'] = 'rompimento_confirmado_compra'
-            self.reason = ('COMPRA DEMO: rompeu resistência descendente e sustentou 2 fechamentos M1 '
+            self.reason = ('COMPRA DEMO: rompeu resistência descendente e sustentou 2 fechamentos %s ' % self.timeframe + '
                            'acima; fundo fractal verde confirmado em %s' % self.timeframe)
             return 'call'
         if last >= last_line - buffer:
