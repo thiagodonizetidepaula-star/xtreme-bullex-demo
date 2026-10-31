@@ -30,7 +30,7 @@ jobs:
         run: python -m unittest -v test_broker test_market_radar test_server
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify V14 multi-duration DEMO quick and M5/M1 engine UI
+      - name: Verify V15 Android separate quick/long expiry controls
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -39,21 +39,29 @@ jobs:
           assert all(html.count('id="'+i+'"')==1 for i in ids)
           assert 'id="call"' not in html and 'id="put"' not in html
           assert 'id="chart"' not in html and 'id="history"' not in html
-          assert '<option value="60" selected>1 minuto</option>' in html
+          assert '<option value="5" selected>5 segundos</option>' in html
+          assert 'id="expiryProfile"' in html
+          assert 'RÁPIDA · 3 a 45 segundos' in html
+          assert 'M5 → M1 · 1 a 30 minutos' in html
           expiry_options=html.split('<select id="expiry">',1)[1].split('</select>',1)[0]
-          assert expiry_options.count('<option value=') == 20
-          assert all(('value="'+str(i)+'"') in expiry_options for i in (3,4,5,6,7,8,9,10,15,20,30,45,60,90,120,180,300,600,900,1800))
-          assert '1 hora · indisponível' in expiry_options and '4 horas · indisponível' in expiry_options
+          assert expiry_options.count('<option value=') == 12
+          assert all(('value="'+str(i)+'"') in expiry_options for i in (3,4,5,6,7,8,9,10,15,20,30,45))
+          assert 'value="60"' not in expiry_options
+          assert 'value="1800"' not in expiry_options
           assert 'AUTOMÁTICO · seguir sinal do perfil' in html
           js=Path('static/app.js').read_text()
           assert "api('order-signal',req)" in js
+          assert "m5:[[60,'1 minuto']" in js
+          assert "[1800,'30 minutos']" in js
+          assert "populateExpiry()" in js
+          assert "'expiryProfile').disabled=!!s.auto" in js
           assert "s.long_signal_offer" in js
           assert "await api('auto',params)" in js
           assert "await action('stop')" in js
           assert "filter_lateral:true" in js
           assert "setInterval(poll,750)" in js
           assert "api('reset-history',{confirm:true})" in js
-          print('PASS: V14 DEMO 3 seconds to 30 minutes, quick and M5/M1 expiry choices')
+          print('PASS: V15 quick 3-45s visible separately from M5/M1 60s-30min on Android')
           PY
       - name: Compile Python modules
         run: python -m py_compile broker.py m1_strategy.py market_radar.py server.py
