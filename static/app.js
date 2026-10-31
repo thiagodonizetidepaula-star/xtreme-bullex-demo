@@ -221,7 +221,7 @@ function render(){
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
  $('warmupStatus').textContent=isZigzag?
   ('ATIVOS ABERTOS: '+(radar.eligible||0)+' elegíveis · '+(radar.subscribed||0)+' inscritos · '+
-   (radar.receiving||0)+' com cotações atuais · '+(radar.warmed||0)+' com 22+ velas '+(expiry===5?'5s':'M1')+' · '+
+   (radar.receiving||0)+' com cotações atuais · '+(radar.history_loaded_assets||0)+' com histórico real · '+(radar.warmed||0)+' prontos para sinais em '+(expiry===5?'5s':'M1')+' · '+
    (radar.last_reason||'Aguardando ZigZag + fractais confirmados e resistência calculada de dois topos. Sem feed real, não há ordem.')):
   isM1?
   ('M5: '+(s.m5_candles||0)+'/6 velas completas · M1: '+(s.m1_candles||0)+'/35 minutos válidos'+
