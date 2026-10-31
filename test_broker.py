@@ -646,7 +646,7 @@ class Tests(unittest.TestCase):
    with self.assertRaisesRegex(ValueError,'pendente|ativo'):
     b.order_signal(1,5,b.symbol,20,80)
  def test_v10_long_expiries_parse_and_demo_wire(self):
-  for expiry in (30,60,120,180,300):
+  for expiry in (15,20,30,45,60,90,120,180,300,600,900,1800):
    self.assertEqual(parse_expiry(expiry),expiry)
    b=self.broker();b.order('call',1,expiry)
    wire=json.loads(b.ws.sent[-1][2:])
@@ -654,8 +654,58 @@ class Tests(unittest.TestCase):
    self.assertEqual(wire[1]['time'],expiry)
    self.assertEqual(wire[1]['isDemo'],1)
    self.assertEqual(b.pending['expiry'],expiry)
-  for invalid in (29,31,59,61,301,600,60.0,'60',True):
+  for invalid in (2,11,29,31,59,61,301,1801,3600,14400,60.0,'60',True):
    with self.assertRaises(ValueError):parse_expiry(invalid)
+ def test_v14_all_expiry_presets_in_snapshot_match_backend(self):
+  from broker import ALL_EXPIRIES,FAST_EXPIRIES,LONG_EXPIRIES
+  b=self.broker();v=b.snapshot()['supported_expiries']
+  self.assertEqual(v,list(ALL_EXPIRIES))
+  self.assertEqual(v,list(range(3,11))+[15,20,30,45,60,90,120,180,300,600,900,1800])
+  self.assertTrue(all(d<60 for d in FAST_EXPIRIES))
+  self.assertTrue(all(d>=60 for d in LONG_EXPIRIES))
+ def test_v14_fast_15_and_45_seconds_auto_route_to_tick_strategy(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000.;clock.return_value=now
+   for expiry in (3,15,30,45):
+    b=self.broker();b.symbol=''
+    b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                 'min_payout':80,'expiry':expiry,'pause_after':20,'filter_lateral':True})
+    b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+    wires=[json.loads(w[2:])[1] for w in b.ws.sent if w.startswith('42["openOrder"')]
+    self.assertEqual(len(wires),1,expiry)
+    self.assertEqual(wires[0]['time'],expiry)
+    self.assertEqual(wires[0]['isDemo'],1)
+    self.assertEqual(wires[0]['amount'],1)
+    self.assertTrue(b.pending)
+    self.assertEqual(b.count,1)
+ def test_v14_long_60_300_1800_auto_route_uses_closed_m1_only(self):
+  with patch('broker.time.time') as clock:
+   now=1800000000.;clock.return_value=now
+   for expiry in (60,90,300,600,900,1800):
+    b=self.broker();b.symbol=''
+    b.start_auto({'amount':1,'stop_win':20,'stop_loss':20,'limit':2,
+                  'min_payout':80,'expiry':expiry,'pause_after':20,'filter_lateral':True})
+    b.event('updateStream',[[b.symbol,now-9+i,1.1] for i in range(9)]+[[b.symbol,now,1.2]])
+    self.assertEqual(b.count,0,expiry)
+    def closed_m1(t,p,arrival):
+     b.minute_engine.direction='call';b.minute_engine.signal_at=arrival
+     b.minute_engine.strength=75;b.minute_engine.reason='M5 e M1 fecharam BUY'
+     return 'call'
+    b.minute_engine.ingest=closed_m1
+    clock.return_value=now+1
+    b.event('updateStream',[[b.symbol,now+1,1.21]])
+    wires=[json.loads(w[2:])[1] for w in b.ws.sent if w.startswith('42["openOrder"')]
+    self.assertEqual(len(wires),1,expiry)
+    self.assertEqual(wires[0]['time'],expiry)
+    self.assertEqual(wires[0]['isDemo'],1)
+    self.assertTrue(b.pending)
+    clock.return_value=now
+ def test_v14_1800_second_pending_does_not_time_out_early(self):
+  b=self.broker();b.order('call',1,1800)
+  b.pending['sent_at']=time.time()-1500
+  self.assertFalse(b.snapshot()['pending']['timed_out'])
+  b.pending['sent_at']=time.time()-1831
+  self.assertTrue(b.snapshot()['pending']['timed_out'])
  def test_v10_long_pending_wont_timeout_before_expiry_plus_grace(self):
   b=self.broker();b.order('call',1,60)
   b.pending['sent_at']=time.time()-50
