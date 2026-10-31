@@ -147,6 +147,12 @@ class Broker:
         self.scan_last_subscribe=0
         self.scan_signals=0
         self.scan_last_verified_at=0
+        self.history_queue=deque()
+        self.history_requests={}
+        self.history_requested=set()
+        self.history_last_request=0
+        self.history_loaded_count=0
+        self.history_unmatched=0
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -183,6 +189,7 @@ class Broker:
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals(); self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.radar=Radar(ZigZagFractalTrend);self.scan_queue.clear()
+            self.history_queue.clear();self.history_requests.clear();self.history_requested.clear()
             self.log('Conectando ao servidor demo…')
             self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
             watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
@@ -244,6 +251,32 @@ class Broker:
             if self.auto and self.auto_strategy=='zigzag_fractal':
                 for sym in self.radar.sync(self.assets,self.min_payout):
                     if sym not in self.scan_queue:self.scan_queue.append(sym)
+                    if sym not in self.history_queue:self.history_queue.append(sym)
+        elif name=='updateHistoryNewFast' and isinstance(d,dict):
+            # Historical broker ticks only, cannot generate old orders.
+            sym=d.get('asset')
+            rows=d.get('history')
+            if (self.auto and self.auto_strategy=='zigzag_fractal' and
+                isinstance(sym,str) and isinstance(rows,list) and len(rows)<=50000):
+                if self.radar.load_history(sym,rows,'updateHistoryNewFast'):
+                    self.history_loaded_count+=1
+        elif name=='loadHistoryPeriodFast' and isinstance(d,dict):
+            # Unlabelled/mismatched responses are never attributed to an asset.
+            idx=d.get('index')
+            sym=d.get('asset')
+            if isinstance(idx,(int,str)) and str(idx).isdigit():
+                requested=self.history_requests.pop(int(idx),None)
+                if requested and (sym is None or sym==requested[0]):sym=requested[0]
+                else:sym=None
+            elif isinstance(sym,str) and sym in self.history_requested:
+                pass
+            else:sym=None
+            rows=d.get('data')
+            if (self.auto and self.auto_strategy=='zigzag_fractal' and
+                isinstance(sym,str) and isinstance(rows,list) and len(rows)<=50000):
+                if self.radar.load_history(sym,rows,'loadHistoryPeriodFast'):
+                    self.history_loaded_count+=1
+            else:self.history_unmatched+=1
         elif name=='updateStream' and isinstance(d,list):
             m1_direction=None
             exhaustion_direction=None
@@ -443,6 +476,42 @@ class Broker:
                 return
             self.radar.subscribed.add(symbol)
             self.scan_last_subscribe=now
+            return
+
+    def request_history_batch(self,now=None):
+        """Request one historical feed every 2s; use only verified live clocks.
+
+        Broker-native read-only loadHistoryPeriod; never invent candles.
+        Strict asset/index association blocks cross-asset history leakage.
+        """
+        now=time.time() if now is None else now
+        if not self.auto or self.auto_strategy!='zigzag_fractal' or not self.connected:
+            return
+        if now-self.history_last_request<2:return
+        for idx,(sym,sent) in list(self.history_requests.items()):
+            if now-sent>20:self.history_requests.pop(idx,None)
+        n=len(self.history_queue)
+        for _ in range(n):
+            sym=self.history_queue.popleft()
+            watch=self.radar.watches.get(sym)
+            if sym in self.history_requested or sym not in self.radar.eligible:
+                continue
+            if not watch or not watch.fresh(now):
+                self.history_queue.append(sym)
+                continue
+            idx=int(now*1000)+len(self.history_requested)
+            period=self.auto_expiry if self.auto_expiry in (5,60) else 60
+            anchor=int(watch.price_time)
+            try:
+                self.send('loadHistoryPeriod',{'asset':sym,'index':idx,
+                    'offset':9000,'period':period,
+                    'time':anchor if period==5 else anchor//60*60})
+            except Exception:
+                self.log('Histórico não disponível; estratégia seguirá somente candles reais novos.')
+                return
+            self.history_requested.add(sym)
+            self.history_requests[idx]=(sym,now)
+            self.history_last_request=now
             return
 
     def try_scan_order(self,candidates):
@@ -696,6 +765,12 @@ class Broker:
                 self.scan_last_subscribe=0
                 self.scan_signals=0
                 self.scan_last_verified_at=0
+                self.history_queue=deque(sorted(radar.eligible,key=lambda s:(-radar.eligible[s]['payout'],s)))
+                self.history_requests.clear()
+                self.history_requested.clear()
+                self.history_last_request=0
+                self.history_loaded_count=0
+                self.history_unmatched=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
                 self.log('VARREDURA DEMO ZigZag + Fractal + resistência: %d ativos elegíveis, candles %s; BUY no rompimento confirmado / SELL com linha intacta; expiração %ds.'%(len(radar.eligible),'5s' if expiry==5 else 'M1',expiry))
@@ -711,6 +786,7 @@ class Broker:
             now=time.time()
             if self.auto and self.auto_strategy=='zigzag_fractal':
                 self.subscribe_scan_batch(now)
+                self.request_history_batch(now)
                 age=now-(self.scan_last_verified_at or self.auto_started_at)
             else:
                 age=(now-self.received) if self.received else (now-self.auto_started_at)
@@ -741,6 +817,9 @@ class Broker:
                 self.log(self.auto_stop_reason)
             radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
             return {'auto_strategy':self.auto_strategy,'radar':radar_status,'scan_signals':self.scan_signals,
+                    'history_requested':len(self.history_requested),
+                    'history_loaded_count':self.history_loaded_count,
+                    'history_unmatched':self.history_unmatched,
                     'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
                     'pause_after':self.pause_after,'filter_lateral':self.lateral_filter,'market_quality':self.market_quality,
                     'auto_waiting_prices':bool(self.auto and age>3),
