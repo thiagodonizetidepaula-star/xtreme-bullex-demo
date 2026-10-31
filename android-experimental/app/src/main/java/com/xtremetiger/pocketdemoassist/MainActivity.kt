@@ -520,11 +520,16 @@ class MainActivity : Activity() {
 
     private fun showSignalPanel() {
         showTiger()
-        status.text = "Conecte DEMO e escolha RÁPIDA + 3s ou 5s. Use ÚLTIMO SUSPIRO para buscar esgotamento confirmado em ticks."
+        status.text = "Conecte DEMO, escolha ZIGZAG + FRACTAL e toque INICIAR AUTOMÁTICO DEMO. Só VENDA 60s após confirmar M1."
         tiger.evaluateJavascript("""
             (() => {
                 const panel=document.querySelector('.signal-console');
                 if(!panel) return 'LOGIN';
+                const profile=document.getElementById('expiryProfile');
+                if(profile && !profile.disabled && profile.querySelector('option[value="zigzag"]')) {
+                    profile.value='zigzag';
+                    profile.dispatchEvent(new Event('change',{bubbles:true}));
+                }
                 panel.scrollIntoView({behavior:'smooth',block:'center'});
                 return 'OK';
             })()
