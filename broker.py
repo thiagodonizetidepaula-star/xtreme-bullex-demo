@@ -458,7 +458,8 @@ class Broker:
                     asset.get('available') and asset.get('payout',0)>=self.min_payout):
                 continue
             self.market_quality=watch.engine.reason
-            try:self.order(watch.last_signal,1.0 if self.auto_trial else self.amount,60,symbol=symbol)
+            selected_direction=watch.last_signal
+            try:self.order(selected_direction,1.0 if self.auto_trial else self.amount,60,symbol=symbol)
             except ValueError as e:
                 self.auto=False;self.auto_trial=False
                 self.auto_stop_reason='Varredura DEMO bloqueada: '+str(e)
