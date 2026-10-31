@@ -1,5 +1,18 @@
 # Xtreme Tiger Pocket 5s
 
+## V19 — ZigZag/Fractal/Linha QUICK 5s (DEMO only)
+
+A new **ZIGZAG + FRACTAL + LINHA · 5s RÁPIDO** profile is available *alongside* the original 60-second/M1 profile in the same Android WebView and Render service. Do not confuse expiry (the option closes after 5 seconds) with chart timeframe (each real, completely observed candle is also five seconds).
+
+- Scans available regular and OTC assets using independently received, current DEMO quotes.
+- Buckets broker quote timestamps into real five-second candles, requiring at least two distinct seconds and sufficient within-candle coverage. Missing or too-sparse intervals discard the technical warmup; no artificial candles or forward-filled ticks.
+- Runs the same ZigZag 5/12/3-inspired confirmed pivot, two-right-bar Fractal 2, confirmed lower-high resistance, breakout BUY (two completed candles holding above the line), and SELL only under intact resistance.
+- Warmup requires **22 full 5-second candles (~110 seconds minimum)** rather than 22 M1 candles, but patterns may take much longer; no arbitrary frequency of orders is promised.
+- Broker-driven expiry is set to exactly **5 seconds** for this mode. Existing min payout, demo session checks, one unresolved order at a time, cooldown, risk stops and official result reconciliation apply. Initial automatic duration validation is limited to a demo amount of 1.
+- Other strategies, including original M1 trendline scanner and separate 3/5-second tick exhaustion, remain available and separate.
+
+**Risk:** Five-second price behavior is especially noisy and latency-sensitive; these ZigZag/Fractal settings are experimental and *not validated for profitable binary-options entries*. A broker confirmation of an order's expiry is not proof of a trading edge. The unofficial API may fail to stream some assets; a subscription request alone never counts as a verified feed. No trades on a real-money account are supported.
+
 ## V18 experimental trendline reversal confirmation (DEMO only)
 
 The existing **ZIGZAG + FRACTAL** OTC-wide scanner now uses **two confirmed descending red fractal highs** to draw a resistance line on the M1 chart (only real, completed candles). It can issue either:
