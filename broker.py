@@ -496,7 +496,7 @@ class Broker:
                     raise ValueError('Feed do ativo de varredura ausente ou atrasado.')
             elif not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
             asset=self.assets.get(target,{})
-            if not asset.get('available') or not target.endswith('_otc'):raise ValueError('Selecione um ativo OTC aberto para operar em DEMO.')
+            if not asset.get('available') or (symbol is None and not target.endswith('_otc')):raise ValueError('Ativo DEMO fechado ou indisponível para o modo escolhido.')
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
@@ -661,7 +661,7 @@ class Broker:
                 radar=Radar(ZigZagFractalTrend)
                 radar.sync(self.assets,vals[3])
                 if not radar.eligible:
-                    raise ValueError('Nenhum ativo OTC DEMO aberto com payout mínimo para varredura.')
+                    raise ValueError('Nenhum ativo DEMO aberto com payout mínimo para varredura.')
             elif isinstance(desired,str) and desired:
                 chosen=self.assets.get(desired,{})
                 if not chosen.get('available') or not desired.endswith('_otc'):
@@ -697,7 +697,7 @@ class Broker:
                 self.scan_last_verified_at=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log('VARREDURA DEMO ZigZag + Fractal + resistência: %d ativos OTC elegíveis; COMPRA por rompimento confirmado ou VENDA por topo confirmado abaixo da linha, 60s.'%len(radar.eligible))
+                self.log('VARREDURA DEMO ZigZag + Fractal + resistência: %d ativos elegíveis; COMPRA por rompimento confirmado ou VENDA por topo confirmado abaixo da linha, 60s.'%len(radar.eligible))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
