@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V15"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V16"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V15 DEMO: escolha RÁPIDA 3-45 segundos ou M5/M1 1-30 minutos. Prazos separados para Android."
+            text = "V16 DEMO: novo Último Suspiro em 3s e 5s, com contagem de ticks, esticada e confirmação de reação."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -520,7 +520,7 @@ class MainActivity : Activity() {
 
     private fun showSignalPanel() {
         showTiger()
-        status.text = "Conecte DEMO, escolha TIPO DE ANÁLISE e EXPIRAÇÃO. Agora 3, 5, 6, 7 e 10 segundos aparecem direto no modo RÁPIDA."
+        status.text = "Conecte DEMO e escolha RÁPIDA + 3s ou 5s. Use ÚLTIMO SUSPIRO para buscar esgotamento confirmado em ticks."
         tiger.evaluateJavascript("""
             (() => {
                 const panel=document.querySelector('.signal-console');
