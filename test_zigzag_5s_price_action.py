@@ -102,7 +102,8 @@ class Tests(unittest.TestCase):
     def test_buy_after_confirmed_price_action_breakout(self):
         e=ZigZagFractalTrend5s()
         e.bars.extend(bars(100.7,100.0))
-        with patch.object(ZigZagFractalTrend,'evaluate',return_value='call'):
+        with patch.object(ZigZagFractalTrend,'evaluate',return_value='call'), \
+             patch('zigzag_5s.candle_psychology',return_value={'ready':True,'reason':'Força confirmada'}):
             self.assertEqual(e.evaluate(NOW),'call')
         self.assertIn('rompeu estrutura',e.reason)
 
