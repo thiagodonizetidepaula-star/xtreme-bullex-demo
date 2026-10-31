@@ -30,7 +30,7 @@ jobs:
         run: python -m unittest -v test_broker test_market_radar test_server
       - name: Check JavaScript syntax
         run: node --check static/app.js
-      - name: Verify V11 single-asset M5 analysis and M1 60s DEMO order
+      - name: Verify V14 multi-duration DEMO quick and M5/M1 engine UI
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -39,10 +39,12 @@ jobs:
           assert all(html.count('id="'+i+'"')==1 for i in ids)
           assert 'id="call"' not in html and 'id="put"' not in html
           assert 'id="chart"' not in html and 'id="history"' not in html
-          assert '<option value="60" selected>1 minuto (M1)</option>' in html
+          assert '<option value="60" selected>1 minuto</option>' in html
           expiry_options=html.split('<select id="expiry">',1)[1].split('</select>',1)[0]
-          assert expiry_options.count('<option ') == 1
-          assert 'AUTOMÁTICO · M5 define, M1 entra' in html
+          assert expiry_options.count('<option ') == 20
+          assert all(('value="'+str(i)+'"') in expiry_options for i in (3,4,5,6,7,8,9,10,15,20,30,45,60,90,120,180,300,600,900,1800))
+          assert '1 hora · indisponível' in expiry_options and '4 horas · indisponível' in expiry_options
+          assert 'AUTOMÁTICO · seguir sinal do perfil' in html
           js=Path('static/app.js').read_text()
           assert "api('order-signal',req)" in js
           assert "s.long_signal_offer" in js
@@ -51,7 +53,7 @@ jobs:
           assert "filter_lateral:true" in js
           assert "setInterval(poll,750)" in js
           assert "api('reset-history',{confirm:true})" in js
-          print('PASS: V11 M5 analysis / M1 automatic 60s UI')
+          print('PASS: V14 DEMO 3 seconds to 30 minutes, quick and M5/M1 expiry choices')
           PY
       - name: Compile Python modules
         run: python -m py_compile broker.py m1_strategy.py market_radar.py server.py
