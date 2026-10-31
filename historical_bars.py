@@ -70,9 +70,12 @@ def _closed_ticks(rows,period,current_start):
         seconds={int(t) for t,_ in ticks}
         first=min(seconds)-start
         last=max(seconds)-start
-        enough=(len(seconds)>=18 and first<=5 and last>=53
-                if period==60 else len(seconds)>=2 and first<=2 and last>=3
-                and last-first>=2)
+        if period==120:
+            enough=(len(seconds)>=28 and first<=10 and last>=110 and last-first>=105)
+        elif period==60:
+            enough=(len(seconds)>=18 and first<=5 and last>=53)
+        else:
+            enough=(len(seconds)>=2 and first<=2 and last>=3 and last-first>=2)
         if not enough:
             continue
         prices=[p for _,p in ticks]
@@ -87,7 +90,7 @@ def extract_closed_history(raw,period,anchor,maxbars=90):
     anchor is the last independently received verified *live broker* timestamp;
     do not accept future candles or stale history without it.
     """
-    if period not in (5,60) or isinstance(raw,(str,bytes,dict)) or not isinstance(raw,(list,tuple)):
+    if period not in (5,60,120) or isinstance(raw,(str,bytes,dict)) or not isinstance(raw,(list,tuple)):
         return []
     anchor=timestamp(anchor)
     if anchor is None:
@@ -147,5 +150,5 @@ def merge_historical_bars(engine,history,anchor):
     engine.strength=None
     engine.reason=('Histórico real da corretora validado: %d candles de %s; '
                    'aguardando NOVO fechamento para emitir sinal'%
-                   (len(continuous),'5s' if period==5 else 'M1'))
+                   (len(continuous),{5:'5s',60:'M1',120:'M2'}[period]))
     return len(continuous)
