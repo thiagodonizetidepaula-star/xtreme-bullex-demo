@@ -7,6 +7,7 @@ Missing / sparse five-second windows clear the prior technical history.
 import math
 from collections import deque
 from zigzag_trendline import ZigZagFractalTrend
+from candle_psychology import candle_psychology
 
 
 class FiveSecondBars:
@@ -73,6 +74,7 @@ class ZigZagFractalTrend5s(ZigZagFractalTrend):
         self.collector=FiveSecondBars()
         self.bars=self.collector.bars
         self.reason='Aguardando 22 velas reais de 5 segundos, ZigZag/Fractal e resistência'
+        self.candle_quality=None
 
     def evaluate(self,now):
         """Price Action: a fresh finished 5s candle must BREAK candle structure.
@@ -85,6 +87,11 @@ class ZigZagFractalTrend5s(ZigZagFractalTrend):
         """
         old_buy=self.last_buy_line
         old_sell=self.last_high_t
+        # Diagnostics for last closed candle even if no ZigZag pivot is found.
+        bars_before=list(self.bars)
+        self.candle_quality=(candle_psychology(bars_before,
+            'call' if bars_before[-1]['close']>bars_before[-1]['open'] else 'put')
+            if len(bars_before)>=12 else None)
         result=super().evaluate(now)
         if result not in ('call','put'):
             return None
@@ -113,6 +120,20 @@ class ZigZagFractalTrend5s(ZigZagFractalTrend):
             if self.trendline:
                 self.trendline['state']='aguardando_rompimento_price_action'
             return None
-        self.reason += '; Price Action: candle 5s fechado rompeu estrutura anterior'
+        # Candle-psychology is an additional hard veto, never a substitute
+        # for ZigZag, fractals, trendline and closed-candle PA confirmation.
+        quality=candle_psychology(bars,result)
+        self.candle_quality=quality
+        if not quality['ready']:
+            self.last_buy_line=old_buy
+            self.last_high_t=old_sell
+            self.direction=None
+            self.signal_at=0.
+            self.strength=None
+            self.reason='NÃO OPERAR · '+quality['reason']
+            if self.trendline:
+                self.trendline['state']='bloqueado_filtro_psicologia'
+            return None
+        self.reason += '; '+quality['reason']
         return result
 
