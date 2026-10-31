@@ -517,7 +517,7 @@ class Broker:
             return
 
     def try_scan_order(self,candidates):
-        """One 5s/60s DEMO BUY/SELL only on new confirmed closed-candle signals."""
+        """Only fresh, newly confirmed DEMO BUY/SELL signals with selected expiry."""
         now=time.time()
         if (not candidates or self.pending or not self.demo_confirmed or
             now-self.last_order<10 or
@@ -530,6 +530,13 @@ class Broker:
                     asset.get('available') and asset.get('payout',0)>=self.min_payout):
                 continue
             self.market_quality=watch.engine.reason
+            # A three-second option must never be submitted from a late
+            # 5-second breakout signal or an aged feed after network delay.
+            if self.auto_expiry==3 and (now-watch.signal_received>1.0 or
+                now-watch.received>1.0):
+                watch.last_signal=None;watch.signal_received=0
+                self.log('3s DEMO: sinal atrasado >1s; entrada descartada, sem ordem')
+                continue
             selected_direction=watch.last_signal
             try:self.order(selected_direction,1.0 if self.auto_trial else self.amount,self.auto_expiry,symbol=symbol)
             except ValueError as e:
@@ -702,10 +709,10 @@ class Broker:
             analysis_timeframe=c.get('analysis_timeframe',5 if expiry==5 else 60)
             if type(analysis_timeframe) is not int or analysis_timeframe not in (5,60,120):
                 raise ValueError('Timeframe de análise inválido: escolha 5s, M1 ou M2.')
-            allowed={5:(5,),60:(60,),120:(60,120,180)}
+            allowed={5:(3,5,60),60:(60,),120:(60,120,180)}
             if strategy=='zigzag_fractal' and (c.get('scan_all') is not True or
                 expiry not in allowed[analysis_timeframe]):
-                raise ValueError('ZigZag/Fractal: candles M2 permitem expiração M1, M2 ou M3; os modos anteriores mantêm prazos próprios.')
+                raise ValueError('ZigZag/Fractal: candles 5s aceitam expiração 3s, 5s ou 60s; M1 aceita 60s; M2 aceita 60s, 120s ou 180s.')
             fast_strategy=c.get('fast_strategy','trend')
             if fast_strategy not in ('trend','exhaustion') or (fast_strategy=='exhaustion' and expiry not in EXHAUSTION_EXPIRIES):
                 raise ValueError('Motor de segundos inválido para a expiração selecionada.')
@@ -781,7 +788,7 @@ class Broker:
                 self.history_unmatched=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log('VARREDURA DEMO ZigZag + Fractal + resistência: %d ativos elegíveis, candles %s; BUY no rompimento confirmado / SELL com linha intacta; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2'}[self.scan_timeframe],expiry))
+                self.log('VARREDURA DEMO ZigZag + Fractal + linha: %d ativos, análise %s, expiração %ds; 5s exige fechamento com rompimento Price Action.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2'}[self.scan_timeframe],expiry))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
