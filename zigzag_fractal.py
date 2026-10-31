@@ -56,49 +56,61 @@ class ZigZagFractalSell:
         if any(bars[i]['t']-bars[i-1]['t']!=60 for i in range(1,len(bars))):
             self.reason='Lacuna em M1: sem entrada até reconstruir velas reais'
             return None
-        peak_idx=len(bars)-3  # exactly two closed bars to the right
-        peak=bars[peak_idx]
-        if self.last_high_t==peak['t']:
-            self.reason='Fractal já analisado: aguardar outro topo'
-            return None
-        # Red Fractal 2: strictly higher than two left and two right bars.
-        # ZigZag depth 5 additionally requires five lower preceding highs.
-        if not all(peak['high']>b['high'] for b in
-                   bars[peak_idx-self.depth:peak_idx]+bars[peak_idx+1:peak_idx+3]):
-            self.reason='Aguardando fractal vermelho confirmado e topo ZigZag'
-            return None
-        # A completed rising leg must start at an earlier *confirmed* trough.
-        # Backstep=3 prevents treating adjacent candles as a full leg.
-        trough=None
-        for i in range(peak_idx-self.backstep, self.depth-1, -1):
-            low=bars[i]
-            neighbors=bars[i-self.depth:i]+bars[i+1:i+3]
-            if len(neighbors)!=self.depth+2:
-                continue
-            if low['low']>=min(b['low'] for b in neighbors):
-                continue
-            if min(b['low'] for b in bars[i:peak_idx])<low['low']:
-                continue
-            if max(b['high'] for b in bars[i:peak_idx])>=peak['high']:
-                continue
-            trough=low
-            break
-        if trough is None:
-            self.reason='Fractal vermelho visto, mas perninha de alta ZigZag não confirmada'
-            return None
+        # Fractal 2 appears only after two *closed* right candles. A
+        # ZigZag leg may need a further candle or two to finish its reversal;
+        # retain the confirmed pivot for at most five right-side candles.
+        # Never use a pivot that a later higher high has already invalidated.
+        saw_fractal=False
+        saw_leg=False
         point=self.price_point(bars)
         if not point:
             self.reason='Precisão de preço inválida'
             return None
-        swing=peak['high']-trough['low']
-        reverse=peak['high']-bars[-1]['close']
-        if (swing<self.deviation*point or reverse<self.deviation*point or
-            bars[-1]['close']>=bars[-2]['close']):
-            self.reason='Fractal vermelho visto; aguardando fechamento e recuo da perninha'
-            return None
-        self.last_high_t=peak['t']
-        self.direction='put'
-        self.signal_at=now
-        self.strength=round(min(100,100*reverse/swing)) if swing>0 else None
-        self.reason='VENDA DEMO: ZigZag 5/12/3 fechou alta e Fractal 2 vermelho confirmou em M1'
-        return 'put'
+        for peak_idx in range(len(bars)-3,max(self.depth-1,len(bars)-7),-1):
+            peak=bars[peak_idx]
+            if self.last_high_t==peak['t']:
+                continue
+            left=bars[peak_idx-self.depth:peak_idx]
+            right=bars[peak_idx+1:peak_idx+3]
+            if len(left)!=self.depth or len(right)!=2:
+                continue
+            if not all(peak['high']>b['high'] for b in left+right):
+                continue
+            if any(b['high']>=peak['high'] for b in bars[peak_idx+3:]):
+                continue
+            saw_fractal=True
+            trough=None
+            for i in range(peak_idx-self.backstep,self.depth-1,-1):
+                low=bars[i]
+                neighbors=bars[i-self.depth:i]+bars[i+1:i+3]
+                if len(neighbors)!=self.depth+2:
+                    continue
+                if low['low']>=min(b['low'] for b in neighbors):
+                    continue
+                if min(b['low'] for b in bars[i:peak_idx])<low['low']:
+                    continue
+                if max(b['high'] for b in bars[i:peak_idx])>=peak['high']:
+                    continue
+                trough=low
+                break
+            if trough is None:
+                continue
+            swing=peak['high']-trough['low']
+            if swing<self.deviation*point:
+                continue
+            saw_leg=True
+            reverse=peak['high']-bars[-1]['close']
+            if reverse<self.deviation*point or bars[-1]['close']>=bars[-2]['close']:
+                continue
+            self.last_high_t=peak['t']
+            self.direction='put'
+            self.signal_at=now
+            self.strength=round(min(100,100*reverse/swing)) if swing>0 else None
+            self.reason='VENDA DEMO: ZigZag 5/12/3 fechou alta e Fractal 2 vermelho confirmou em M1'
+            return 'put'
+        self.reason=('Fractal vermelho confirmado; aguardando recuo e fechamento ZigZag'
+                     if saw_leg else
+                     'Fractal vermelho visto, mas perninha de alta ZigZag não confirmada'
+                     if saw_fractal else
+                     'Aguardando fractal vermelho confirmado e topo ZigZag')
+        return None
