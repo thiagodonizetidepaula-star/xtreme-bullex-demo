@@ -40,19 +40,19 @@ jobs:
           name: xtreme-tiger-android-experimental-debug
           path: android-experimental/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 3
-      - name: Publish direct V13 APK download on experimental branch only
+      - name: Publish direct V14 APK download on experimental branch only
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           apk=app/build/outputs/apk/debug/app-debug.apk
-          target="downloads/Xtreme-Tiger-Android-V13-Demo.apk"
+          target="downloads/Xtreme-Tiger-Android-V14-Demo.apk"
           branch="experiment/android-pocket-demo-assist"
           sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/$target?ref=$branch" --jq '.sha' 2>/dev/null || true)
           if [ -n "$sha" ]; then
-            base64 -w 0 "$apk" | jq -R -s --arg branch "$branch" --arg sha "$sha" --arg message "Update experimental Android V13 APK for mobile downloads" '{branch:$branch,sha:$sha,message:$message,content:.}' | gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$target" --input -
+            base64 -w 0 "$apk" | jq -R -s --arg branch "$branch" --arg sha "$sha" --arg message "Update experimental Android V14 APK for mobile downloads" '{branch:$branch,sha:$sha,message:$message,content:.}' | gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$target" --input -
           else
-            base64 -w 0 "$apk" | jq -R -s --arg branch "$branch" --arg message "Add experimental Android V13 APK for mobile downloads" '{branch:$branch,message:$message,content:.}' | gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$target" --input -
+            base64 -w 0 "$apk" | jq -R -s --arg branch "$branch" --arg message "Add experimental Android V14 APK for mobile downloads" '{branch:$branch,message:$message,content:.}' | gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/$target" --input -
           fi
           echo "Experimental direct URL: https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$branch/$target"
