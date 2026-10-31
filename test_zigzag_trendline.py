@@ -103,4 +103,27 @@ class TrendlineTests(unittest.TestCase):
             self.assertEqual(orders[0]['isDemo'],1)
             self.assertEqual(b.pending['asset'],'A_otc')
 
+
+    def test_open_non_otc_asset_is_scanned_only_with_real_demo_quotes(self):
+        with patch('broker.time.time',return_value=BASE):
+            b=Broker({'isDemo':1})
+            b.ws=FakeWS();b.connected=True;b.demo_confirmed=True;b.balance=100
+            b.assets={'AAPL':{'symbol':'AAPL','name':'Apple','payout':90,'available':True},
+                      'A_otc':{'symbol':'A_otc','name':'A OTC','payout':90,'available':True}}
+            b.start_auto({'strategy':'zigzag_fractal','scan_all':True,'expiry':60,'amount':1,
+                          'stop_win':20,'stop_loss':20,'limit':3,'min_payout':88,'pause_after':20})
+            self.assertIn('AAPL',b.radar.eligible)
+            self.assertFalse(b.pending)
+            # A real, fresh stream is still mandatory before any non-OTC DEMO order.
+            watch=b.radar.watches['AAPL']
+            watch.engine.ingest=lambda ts,p,arrival:'call'
+            b.event('updateStream',[['AAPL',BASE-300,100.1]])
+            self.assertIsNone(b.pending)
+            b.event('updateStream',[['AAPL',BASE,100.2]])
+            orders=[json.loads(msg[2:])[1] for msg in b.ws.sent
+                    if msg.startswith('42["openOrder"')]
+            self.assertEqual(len(orders),1)
+            self.assertEqual(orders[0]['asset'],'AAPL')
+            self.assertEqual(orders[0]['isDemo'],1)
+
 if __name__=='__main__': unittest.main()
