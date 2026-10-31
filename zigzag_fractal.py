@@ -14,6 +14,8 @@ class ZigZagFractalSell:
     deviation=12
     backstep=3
     warmup_bars=15
+    bar_seconds=60
+    timeframe='M1'
 
     def __init__(self):
         self.collector=MinuteSignals()
@@ -53,8 +55,8 @@ class ZigZagFractalSell:
         if len(bars)<self.warmup_bars:
             self.reason='ZigZag/Fractal: %d/%d velas M1 fechadas e válidas'%(len(bars),self.warmup_bars)
             return None
-        if any(bars[i]['t']-bars[i-1]['t']!=60 for i in range(1,len(bars))):
-            self.reason='Lacuna em M1: sem entrada até reconstruir velas reais'
+        if any(bars[i]['t']-bars[i-1]['t']!=self.bar_seconds for i in range(1,len(bars))):
+            self.reason='Lacuna em %s: sem entrada até reconstruir velas reais'%self.timeframe
             return None
         # Fractal 2 appears only after two *closed* right candles. A
         # ZigZag leg may need a further candle or two to finish its reversal;
@@ -106,7 +108,7 @@ class ZigZagFractalSell:
             self.direction='put'
             self.signal_at=now
             self.strength=round(min(100,100*reverse/swing)) if swing>0 else None
-            self.reason='VENDA DEMO: ZigZag 5/12/3 fechou alta e Fractal 2 vermelho confirmou em M1'
+            self.reason='VENDA DEMO: ZigZag 5/12/3 fechou alta e Fractal 2 vermelho confirmou em '+self.timeframe
             return 'put'
         self.reason=('Fractal vermelho confirmado; aguardando recuo e fechamento ZigZag'
                      if saw_leg else
