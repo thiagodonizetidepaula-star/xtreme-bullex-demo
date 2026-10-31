@@ -8,6 +8,8 @@ on:
       - 'tick_exhaustion.py'
       - 'test_tick_exhaustion.py'
       - 'market_radar.py'
+      - 'zigzag_fractal.py'
+      - 'test_zigzag_fractal.py'
       - 'test_market_radar.py'
       - 'test_server.py'
       - 'server.py'
@@ -29,7 +31,7 @@ jobs:
       - name: Install test dependencies
         run: pip install websocket-client==1.8.0
       - name: Run unit tests
-        run: python -m unittest -v test_broker test_market_radar test_server test_tick_exhaustion
+        run: python -m unittest -v test_broker test_market_radar test_zigzag_fractal test_server test_tick_exhaustion
       - name: Check JavaScript syntax
         run: node --check static/app.js
       - name: Verify V16 tick exhaustion manual/auto UX for 3s and 5s
@@ -71,4 +73,4 @@ jobs:
           print('PASS: V16 3s/5s tick stretch reversal and fallback trend UI, 60s+ M5/M1 untouched')
           PY
       - name: Compile Python modules
-        run: python -m py_compile broker.py m1_strategy.py tick_exhaustion.py market_radar.py server.py
+        run: python -m py_compile broker.py m1_strategy.py tick_exhaustion.py market_radar.py zigzag_fractal.py server.py
