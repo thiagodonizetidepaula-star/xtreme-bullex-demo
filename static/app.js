@@ -62,9 +62,11 @@ $('startSignalAuto').onclick=async()=>{
  const ids=['amount','min_payout','stop_win','stop_loss','limit'];
  for(const id of ids){if(!$(id).reportValidity())return}
  const symbol=$('asset').value;
- if(!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
+ const scanAll=$('expiryProfile').value==='zigzag';
+ if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
  const params={
-  symbol,expiry:Number($('expiry').value),fast_strategy:selectedQuickStrategy(),
+  symbol:scanAll?'':symbol,strategy:scanAll?'zigzag_fractal':'standard',scan_all:scanAll,
+  expiry:Number($('expiry').value),fast_strategy:selectedQuickStrategy(),
   amount:Number($('amount').value),
   stop_win:Number($('stop_win').value),
   stop_loss:Number($('stop_loss').value),
@@ -80,7 +82,7 @@ $('startSignalAuto').onclick=async()=>{
   snapshot=await api('status');
   render();
   $('autoSignalStatus').textContent=snapshot.auto?
-   'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.':
+   (scanAll?'VARREDURA OTC ATIVA: aguardando fechamento ZigZag e fractal vermelho confirmado.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
    'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
  }catch(e){
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
@@ -108,6 +110,10 @@ $('resolvePending').onclick=async()=>{
  finally{busy=false;$('resolvePending').disabled=true}
 };
 $('executeSignal').onclick=async()=>{
+ if($('expiryProfile').value==='zigzag'){
+  $('offerStatus').textContent='ZigZag/Fractal em varredura é exclusivo do automático DEMO; não usar o sinal M5 antigo.';
+  return;
+ }
  const offer=Number($('expiry').value)>=30?snapshot.long_signal_offer:snapshot.signal_offer;
  if(busy||!offer?.ready||snapshot.auto||snapshot.pending?.id)return;
  if(!$('amount').reportValidity()||!$('min_payout').reportValidity())return;
@@ -134,9 +140,10 @@ const expiryChoices={
        [7,'7 segundos'],[8,'8 segundos'],[9,'9 segundos'],[10,'10 segundos'],
        [15,'15 segundos'],[20,'20 segundos'],[30,'30 segundos'],[45,'45 segundos']],
  m5:[[60,'1 minuto'],[90,'1min 30s'],[120,'2 minutos'],[180,'3 minutos'],
-     [300,'5 minutos'],[600,'10 minutos'],[900,'15 minutos'],[1800,'30 minutos']]
+     [300,'5 minutos'],[600,'10 minutos'],[900,'15 minutos'],[1800,'30 minutos']],
+ zigzag:[[60,'1 minuto · VENDA após Fractal vermelho']]
 };
-const rememberedExpiry={fast:5,m5:60};
+const rememberedExpiry={fast:5,m5:60,zigzag:60};
 function populateExpiry(preferred=null){
  const profile=$('expiryProfile').value;
  const values=expiryChoices[profile];
@@ -182,8 +189,9 @@ $('resetHistory').onclick=async()=>{
 function render(){
  const s=snapshot||{};
  // Reopen the same active strategy even if the Android WebView refreshed.
- if(s.auto&&Number(s.auto_expiry)!==Number($('expiry').value)){
-  $('expiryProfile').value=Number(s.auto_expiry)>=60?'m5':'fast';
+ if(s.auto&&(Number(s.auto_expiry)!==Number($('expiry').value)||
+              (s.auto_strategy==='zigzag_fractal'&&$('expiryProfile').value!=='zigzag'))){
+  $('expiryProfile').value=s.auto_strategy==='zigzag_fractal'?'zigzag':Number(s.auto_expiry)>=60?'m5':'fast';
   populateExpiry(Number(s.auto_expiry));
  }
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
@@ -199,15 +207,22 @@ function render(){
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
  const expiry=Number($('expiry').value),isM1=expiry>=60;
+ const isZigzag=$('expiryProfile').value==='zigzag';
+ const radar=s.radar||{};
  const exhaustionActive=[3,5].includes(expiry)&&selectedQuickStrategy()==='exhaustion';
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
- const offer=(isM1?s.long_signal_offer:exhaustionActive?
+ const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
- $('strategyProfile').textContent=isM1?
-  'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
+ $('strategyProfile').textContent=isZigzag?
+  'VARREDURA OTC · ZigZag 5/12/3 + Fractal 2 vermelho · VENDA 60s':
+  isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
- $('warmupStatus').textContent=isM1?
+ $('warmupStatus').textContent=isZigzag?
+  ('ATIVOS OTC: '+(radar.eligible||0)+' elegíveis · '+(radar.subscribed||0)+' inscritos · '+
+   (radar.receiving||0)+' com cotações atuais · '+(radar.warmed||0)+' com 15+ velas M1 · '+
+   (radar.last_reason||'Aguardando fechamento de perninha e confirmação de fractal vermelho. O indicador é uma aproximação experimental; sem feed real não há ordem.')):
+  isM1?
   ('M5: '+(s.m5_candles||0)+'/6 velas completas · M1: '+(s.m1_candles||0)+'/35 minutos válidos'+
    ((s.m1_rejected||0)>0?' · Minutos rejeitados: '+s.m1_rejected:'')+
    ' · '+(s.m1_status||'Aguardando cotações')+
@@ -229,7 +244,8 @@ function render(){
   else if(s.symbol&&assets.some(a=>a.symbol===s.symbol))$('asset').value=s.symbol;
  }
  const currentAsset=(s.assets||[]).find(a=>a.symbol===s.symbol);
- $('offerPair').textContent=currentAsset?.name||s.symbol||'Aguardando ativo OTC';
+ $('offerPair').textContent=isZigzag?(radar.last_symbol||'TODOS OS ATIVOS OTC ELEGÍVEIS'):
+  currentAsset?.name||s.symbol||'Aguardando ativo OTC';
  $('offerExpiry').textContent=expiry>=60?Math.floor(expiry/60)+'min'+(expiry%60?' '+(expiry%60)+'s':''):expiry+'s';
  const strength=Number.isFinite(offer.strength)?Math.max(0,Math.min(100,offer.strength)):null;
  $('signalStrength').textContent=strength===null?'—':strength+'%';
@@ -253,7 +269,13 @@ function render(){
  $('executeSignal').textContent=ready?'OPERAR '+direction+' • '+expiry+'s':'AGUARDANDO SINAL';
  $('startSignalAuto').disabled=busy||s.auto||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
  $('stopSignalAuto').disabled=busy||!s.auto;
- if(s.auto){
+ if(s.auto&&s.auto_strategy==='zigzag_fractal'){
+  $('autoSignalStatus').textContent='VARREDURA OTC ATIVA • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
+   ' operações · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+
+   (s.pending?.id?'aguardando resultado oficial':s.auto_waiting_prices?'aguardando feeds reais':
+    'esperando ZigZag fechar e Fractal 2 vermelho confirmar')+
+   ' · somente VENDA 60s DEMO'+(s.auto_trial?' · primeiro teste valor 1':'');
+ }else if(s.auto){
   $('autoSignalStatus').textContent='BOT ATIVO • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
    ' operações • '+(s.auto_waiting_prices?'aguardando preços atuais':
       s.pending?.id?'aguardando resultado da corretora':
@@ -278,7 +300,13 @@ function render(){
  }
  if(offer.cooldown>0)$('offerStatus').textContent='Pausa: '+offer.cooldown.toFixed(1)+'s até próxima entrada possível.';
  if(s.pending?.id){$('offerStatus').textContent='Ordem pendente de resultado oficial; outra entrada bloqueada.'}
- if(s.auto){
+ if(s.auto&&s.auto_strategy==='zigzag_fractal'){
+  $('offerStatus').textContent='VARREDURA DEMO: '+(radar.subscribed||0)+' ativos inscritos, '+
+   (radar.receiving||0)+' recebendo cotações · '+
+   (s.pending?.id?'ordem pendente de resultado oficial':
+    s.auto_waiting_prices?'SEM FEED ATUAL · não operar':
+    'aguardando topo ZigZag encerrado + Fractal vermelho confirmado · sem entrada antecipada');
+ }else if(s.auto){
   const blockers=s.pending?.id?'Aguardando resultado oficial da corretora':
     s.auto_waiting_prices?'COTAÇÃO ATRASADA: aguardando feed real':
     (s.auto_expiry>=60&&(s.m5_candles||0)<6)?'AGUARDANDO HISTÓRICO M5 REAL: '+(s.m5_candles||0)+'/6 velas completas':
@@ -297,7 +325,7 @@ function render(){
  $('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;
  $('resetHistory').disabled=busy||!!s.auto||!!s.pending?.id;
  $('connect').disabled=!!s.connecting;
- $('subscribe').disabled=!s.connected||busy||!!s.pending?.id;
+ $('subscribe').disabled=!s.connected||busy||!!s.pending?.id||!!s.auto;
  $('events').replaceChildren();
  for(const e of (s.events||[]).slice().reverse()){
   const li=document.createElement('li');
