@@ -3,7 +3,7 @@ import unittest
 from market_radar import Radar
 
 class RadarTests(unittest.TestCase):
-    def test_strict_payout_and_available_otc_only(self):
+    def test_strict_payout_and_available_regular_plus_otc(self):
         a={
          "EURUSD_otc":{"symbol":"EURUSD_otc","name":"EUR/USD OTC","available":True,"payout":88},
          "GBPUSD_otc":{"symbol":"GBPUSD_otc","name":"GBP/USD OTC","available":True,"payout":87},
@@ -11,8 +11,8 @@ class RadarTests(unittest.TestCase):
          "EURUSD":{"symbol":"EURUSD","name":"EUR/USD","available":True,"payout":91},
          "BTCUSD_otc":{"symbol":"BTCUSD_otc","name":"BTC OTC","available":True,"payout":90},
         }
-        r=Radar();self.assertEqual(r.sync(a),["BTCUSD_otc","EURUSD_otc"])
-        self.assertEqual(r.status(100)["eligible"],2)
+        r=Radar();self.assertEqual(r.sync(a),["BTCUSD_otc","EURUSD","EURUSD_otc"])
+        self.assertEqual(r.status(100)["eligible"],3)
         self.assertEqual(r.status(100)["receiving"],0)
     def test_one_symbol_cannot_reuse_others_quotes(self):
         a={s:{"symbol":s,"name":s,"available":True,"payout":90}
