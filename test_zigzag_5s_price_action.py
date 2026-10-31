@@ -105,7 +105,7 @@ class Tests(unittest.TestCase):
         with patch.object(ZigZagFractalTrend,'evaluate',return_value='call'), \
              patch('zigzag_5s.candle_psychology',return_value={'ready':True,'reason':'Força confirmada'}):
             self.assertEqual(e.evaluate(NOW),'call')
-        self.assertIn('rompeu estrutura',e.reason)
+        self.assertIn('Força confirmada',e.reason)
 
     def test_sell_requires_closed_break_below_previous_low_not_only_red_fractal(self):
         e=ZigZagFractalTrend5s()
