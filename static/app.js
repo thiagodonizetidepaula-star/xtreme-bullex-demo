@@ -219,7 +219,7 @@ function render(){
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
  $('warmupStatus').textContent=isZigzag?
-  ('ATIVOS OTC: '+(radar.eligible||0)+' elegíveis · '+(radar.subscribed||0)+' inscritos · '+
+  ('ATIVOS ABERTOS: '+(radar.eligible||0)+' elegíveis · '+(radar.subscribed||0)+' inscritos · '+
    (radar.receiving||0)+' com cotações atuais · '+(radar.warmed||0)+' com 22+ velas M1 · '+
    (radar.last_reason||'Aguardando ZigZag + fractais confirmados e resistência calculada de dois topos. Sem feed real, não há ordem.')):
   isM1?
@@ -244,7 +244,7 @@ function render(){
   else if(s.symbol&&assets.some(a=>a.symbol===s.symbol))$('asset').value=s.symbol;
  }
  const currentAsset=(s.assets||[]).find(a=>a.symbol===s.symbol);
- $('offerPair').textContent=isZigzag?(radar.last_symbol||'TODOS OS ATIVOS OTC ELEGÍVEIS'):
+ $('offerPair').textContent=isZigzag?(radar.last_symbol||'TODOS OS ATIVOS ABERTOS ELEGÍVEIS'):
   currentAsset?.name||s.symbol||'Aguardando ativo OTC';
  $('offerExpiry').textContent=expiry>=60?Math.floor(expiry/60)+'min'+(expiry%60?' '+(expiry%60)+'s':''):expiry+'s';
  const strength=Number.isFinite(offer.strength)?Math.max(0,Math.min(100,offer.strength)):null;
