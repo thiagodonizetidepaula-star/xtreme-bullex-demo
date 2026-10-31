@@ -62,10 +62,11 @@ $('startSignalAuto').onclick=async()=>{
  const ids=['amount','min_payout','stop_win','stop_loss','limit'];
  for(const id of ids){if(!$(id).reportValidity())return}
  const symbol=$('asset').value;
- const scanAll=['zigzag','zigzag_fast'].includes($('expiryProfile').value);
+ const scanAll=['zigzag','zigzag_fast','zigzag_m2'].includes($('expiryProfile').value);
  if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
  const params={
   symbol:scanAll?'':symbol,strategy:scanAll?'zigzag_fractal':'standard',scan_all:scanAll,
+   analysis_timeframe:scanAll?($('expiryProfile').value==='zigzag_m2'?120:$('expiryProfile').value==='zigzag_fast'?5:60):60,
   expiry:Number($('expiry').value),fast_strategy:selectedQuickStrategy(),
   amount:Number($('amount').value),
   stop_win:Number($('stop_win').value),
@@ -110,7 +111,7 @@ $('resolvePending').onclick=async()=>{
  finally{busy=false;$('resolvePending').disabled=true}
 };
 $('executeSignal').onclick=async()=>{
- if(['zigzag','zigzag_fast'].includes($('expiryProfile').value)){
+ if(['zigzag','zigzag_fast','zigzag_m2'].includes($('expiryProfile').value)){
   $('offerStatus').textContent='ZigZag/Fractal em varredura é exclusivo do automático DEMO; não usar o sinal M5 antigo.';
   return;
  }
@@ -142,9 +143,10 @@ const expiryChoices={
  m5:[[60,'1 minuto'],[90,'1min 30s'],[120,'2 minutos'],[180,'3 minutos'],
      [300,'5 minutos'],[600,'10 minutos'],[900,'15 minutos'],[1800,'30 minutos']],
  zigzag:[[60,'1 minuto · BUY/SELL após confirmação']],
- zigzag_fast:[[5,'5 segundos · BUY/SELL após confirmação']]
+ zigzag_fast:[[5,'5 segundos · BUY/SELL após confirmação']],
+ zigzag_m2:[[60,'M1 · expiração 1 minuto'],[120,'M2 · expiração 2 minutos'],[180,'M3 · expiração 3 minutos']]
 };
-const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5};
+const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120};
 function populateExpiry(preferred=null){
  const profile=$('expiryProfile').value;
  const values=expiryChoices[profile];
@@ -168,7 +170,7 @@ $('expiryProfile').onchange=()=>{
 $('fastStrategy').onchange=()=>render();
 function selectedQuickStrategy(){
  const n=Number($('expiry').value);
- return (['zigzag','zigzag_fast'].includes($('expiryProfile').value))?'trend':((n===3||n===5)&&$('fastStrategy').value==='exhaustion')?'exhaustion':'trend';
+ return (['zigzag','zigzag_fast','zigzag_m2'].includes($('expiryProfile').value))?'trend':((n===3||n===5)&&$('fastStrategy').value==='exhaustion')?'exhaustion':'trend';
 }
 $('expiry').onchange=()=>{
  rememberedExpiry[$('expiryProfile').value]=Number($('expiry').value);
@@ -191,8 +193,8 @@ function render(){
  const s=snapshot||{};
  // Reopen the same active strategy even if the Android WebView refreshed.
  if(s.auto&&(Number(s.auto_expiry)!==Number($('expiry').value)||
-              (s.auto_strategy==='zigzag_fractal'&&!['zigzag','zigzag_fast'].includes($('expiryProfile').value)))){
-  $('expiryProfile').value=s.auto_strategy==='zigzag_fractal'?(s.auto_expiry===5?'zigzag_fast':'zigzag'):Number(s.auto_expiry)>=60?'m5':'fast';
+              (s.auto_strategy==='zigzag_fractal'&&$('expiryProfile').value!==({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag')))){
+  $('expiryProfile').value=s.auto_strategy==='zigzag_fractal'?({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag'):Number(s.auto_expiry)>=60?'m5':'fast';
   populateExpiry(Number(s.auto_expiry));
  }
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
@@ -208,21 +210,23 @@ function render(){
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
  const expiry=Number($('expiry').value),isM1=expiry>=60;
- const isZigzag=['zigzag','zigzag_fast'].includes($('expiryProfile').value);
+ const isZigzag=['zigzag','zigzag_fast','zigzag_m2'].includes($('expiryProfile').value);
  $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
  const radar=s.radar||{};
+ const chartTf=radar.candle_seconds||($('expiryProfile').value==='zigzag_m2'?120:expiry===5?5:60);
+ const chartTfLabel={5:'5s',60:'M1',120:'M2'}[chartTf]||'M1';
  const exhaustionActive=[3,5].includes(expiry)&&selectedQuickStrategy()==='exhaustion';
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
  const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
  $('strategyProfile').textContent=isZigzag?
-  'VARREDURA · ZigZag + Fractal 2 + resistência · BUY/SELL '+(expiry===5?'5s':'60s'):
+  'VARREDURA · ZigZag + Fractal 2 + Linha · gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
   isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
   'PERFIL RÁPIDO · cruzamento e continuação em ticks';
  $('warmupStatus').textContent=isZigzag?
   ('ATIVOS ABERTOS: '+(radar.eligible||0)+' elegíveis · '+(radar.subscribed||0)+' inscritos · '+
-   (radar.receiving||0)+' com cotações atuais · '+(radar.history_loaded_assets||0)+' com histórico real · '+(radar.warmed||0)+' prontos para sinais em '+(expiry===5?'5s':'M1')+' · '+
+   (radar.receiving||0)+' com cotações atuais · '+(radar.history_loaded_assets||0)+' com histórico real · '+(radar.warmed||0)+' prontos para sinais em '+chartTfLabel+' · '+
    (radar.last_reason||'Aguardando ZigZag + fractais confirmados e resistência calculada de dois topos. Sem feed real, não há ordem.')):
   isM1?
   ('M5: '+(s.m5_candles||0)+'/6 velas completas · M1: '+(s.m1_candles||0)+'/35 minutos válidos'+
@@ -275,7 +279,7 @@ function render(){
   $('autoSignalStatus').textContent='VARREDURA OTC ATIVA • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
    ' operações · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+
    (s.pending?.id?'aguardando resultado oficial':s.auto_waiting_prices?'aguardando feeds reais':
-    'esperando linha de tendência + confirmação ZigZag/Fractal em '+(s.auto_expiry===5?'5s':'M1'))+
+    'esperando linha de tendência + confirmação ZigZag/Fractal em '+({5:'5s',60:'M1',120:'M2'}[s.scan_timeframe]||'M1'))+
    ' · BUY/SELL '+s.auto_expiry+'s DEMO'+(s.auto_trial?' · primeiro teste valor 1':'');
  }else if(s.auto){
   $('autoSignalStatus').textContent='BOT ATIVO • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
@@ -307,7 +311,7 @@ function render(){
    (radar.receiving||0)+' recebendo cotações · '+
    (s.pending?.id?'ordem pendente de resultado oficial':
     s.auto_waiting_prices?'SEM FEED ATUAL · não operar':
-    'aguardando SELL com linha intacta ou BUY após 2 fechamentos '+(s.auto_expiry===5?'5s':'M1')+' acima da resistência · sem entrada antecipada');
+    'aguardando SELL com linha intacta ou BUY após 2 fechamentos '+chartTfLabel+' acima da resistência · sem entrada antecipada');
  }else if(s.auto){
   const blockers=s.pending?.id?'Aguardando resultado oficial da corretora':
     s.auto_waiting_prices?'COTAÇÃO ATRASADA: aguardando feed real':
@@ -343,7 +347,7 @@ function drawTrendlineChart(radar){
  const line=series.trendline||null;
  $('trendlineSymbol').textContent=series.symbol||'Aguardando ativo OTC real';
  $('trendlineDiagnostic').textContent=!bars.length?
-  'Aguardando velas reais '+(series.candle_seconds===5?'5s':'M1')+', fechadas e sem lacunas. Nenhum preço artificial é utilizado.':
+  'Aguardando velas reais '+({5:'5s',60:'M1',120:'M2'}[series.candle_seconds]||'M1')+', fechadas e sem lacunas. Nenhum preço artificial é utilizado.':
   line?((line.state==='rompimento_confirmado_compra'?'COMPRA CONFIRMADA':'Estado: '+line.state)+
     ' · Resistência projetada: '+Number(line.projected_now).toPrecision(7)+
     ' · Último fechamento: '+Number(line.last_close).toPrecision(7)+
@@ -356,7 +360,7 @@ function drawTrendlineChart(radar){
  const ctx=canvas.getContext('2d');if(!ctx)return;
  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);
  ctx.fillStyle='#111c24';ctx.fillRect(0,0,w,h);
- if(bars.length<3){ctx.fillStyle='#96a8ad';ctx.font='12px sans-serif';ctx.fillText('Aguardando candles '+(series.candle_seconds===5?'5s':'M1')+' fechados',12,Math.floor(h/2));return}
+ if(bars.length<3){ctx.fillStyle='#96a8ad';ctx.font='12px sans-serif';ctx.fillText('Aguardando candles '+({5:'5s',60:'M1',120:'M2'}[series.candle_seconds]||'M1')+' fechados',12,Math.floor(h/2));return}
  const firstT=bars[0].t,lastT=bars[bars.length-1].t,spanT=Math.max(60,lastT-firstT);
  const x=t=>12+(w-24)*(t-firstT)/spanT;
  const ys=[];
@@ -388,7 +392,7 @@ function drawTrendlineChart(radar){
    ctx.beginPath();ctx.moveTo(x(lineStart),y(lineAt(lineStart)));ctx.lineTo(x(lastT),y(lineAt(lastT)));ctx.stroke();
    ctx.fillStyle='#a7f28b';ctx.beginPath();ctx.arc(x(lastT),y(lineAt(lastT)),3,0,Math.PI*2);ctx.fill();
  }
- ctx.fillStyle='#98a8b3';ctx.font='10px sans-serif';ctx.fillText((series.candle_seconds===5?'5s':'M1')+' · candles fechados',10,h-3);
+ ctx.fillStyle='#98a8b3';ctx.font='10px sans-serif';ctx.fillText(({5:'5s',60:'M1',120:'M2'}[series.candle_seconds]||'M1')+' · candles fechados',10,h-3);
 }
 
 async function poll(){
