@@ -8,7 +8,7 @@ class AndroidPanelRenderTests(unittest.TestCase):
         source=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf-8')
         self.assertIn('function render(){',source)
         body=source.split('function render(){',1)[1].split('async function poll(){',1)[0]
-        declaration="const isZigzag=['zigzag','zigzag_fast'].includes"
+        declaration="const isZigzag=['zigzag','zigzag_fast','zigzag_m2'].includes"
         self.assertIn(declaration,body)
         flag_decl=body.index(declaration)
         # The first occurrence of the lexical binding must be its declaration;
@@ -17,10 +17,11 @@ class AndroidPanelRenderTests(unittest.TestCase):
         self.assertGreater(body.index("$('fastStrategyWrap').hidden=isZigzag"),flag_decl)
         self.assertIn('const expiry=Number(',body)
 
-    def test_two_zigzag_modes_remain_available(self):
+    def test_three_zigzag_modes_remain_available(self):
         html=(Path(__file__).parent/'static'/'index.html').read_text(encoding='utf-8')
         self.assertIn('option value="zigzag"',html)
         self.assertIn('option value="zigzag_fast"',html)
+        self.assertIn('option value="zigzag_m2"',html)
 
 
 if __name__=='__main__':
