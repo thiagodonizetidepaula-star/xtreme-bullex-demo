@@ -109,7 +109,7 @@ class ZigZagTests(unittest.TestCase):
 
     def test_scan_explicit_demo_opt_in_and_expiry_required(self):
         b=self.broker()
-        for changes in ({'expiry':5},{'scan_all':False},{'strategy':'invalid'}):
+        for changes in ({'expiry':3},{'scan_all':False},{'strategy':'invalid'}):
             c=self.config();c.update(changes)
             with self.assertRaises(ValueError):b.start_auto(c)
         self.assertFalse(b.auto)
