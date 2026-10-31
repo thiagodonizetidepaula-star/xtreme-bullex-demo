@@ -77,7 +77,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(len(requests),1)
             self.assertEqual(requests[0]['period'],5)
             self.assertEqual(requests[0]['time'],now)
-            b.request_history_batch(now+3)
+            b.request_history_batch(now+2)
             requests=[json.loads(v[2:])[1] for v in b.ws.sent if v.startswith('42["loadHistoryPeriod"')]
             self.assertEqual(len(requests),2)
             self.assertEqual({x['asset'] for x in requests},{'A_otc','B_otc'})
