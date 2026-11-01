@@ -35,7 +35,7 @@ window.pocketNativeMarket=raw=>{
  if(!nativeRelay||!active)return;
  try{const packet=JSON.parse(raw);if(packet.type!=='feed'||!Array.isArray(packet.events))return;
   if(nativeQueue.length+packet.events.length>64){nativeRelay=false;toast('A transmissão ficou atrasada. Reconecte a conta demo.');return;}
-  for(const e of packet.events)if(e.event==='demoExecution'){executionState=e.data;executionSeen=Date.now();renderExecution();}
+  for(const e of packet.events)if(e.event==='demoExecution'){executionState=e.data;executionSeen=Date.now();autoStartPending=0;renderExecution();}
   nativeQueue.push(...packet.events.filter(e=>e.event!=='demoExecution'));flushNative();
  }catch{}
 };
@@ -209,20 +209,27 @@ $('settingsTab').onclick=async()=>{settingsView(true);try{const {settings:s}=awa
 $('tradingSettingsForm').oninput=exposure;
 $('tradingSettingsForm').onsubmit=async e=>{e.preventDefault();try{await api('trading-settings',settingsValues());$('tradeSettingsMessage').textContent='Configurações salvas. Pause e inicie o automático para aplicar às próximas ordens.';}catch(err){$('tradeSettingsMessage').textContent=err.message;}};
 
-let executionState=null,executionSeen=0,lastForwardedSignal='';
+let executionState=null,executionSeen=0,lastForwardedSignal='',autoStartPending=0;
 function renderExecution(){
- const e=executionState,ready=!!(e?.version===2&&Date.now()-executionSeen<4000&&state?.connected);
- $('autoStart').disabled=!ready;$('autoPause').disabled=!ready;
- $('executionMessage').textContent=ready?e.message:(state?.connected?'O gráfico está conectado, mas o aplicativo instalado não confirmou o módulo Android Automático Demo v2 (edição 1.0.4-test). A análise ao vivo, sozinha, não envia ordens.':'Conecte com o aplicativo Android edição Automático Demo 1.0.4-test e confirme a conta DEMO para liberar o botão.');
+ const e=executionState,canSend=!!(nativeRelay&&window.PocketLensNative&&state?.connected),recent=!!(e?.version===2&&Date.now()-executionSeen<20000),pending=!!(autoStartPending&&Date.now()-autoStartPending<8000);
+ // Let the initial button request an Android report. Broker DEMO balance and session checks remain in the native engine.
+ $('autoStart').disabled=!canSend||pending||(recent&&!!e.enabled);
+ $('autoPause').disabled=!canSend;
+ $('autoStart').textContent=recent&&e.enabled?'Automático DEMO ligado':'Iniciar automático DEMO';
+ $('executionMessage').textContent=recent?e.message:(pending?'Solicitando ativação ao módulo Android. Só envia ordens se a conta DEMO for confirmada.':canSend?(autoStartPending?'O módulo de execução não respondeu. Instale Pocket Lens Automático DEMO 1.0.4-test; reinicie e conecte novamente.':'Leitura ao vivo conectada. Toque em Iniciar automático DEMO para verificar e ativar o módulo de ordens do Android. Se não responder, atualize o APK 1.0.4-test.'):'Conecte a conta demonstrativa pelo APK Pocket Lens Automático DEMO 1.0.4-test. O site sozinho não envia ordens.');
  const rows=e?.orders||[];const count=s=>rows.filter(r=>r.status===s).length;
  $('brokerScore').textContent='WIN '+count('win')+' · LOSS '+count('loss')+' · EMPATE '+count('tie')+' · Pendentes '+rows.filter(r=>['sending','open','unknown'].includes(r.status)).length+' · Resultado demo '+Number(e?.net||0).toFixed(2);
  $('brokerHistory').innerHTML=rows.slice(-20).reverse().map(r=>'<p>'+html(r.asset)+' · '+html(r.direction.toUpperCase())+' · '+html(r.amount)+' · '+html(duration(r.expiry))+' · '+html(({sending:'Enviando',open:'Aceita',unknown:'Sem confirmação',rejected:'Recusada',win:'WIN',loss:'LOSS',tie:'Empate'})[r.status]||r.status)+(r.net!=null?' · '+html(r.net):'')+'</p>').join('');
 }
 function forwardExecutionSignal(){
- const s=state?.signals?.at(-1);if(!executionState?.enabled||!fresh()||!s?.id||s.id===lastForwardedSignal)return;
+ const s=state?.signals?.at(-1);if(!nativeRelay||!executionState?.enabled||Date.now()-executionSeen>20000||!fresh()||!s?.id||s.id===lastForwardedSignal)return;
  lastForwardedSignal=s.id;
  if(Date.now()/1000-s.confirmed_at<=3)nativeCommands([{event:'demoSignal',data:{id:s.id,symbol:s.symbol,direction:s.direction,confirmed_at:s.confirmed_at}}]);
 }
-$('autoStart').onclick=async()=>{try{const v=settingsValues();await api('trading-settings',v);lastForwardedSignal=state?.signals?.at(-1)?.id||'';nativeCommands([{event:'demoStart',data:v}]);}catch(e){toast(e.message);}};
+$('autoStart').onclick=async()=>{
+ if(!nativeRelay||!window.PocketLensNative||!state?.connected){toast('Para ordens DEMO, conecte pelo aplicativo Android Automático DEMO.');return;}
+ try{const v=settingsValues();await api('trading-settings',v);lastForwardedSignal=state?.signals?.at(-1)?.id||'';autoStartPending=Date.now();nativeCommands([{event:'demoStart',data:v},{event:'demoHeartbeat'}]);renderExecution();}
+ catch(e){autoStartPending=0;toast(e.message);}
+};
 $('autoPause').onclick=()=>nativeCommands([{event:'demoPause'}]);
 setInterval(()=>{if(active&&nativeRelay){nativeCommands([{event:'demoHeartbeat'}]);renderExecution();}},2000);
