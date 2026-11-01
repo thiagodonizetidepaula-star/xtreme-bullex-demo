@@ -114,6 +114,7 @@ class TriangleBreakout:
         self.trendline=None;self.candle_quality=None;self.last_entry=None
         self.last_bar_processed=None
         self.last_signal_bar=None;self.retest_pending=None
+        self.false_breakout=None;self.false_breakout_count=0
         self.pattern=''
 
     def ingest(self,ts,price,arrival):
@@ -214,11 +215,36 @@ class TriangleBreakout:
         if self.last_bar_processed==cur['t']:
             return None
         self.last_bar_processed=cur['t']
+        # A wick beyond the line that closes back inside is a FALSE break:
+        # log it, invalidate any pending retest and never place an order.
+        self.false_breakout=None
+        upper_wick=(cur['high']>up1+margin and cur['close']<=up1+margin*.2)
+        lower_wick=(cur['low']<low1-margin and cur['close']>=low1-margin*.2)
+        if upper_wick or lower_wick:
+            self.false_breakout={'t':cur['t'],
+                'direction':'call' if upper_wick else 'put',
+                'kind':'pavio_sem_fechamento',
+                'level':up1 if upper_wick else low1}
+            self.false_breakout_count+=1
+            self.retest_pending=None
+            self.reason='FALSO ROMPIMENTO: pavio atravessou a linha sem fechamento confirmado'
+            return None
         # Existing validated breakout becomes a retest setup for subsequent
         # closed candles, never the same bar, never an entry from old history.
         choices=[]
         if self.retest_pending:
             p=self.retest_pending
+            # Once price returns inside the broken triangle, there is no
+            # valid retest: reject and wait for an entirely new breakout.
+            reentered=(cur['close']<up1-margin*.3) if p['direction']=='call' else (cur['close']>low1+margin*.3)
+            if reentered:
+                self.false_breakout={'t':cur['t'],'direction':p['direction'],
+                    'kind':'retorno_ao_triangulo',
+                    'level':up1 if p['direction']=='call' else low1}
+                self.false_breakout_count+=1
+                self.retest_pending=None
+                self.reason='FALSO ROMPIMENTO: preço voltou para dentro do triângulo'
+                return None
             age=(cur['t']-p['at'])//self.bar_seconds
             if age>8 or age<1:
                 if age>8:self.retest_pending=None
@@ -233,8 +259,15 @@ class TriangleBreakout:
                        cur['close']<low1-margin and cur['close']<prev['low'] and cur['close']<cur['open'])
         if breakout_up or breakout_down:
             direction='call' if breakout_up else 'put'
-            # Ascending/descending triangles may break in either direction,
-            # but an optional EMA filter can veto the counter-trend signal.
+            breakout_quality=candle_psychology(b,direction)
+            self.candle_quality=breakout_quality
+            # A bad breakout candle must not create a later retest setup.
+            # This avoids trading a wick or low-volume indecision as though
+            # it were a validated Price Action breakout.
+            if not breakout_quality.get('ready'):
+                self.retest_pending=None
+                self.reason='FALSO ROMPIMENTO / força insuficiente: '+breakout_quality.get('reason','')
+                return None
             self.retest_pending={'at':cur['t'],'direction':direction,'triangle':name}
             choices.append((direction,'rompimento',name))
         if not choices:
