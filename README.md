@@ -1,3 +1,13 @@
+## V31 — Conectar pela plataforma (Android) sem copiar SSID
+
+The redesigned Xtreme Tiger settings now prioritize **CONECTAR PELA PLATAFORMA · DEMO** on Android V18 or later, using an origin-scoped `XtremeAppBridge` WebMessage listener. The Android app opens the **official HTTPS Pocket Option site in its in-app WebView** only after explicit user confirmation. The pre-existing experimental Android document-start probe can pick up an outbound **DEMO** authentication packet and hand it to the existing server connection only for that consented attempt. The backend still validates isDemo=1 and confirms the account and balance. A WebView login is **not** proof of bot connection until the backend reports **DEMO CONFIRMADA**.
+
+The native bridge accepts **only the exact HTTPS Xtreme Tiger origin and its main frame**, with only the literal `connect-demo` command. No trade/order command is exposed. It does **not** retrieve Chrome cookies, passwords or real account sessions; Android's platform support or broker login changes may prevent connection. The original manual SSID element remains in the DOM for backward-compatible handoff; it is hidden from Android interface and behind optional advanced details in ordinary browsers.
+
+**Important browser difference:** on Windows/Chrome, there is no official cross-site OAuth integration. The button **ABRIR SITE OFICIAL DA POCKET OPTION** opens the official site, **but does not connect the server or import credentials**. Connection without SSID needs the Android native bridge, and the native experiment still depends on the broker permitting the WebView login.
+
+The Android V18 source and APK build belong to the isolated `experiment/android-pocket-demo-assist` branch; the Render deployment serves only the new web UI. An Android APK build is not inferred from a successful Render build, and a previous native APK may need uninstalling before installing a differently signed debug build. Do not claim that the broker connection is tested until a user's own authenticated DEMO status verifies it.
+
 ## V30 — Xtreme Tiger: painel limpo de operações (Android web/PC)
 
 The existing authenticated app now uses a mobile-first **three-tab** UI:
