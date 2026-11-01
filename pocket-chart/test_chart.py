@@ -31,6 +31,24 @@ class ChartTests(unittest.TestCase):
         for raw in ('bad','42["auth",{"isDemo":0}]'):
             with self.assertRaises(ValueError):parse_auth(raw)
         self.assertEqual(parse_auth('42["auth",{"session":"01234567890","uid":1,"isDemo":1}]')['isDemo'],1)
+    def test_demo_auth_preserves_broker_platform_and_flags(self):
+        p=parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1,"platform":1,"isFastHistory":false,"isOptimized":true}]')
+        self.assertEqual(p['platform'],1)
+        self.assertIs(p['isFastHistory'],False)
+        self.assertIs(p['isOptimized'],True)
+        self.assertEqual(p['isDemo'],1)
+        self.assertEqual(parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1}]')['platform'],2)
+        for value in ('0','3','true'):
+            with self.assertRaises(ValueError):
+                parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1,"platform":'+value+'}]')
+    def test_broker_not_authorized_has_actionable_message(self):
+        f=Feed({'isDemo':1});f.ws=FakeSocket()
+        f.on_message(f.ws,'42["NotAuthorized"]')
+        self.assertTrue(f.closed);self.assertFalse(f.connected)
+        self.assertIn('recusada',f.message)
+        original=f.message
+        f.on_message(f.ws,'41')
+        self.assertEqual(f.message,original)
     def test_stale_ticks_rejected(self):
         f=self.feed();f.tick(time.time()-40,1.2);self.assertEqual(f.bars,{});self.assertIsNone(f.current)
     def test_continuous_real_ticks_close_candle(self):
