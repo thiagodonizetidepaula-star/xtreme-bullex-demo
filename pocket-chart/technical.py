@@ -75,7 +75,8 @@ def context(bars,period,structure):
     title={'up':'Viés de alta','down':'Viés de baixa','neutral':'Sem direção definida'}[main['bias']]
     regime={'trend':'tendência','range':'lateralização','transition':'transição','insufficient':'histórico insuficiente'}[main['regime']]
     summary=title+' • '+regime+'.'
-    if len(bars)<24:summary='Aquecendo a análise: '+str(len(bars))+'/24 velas consecutivas.'
+    if not bars:summary='Carregando o histórico de velas da corretora.'
+    elif len(bars)<24:summary='Price Action com '+str(len(bars))+' velas fechadas recebidas. Indicadores de período longo são opcionais; padrões ainda precisam de confirmação.'
     live_price=bars[-1]['close'] if bars else None;atr=main['atr'];setups=[]
     if atr and live_price:
         levels=list(structure.get('zones',[]))
@@ -100,8 +101,8 @@ def context(bars,period,structure):
                            'explanation':('Possível reação de alta' if direction=='BUY' else 'Possível reação de baixa')+' na região de '+name+'.',
                            'cautions':reasons})
     cautions=[]
-    if len(bars)<50:cautions.append('EMA50 ainda sem aquecimento completo.')
-    if higher['count']<24:cautions.append('Período superior ainda sem histórico suficiente.')
+    if len(bars)<50:cautions.append('EMA50 ainda indisponível; não impede a leitura de Price Action.')
+    if higher['count']<24:cautions.append('Período superior incompleto; leitura dos pivôs do gráfico principal continua.')
     if bars and atr and bars[-1]['high']-bars[-1]['low']>2.5*atr:cautions.append('Última vela muito ampla: evite perseguir o movimento.')
     if main['regime']=='range':cautions.append('Mercado lateral: rompimentos podem falhar; priorize confirmação nos extremos.')
     if not structure.get('lines'):cautions.append('Sem dois pivôs compatíveis para LTA/LTB validada; linha tracejada é apenas referência.')
@@ -115,19 +116,19 @@ def qualify(candidate,bars,period,structure):
     if not candidate:return None
     info=context(bars,period,structure);m=info['indicators'];h=info['higher'];direction=candidate['direction'];buy=direction=='BUY'
     b=bars[-1];span=b['high']-b['low'];atr=m['atr'];rsi=m['rsi']
-    if not atr or rsi is None or len(suffix(bars,period))<24 or span<=0:return None
+    if not atr or len(suffix(bars,period))<8 or span<=0:return None
     if span>2.5*atr or abs(b['close']-b['open'])/span<.1:return None
     expected='up' if buy else 'down';opposite='down' if buy else 'up'
     if h['bias']==opposite:return None
-    range_ok=m['regime']=='range' and (rsi<=45 if buy else rsi>=55)
-    if m['bias']!=expected and h['bias']!=expected and not range_ok:return None
-    if (buy and rsi>=75) or (not buy and rsi<=25):return None
+    range_ok=m['regime']=='range' and rsi is not None and (rsi<=45 if buy else rsi>=55)
+    if len(suffix(bars,period))>=24 and m['bias']!=expected and h['bias']!=expected and not range_ok:return None
+    if rsi is not None and ((buy and rsi>=75) or (not buy and rsi<=25)):return None
     opposing=[z for z in structure.get('zones',[]) if z['kind']==('resistance' if buy else 'support') and (z['price']>b['close'] if buy else z['price']<b['close'])]
     if opposing and min(abs(z['price']-b['close']) for z in opposing)<.8*atr:return None
     checks=['Região testada','Price action em vela fechada','Amplitude controlada']
     if m['bias']==expected:checks.append('Viés alinhado')
     if h['bias']==expected:checks.append('Período superior alinhado')
     if range_ok:checks.append('Reversão no extremo lateral')
-    if (40<=rsi<=68 if buy else 32<=rsi<=60):checks.append('Momentum compatível')
+    if rsi is not None and (40<=rsi<=68 if buy else 32<=rsi<=60):checks.append('Momentum compatível')
     if len(checks)<4:return None
     return {**candidate,'confluences':checks,'score':len(checks),'score_max':7,'invalidation':candidate['region']+(-.45*atr if buy else .45*atr),'validation':'experimental'}
