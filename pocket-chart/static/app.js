@@ -185,6 +185,7 @@ const outcome={pending:'Em acompanhamento',positive:'Positiva',negative:'Negativ
 function renderSignalBook(){
  const book=state?.signal_book,rows=book?.rows||[],counts=book?.counts||{};
  $('scoreboard').textContent='Positivas '+(counts.positive||0)+' · Negativas '+(counts.negative||0)+' · Empates '+(counts.tie||0)+' · Sem conclusão '+(counts.inconclusive||0)+' · Ativas '+(counts.pending||0);
+ $('topScoreboard').textContent=$('scoreboard').textContent;
  $('signalHistory').innerHTML=rows.slice(-30).reverse().map(r=>'<article class="historyRow"><b>'+html(r.asset)+' · '+(r.direction==='BUY'?'CALL ↑':'PUT ↓')+'</b><span>'+html(outcome[r.status])+' · '+html(duration(r.expiry))+' · '+html(new Date(r.announced_at*1000).toLocaleTimeString('pt-BR'))+'</span><small>Referência '+html(price(r.entry_price))+(r.exit_price!=null?' → '+html(price(r.exit_price)):'')+'</small></article>').join('')||'<p class="muted">Aguardando um padrão confirmado ao vivo. Cenários em observação não entram no placar.</p>';
  const r=rows.at(-1),now=Date.now()/1000;
  if(!active||!r||r.id===dismissedSignal||now-r.announced_at>r.expiry+8){$('signalAlert').hidden=true;return;}
@@ -200,7 +201,7 @@ function renderSignalBook(){
 }
 
 function settingsValues(){return {amount:Number($('tradeAmount').value),expiry:Number($('tradeExpiry').value),max_concurrent:Number($('tradeConcurrent').value),martingale:$('tradeMartingale').checked,multiplier:Number($('tradeMultiplier').value),max_steps:Number($('tradeSteps').value),stop_loss:Number($('tradeLoss').value),stop_win:Number($('tradeWin').value)};}
-function exposure(){const v=settingsValues();let total=0;for(let n=0;n<=(v.martingale?v.max_steps:0);n++)total+=v.amount*Math.pow(v.multiplier,n);$('tradeExposure').textContent=Number.isFinite(total)?'Exposição de uma sequência completa: '+total.toFixed(2)+' · Com '+v.max_concurrent+' sequências: '+(total*v.max_concurrent).toFixed(2)+'. Martingale aumenta o valor após perdas e não garante recuperação.':'';}
+function exposure(){const v=settingsValues();let total=0;for(let n=0;n<=(v.martingale?Math.min(5,Math.max(0,v.max_steps)):0);n++)total+=v.amount*Math.pow(v.multiplier,n);$('tradeExposure').textContent=Number.isFinite(total)?'Exposição de uma sequência completa: '+total.toFixed(2)+' · Com '+v.max_concurrent+' sequências: '+(total*v.max_concurrent).toFixed(2)+'. Martingale aumenta o valor após perdas e não garante recuperação.':'';}
 function settingsView(show){$('chartView').hidden=show;$('settingsView').hidden=!show;$('chartTab').setAttribute('aria-pressed',String(!show));$('settingsTab').setAttribute('aria-pressed',String(show));if(!show)draw();}
 $('chartTab').onclick=()=>settingsView(false);
 $('settingsTab').onclick=async()=>{settingsView(true);try{const {settings:s}=await api('trading-settings');for(const [id,key] of [['tradeAmount','amount'],['tradeExpiry','expiry'],['tradeConcurrent','max_concurrent'],['tradeMultiplier','multiplier'],['tradeSteps','max_steps'],['tradeLoss','stop_loss'],['tradeWin','stop_win']])$(id).value=s[key];$('tradeMartingale').checked=s.martingale;exposure();}catch(e){$('tradeSettingsMessage').textContent=e.message;}};
