@@ -78,6 +78,8 @@ $('startSignalAuto').onclick=async()=>{
    analysis_timeframe:scanAll?($('expiryProfile').value==='triangle'?Number($('triangleTimeframe').value):$('expiryProfile').value==='zigzag_m2'?120:['zigzag_fast','zigzag_zones'].includes($('expiryProfile').value)?5:60):60,
    triangle_mode:$('expiryProfile').value==='triangle',
    triangle_observe:$('triangleExecution').value==='observe',
+   triangle_trial_only:$('triangleExecution').value==='trial',
+   triangle_sensitivity:$('triangleSensitivity').value,
    triangle_entry:$('triangleEntry').value,
    triangle_ema:$('triangleEMA').checked,
    triangle_adx:$('triangleADX').checked,
@@ -98,7 +100,7 @@ $('startSignalAuto').onclick=async()=>{
   snapshot=await api('status');
   render();
   $('autoSignalStatus').textContent=snapshot.auto?
-   (params.triangle_mode&&params.triangle_observe?'OBSERVAÇÃO DE TRIÂNGULOS ATIVA: lendo candles e traçando padrões; SEM ORDENS.':scanAll?'VARREDURA DEMO ATIVA: esperando confirmação técnica para BUY/SELL.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
+   (params.triangle_mode&&params.triangle_observe?'OBSERVAÇÃO DE TRIÂNGULOS ATIVA: lendo candles e traçando padrões; SEM ORDENS.':params.triangle_trial_only?'TESTE DEMO ÚNICO: aguardando triângulo confirmado para enviar no máximo 1 ordem de valor 1.':scanAll?'VARREDURA DEMO ATIVA: esperando confirmação técnica para BUY/SELL.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
    'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
  }catch(e){
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
@@ -163,7 +165,7 @@ const expiryChoices={
  zigzag_zones:[[3,'3 segundos · Região confirmada'],[5,'5 segundos · Região confirmada'],[60,'1 minuto · Região confirmada'],[120,'2 minutos · Região confirmada'],[180,'3 minutos · Região confirmada']],
  triangle:[[3,'3 segundos · requer ticks'],[5,'5 segundos'],[60,'M1 · 1 minuto'],[120,'M2 · 2 minutos'],[180,'M3 · 3 minutos'],[300,'M5 · 5 minutos']]
 };
-const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120,zigzag_zones:60,triangle:60};
+const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120,zigzag_zones:60,triangle:5};
 function populateExpiry(preferred=null){
  const profile=$('expiryProfile').value;
  const values=profile==='triangle'?expiryChoices.triangle.filter(e=>e[0]>=Number($('triangleTimeframe').value)):expiryChoices[profile];
@@ -185,8 +187,17 @@ $('expiryProfile').onchange=()=>{
  if($('expiryProfile').value==='triangle')$('triangleExecution').value='observe';
  populateExpiry();render();
 };
-$('triangleTimeframe').onchange=()=>{if(!snapshot.auto){populateExpiry();render()}};
-for(const id of ['triangleEntry','triangleExecution','triangleEMA','triangleADX'])$(id).onchange=()=>render();
+$('triangleTimeframe').onchange=()=>{if(!snapshot.auto){
+ if(Number($('triangleTimeframe').value)!==5){$('triangleSensitivity').value='strict';if($('triangleExecution').value==='trial')$('triangleExecution').value='observe';}
+ populateExpiry();render()}};
+for(const id of ['triangleEntry','triangleEMA','triangleADX','triangleSensitivity'])$(id).onchange=()=>render();
+$('triangleExecution').onchange=()=>{
+ if($('triangleExecution').value==='trial'){
+  $('amount').value='1';$('limit').value='1';
+  $('autoSignalStatus').textContent='TESTE ÚNICO DEMO: valor 1, no máximo UMA ordem, somente com candles reais e sinal confirmado.';
+ }
+ render();
+};
 $('fastStrategy').onchange=()=>render();
 function selectedQuickStrategy(){
  const n=Number($('expiry').value);
@@ -215,7 +226,11 @@ function render(){
  if(s.auto&&(Number(s.auto_expiry)!==Number($('expiry').value)||
               (s.auto_strategy==='zigzag_fractal'&&$('expiryProfile').value!==(s.triangle_mode?'triangle':s.zone_mode?'zigzag_zones':({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag'))))){
   $('expiryProfile').value=s.auto_strategy==='zigzag_fractal'?(s.triangle_mode?'triangle':s.zone_mode?'zigzag_zones':({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag')):Number(s.auto_expiry)>=60?'m5':'fast';
-  if(s.triangle_mode)$('triangleTimeframe').value=String(s.scan_timeframe);
+  if(s.triangle_mode){
+   $('triangleTimeframe').value=String(s.scan_timeframe);
+   $('triangleSensitivity').value=s.triangle_sensitivity||'strict';
+   $('triangleExecution').value=s.triangle_trial_only?'trial':s.triangle_observe?'observe':'demo';
+  }
   populateExpiry(Number(s.auto_expiry));
  }
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
@@ -240,6 +255,7 @@ function render(){
  $('triangleExecution').disabled=!!s.auto;
  $('triangleEMA').disabled=!!s.auto;
  $('triangleADX').disabled=!!s.auto;
+ $('triangleSensitivity').disabled=!!s.auto;
  if(s.auto&&s.triangle_mode){$('triangleTimeframe').value=String(s.scan_timeframe);}
  const recentReports=s.triangle_reports||[];
  const observations=s.triangle_observations||[];
@@ -248,6 +264,10 @@ function render(){
  const triangleHoldoutReady=recentReports.some(r=>r.timeframe===selectedTriangleTf&&r.expiry===selectedTriangleExpiry&&r.status==='PAPER_APROVADO');
  const triangleExpiryReady=(s.validated_expiries||[]).includes(selectedTriangleExpiry);
  const triangleDemoAvailable=Boolean(s.connected&&s.demo_confirmed&&triangleHoldoutReady&&triangleExpiryReady);
+ const triangleTrialOption=$('triangleExecution').querySelector('option[value="trial"]');
+ const triangleTrialAvailable=Boolean(s.connected&&s.demo_confirmed&&selectedTriangleTf===5&&[3,5].includes(selectedTriangleExpiry));
+ if(triangleTrialOption)triangleTrialOption.disabled=!triangleTrialAvailable;
+ if(!triangleTrialAvailable&&$('triangleExecution').value==='trial'&&!s.auto)$('triangleExecution').value='observe';
  const triangleDemoOption=$('triangleExecution').querySelector('option[value="demo"]');
  if(triangleDemoOption)triangleDemoOption.disabled=!triangleDemoAvailable;
  if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')$('triangleExecution').value='observe';
@@ -258,8 +278,9 @@ function render(){
     r.status+' · TREINO '+r.train.trades+' ops / WIN '+(r.train.win_rate??'—')+'% / '+r.train.net+
     ' · TESTE '+r.test.trades+' ops / WIN '+(r.test.win_rate??'—')+'% / '+r.test.net+' · '+r.reason).join(' | ') :
   'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.') +
-  (!triangleDemoAvailable?' · AUTO DEMO BLOQUEADO: requer backtest fora da amostra positivo e expiração validada em DEMO.':' · AUTO DEMO elegível após confirmação do usuário.');
- $('startSignalAuto').textContent=triangleSelected&&$('triangleExecution').value==='observe'?'INICIAR OBSERVAÇÃO · SEM ORDENS':'INICIAR AUTOMÁTICO DEMO';
+  (!triangleDemoAvailable?' · AUTO DEMO CONTÍNUO BLOQUEADO até validação independente.':' · AUTO DEMO elegível após confirmação do usuário.')+
+  (triangleTrialAvailable?' · TESTE CONTROLADO: gráfico 5s, expiração '+selectedTriangleExpiry+'s, UMA ordem valor 1, se houver sinal.':'');
+ $('startSignalAuto').textContent=triangleSelected&&$('triangleExecution').value==='observe'?'INICIAR OBSERVAÇÃO · SEM ORDENS':triangleSelected&&$('triangleExecution').value==='trial'?'TESTAR UMA ENTRADA DEMO · VALOR 1':'INICIAR AUTOMÁTICO DEMO';
  const radar=s.radar||{};
  const chartTf=radar.candle_seconds||($('expiryProfile').value==='triangle'?Number($('triangleTimeframe').value):$('expiryProfile').value==='zigzag_m2'?120:['zigzag_fast','zigzag_zones'].includes($('expiryProfile').value)?5:60);
  const chartTfLabel={5:'5s',60:'M1',120:'M2',300:'M5'}[chartTf]||'M1';
@@ -323,13 +344,15 @@ function render(){
  $('executeSignal').textContent=ready?'OPERAR '+direction+' • '+expiry+'s':'AGUARDANDO SINAL';
  $('startSignalAuto').disabled=busy||s.auto||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
  $('stopSignalAuto').disabled=busy||!s.auto;
- if(s.auto&&s.triangle_mode&&s.triangle_observe){
+ if(s.auto&&s.triangle_mode&&s.triangle_trial_only){
+  $('autoSignalStatus').textContent='TESTE ÚNICO DEMO ATIVO: '+(radar.receiving||0)+' ativos com cotações; esperando triângulo confirmado em 5s para uma única ordem de valor 1 (expiração '+s.auto_expiry+'s).';
+ }else if(s.auto&&s.triangle_mode&&s.triangle_observe){
   $('autoSignalStatus').textContent='OBSERVAÇÃO TRIÂNGULO ATIVA · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+observations.length+' sinais observados · NENHUMA ORDEM AUTOMÁTICA.';
  }else if(s.auto&&s.auto_strategy==='zigzag_fractal'){
   $('autoSignalStatus').textContent='VARREDURA OTC ATIVA • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
    ' operações · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+
    (s.pending?.id?'aguardando resultado oficial':s.auto_waiting_prices?'aguardando feeds reais':
-    (s.triangle_mode?'observando triângulos, rompimentos e retestes sem ordens · ':'esperando linha de tendência, regiões e candles confirmados · ')+({5:'5s',60:'M1',120:'M2',300:'M5'}[s.scan_timeframe]||'M1'))+
+    (s.triangle_mode?(s.triangle_trial_only?'teste único DEMO aguardando confirmação técnica · ':'observando triângulos, rompimentos e retestes sem ordens · '):'esperando linha de tendência, regiões e candles confirmados · ')+({5:'5s',60:'M1',120:'M2',300:'M5'}[s.scan_timeframe]||'M1'))+
    ' · BUY/SELL '+s.auto_expiry+'s DEMO'+(s.auto_trial?' · primeiro teste valor 1':'');
  }else if(s.auto){
   $('autoSignalStatus').textContent='BOT ATIVO • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
