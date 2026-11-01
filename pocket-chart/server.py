@@ -2,7 +2,7 @@ import hashlib,json,os,secrets,threading,time,urllib.request,urllib.error
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from pathlib import Path
 from http.cookies import SimpleCookie
-from feed import Feed,parse_auth
+from feed import Feed,NativeFeed,parse_auth
 from analysis import TIMEFRAMES
 
 BASE=Path(__file__).parent
@@ -48,7 +48,8 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Sec-Fetch-Site')=='cross-site':raise PermissionError('Origem inválida.')
                 if self.headers.get('Origin') and self.headers['Origin'] not in ('https://'+self.headers.get('Host',''),'http://'+self.headers.get('Host','')):raise PermissionError('Origem inválida.')
                 size=int(self.headers.get('Content-Length','0'))
-                if not 0<size<=24000 or self.headers.get('Content-Type','').split(';')[0]!='application/json':raise ValueError('Solicitação inválida.')
+                limit=1200000 if path=='/api/native-events' else 24000
+                if not 0<size<=limit or self.headers.get('Content-Type','').split(';')[0]!='application/json':raise ValueError('Solicitação inválida.')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Solicitação inválida.')
             files={'/':'index.html','/app.js':'app.js','/style.css':'style.css'}
@@ -84,6 +85,15 @@ class Handler(BaseHTTPRequestHandler):
                 if session['feed']:session['feed'].close()
                 with LOCK:SESSIONS.pop(sid,None)
                 return self.reply(200,{'ok':True},cookie='pc_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0')
+            if path=='/api/native-start' and post:
+                if session['feed']:session['feed'].close()
+                session['feed']=NativeFeed();return self.reply(200,{'ok':True})
+            if path=='/api/native-events' and post:
+                f=session['feed']
+                if not isinstance(f,NativeFeed):raise ValueError('Inicie a conexão Android novamente.')
+                f.ingest(body.get('events',[]));return self.reply(200,{'commands':f.drain()})
+            if path=='/api/native-commands' and not post:
+                f=session['feed'];return self.reply(200,{'commands':f.drain() if isinstance(f,NativeFeed) else []})
             if path=='/api/connect' and post:
                 auth=parse_auth(body.get('auth',''))
                 if session['feed']:session['feed'].close()

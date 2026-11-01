@@ -181,3 +181,27 @@ class Feed:
     def close(self):
         self.closed=True;self.connected=False;self.auth={}
         if self.ws:self.ws.close()
+
+class NativeFeed(Feed):
+    """Analyze the existing demo socket on the phone. Never opens another login."""
+    def __init__(self):
+        super().__init__({});self.commands=deque(maxlen=32);self.message='Abra a Pocket Option no Android e selecione DEMO.'
+    def start(self):pass
+    def send(self,event,data=None):
+        if event not in READ_EVENTS or event=='auth':raise ValueError('Comando de leitura inválido.')
+        if event!='ps':self.commands.append({'event':event,'data':data})
+    def drain(self):
+        with self.lock:
+            result=list(self.commands);self.commands.clear();return result
+    def ingest(self,events):
+        if not isinstance(events,list) or len(events)>12:raise ValueError('Lote inválido.')
+        with self.lock:
+            for item in events:
+                if not isinstance(item,dict):continue
+                name=item.get('event');data=item.get('data')
+                if name=='disconnected':
+                    self.connected=False;self.message='A conexão demo no celular foi encerrada. Reconecte pelo botão Conectar.'
+                elif name in ('successauth','updateAssets','updateStream','loadHistoryPeriodFast','errorauth','failauth'):
+                    self.event(name,data)
+    def close(self):
+        super().close();self.commands.clear()

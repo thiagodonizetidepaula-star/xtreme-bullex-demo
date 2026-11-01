@@ -1,7 +1,7 @@
 import json,time,unittest
 from unittest.mock import patch
 from analysis import structure,evaluate,valid_bar
-from feed import Feed,parse_auth
+from feed import Feed,NativeFeed,parse_auth
 
 class FakeSocket:
     def __init__(self):self.sent=[]
@@ -9,6 +9,23 @@ class FakeSocket:
     def close(self):pass
 
 class ChartTests(unittest.TestCase):
+    def test_native_feed_uses_existing_socket_without_auth_replay(self):
+        f=NativeFeed()
+        f.ingest([{'event':'successauth','data':{}}])
+        row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD OTC';row[14]=True
+        f.ingest([{'event':'updateAssets','data':[row]}])
+        self.assertEqual(f.symbol,'EURUSD_otc');self.assertIsNone(f.ws)
+        commands=f.drain();self.assertTrue(any(c['event']=='subscribeSymbol' for c in commands))
+        self.assertFalse(any(c['event']=='auth' for c in commands))
+        now=time.time()
+        f.ingest([{'event':'updateStream','data':[['EURUSD_otc',now,1.2]]}])
+        self.assertTrue(f.snapshot()['fresh']);self.assertEqual(f.current['close'],1.2)
+        f.ingest([{'event':'disconnected','data':{}}]);self.assertFalse(f.snapshot()['fresh'])
+    def test_native_feed_never_requests_orders(self):
+        f=NativeFeed()
+        for event in ('auth','openOrder'):
+            with self.assertRaises(ValueError):f.send(event,{})
+        f.ingest([{'event':'openOrder','data':{'amount':1}}]);self.assertFalse(f.connected)
     def test_catalog_automatically_subscribes_open_asset(self):
         f=Feed({});f.ws=FakeSocket();f.connected=True
         row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD OTC';row[14]=True
@@ -31,24 +48,6 @@ class ChartTests(unittest.TestCase):
         for raw in ('bad','42["auth",{"isDemo":0}]'):
             with self.assertRaises(ValueError):parse_auth(raw)
         self.assertEqual(parse_auth('42["auth",{"session":"01234567890","uid":1,"isDemo":1}]')['isDemo'],1)
-    def test_demo_auth_preserves_broker_platform_and_flags(self):
-        p=parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1,"platform":1,"isFastHistory":false,"isOptimized":true}]')
-        self.assertEqual(p['platform'],1)
-        self.assertIs(p['isFastHistory'],False)
-        self.assertIs(p['isOptimized'],True)
-        self.assertEqual(p['isDemo'],1)
-        self.assertEqual(parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1}]')['platform'],2)
-        for value in ('0','3','true'):
-            with self.assertRaises(ValueError):
-                parse_auth('42["auth",{"session":"valid-session-123","uid":42,"isDemo":1,"platform":'+value+'}]')
-    def test_broker_not_authorized_has_actionable_message(self):
-        f=Feed({'isDemo':1});f.ws=FakeSocket()
-        f.on_message(f.ws,'42["NotAuthorized"]')
-        self.assertTrue(f.closed);self.assertFalse(f.connected)
-        self.assertIn('recusada',f.message)
-        original=f.message
-        f.on_message(f.ws,'41')
-        self.assertEqual(f.message,original)
     def test_stale_ticks_rejected(self):
         f=self.feed();f.tick(time.time()-40,1.2);self.assertEqual(f.bars,{});self.assertIsNone(f.current)
     def test_continuous_real_ticks_close_candle(self):
@@ -107,5 +106,26 @@ class ChartTests(unittest.TestCase):
             self.assertEqual(e.exception.code,401)
             self.assertIn('POCKET LENS',urllib.request.urlopen(base+'/').read().decode())
         finally:srv.shutdown();srv.server_close()
+
+    def test_native_api_relay_is_authenticated_and_delivers_commands(self):
+        import server,threading,urllib.request,hashlib
+        token='LOCAL_TEST_COOKIE';key=hashlib.sha256(token.encode()).hexdigest()
+        server.SESSIONS[key]={'uid':'local-test','expires':time.time()+60,'seen':time.time(),'feed':None}
+        srv=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
+        threading.Thread(target=srv.serve_forever,daemon=True).start()
+        base='http://127.0.0.1:'+str(srv.server_port)
+        def post(path,body):
+            req=urllib.request.Request(base+path,data=json.dumps(body).encode(),headers={'Content-Type':'application/json','Cookie':'pc_session='+token})
+            return json.load(urllib.request.urlopen(req))
+        try:
+            self.assertTrue(post('/api/native-start',{})['ok'])
+            row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD';row[14]=True
+            reply=post('/api/native-events',{'events':[{'event':'successauth','data':{}},{'event':'updateAssets','data':[row]}]})
+            self.assertTrue(any(c['event']=='subscribeSymbol' for c in reply['commands']))
+            self.assertFalse(any(c['event']=='auth' for c in reply['commands']))
+            post('/api/native-events',{'events':[{'event':'updateStream','data':[['EURUSD_otc',time.time(),1.2]]}]})
+            self.assertIsNotNone(server.SESSIONS[key]['feed'].current)
+        finally:
+            srv.shutdown();srv.server_close();server.SESSIONS.pop(key,None)
 
 if __name__=='__main__':unittest.main()

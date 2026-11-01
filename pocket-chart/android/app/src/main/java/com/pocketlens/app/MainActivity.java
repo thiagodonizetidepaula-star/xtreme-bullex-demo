@@ -32,6 +32,7 @@ public final class MainActivity extends Activity {
     private TextView info;
     private boolean brokerVisible = false, transferring = false, destroyed = false;
     private long attempt = 0;
+    private boolean relayEnabled = false;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -55,10 +56,16 @@ public final class MainActivity extends Activity {
             if ("connect".equals(command)) openBroker();
             else if ("connected".equals(command)) {transferring=false;showPortal();}
             else if ("failed".equals(command)) {transferring=false;info.setText("A conexão de leitura não foi confirmada. Confira a sessão demo ou tente novamente.");}
+            else if (command!=null && command.startsWith("{")) {
+                try {JSONObject request=new JSONObject(command);JSONArray commands=request.optJSONArray("commands");
+                    if ("commands".equals(request.optString("type")) && commands!=null && commands.length()<=32 && relayEnabled)
+                        broker.evaluateJavascript("window.pocketLensMarketCommand && window.pocketLensMarketCommand("+commands.toString()+")",null);
+                } catch(Exception ignored) { }
+            }
             else if ("logout".equals(command) || "disconnect".equals(command)) clearBroker();
         });
         WebViewCompat.addWebMessageListener(broker,"PocketLensSession",WebPolicy.BROKER_ORIGINS,(view,message,origin,main,reply)-> {
-            if (!main || message.getType()!=WebMessageCompat.TYPE_STRING || !brokerVisible || !WebPolicy.allowed(origin.toString(),true)) return;
+            if (!main || message.getType()!=WebMessageCompat.TYPE_STRING || !relayEnabled || !WebPolicy.allowed(origin.toString(),true)) return;
             handleBrokerMessage(message.getData());
         });
         try {
@@ -95,32 +102,23 @@ public final class MainActivity extends Activity {
 
     private void openBroker(){
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        attempt++;transferring=false;brokerVisible=true;portal.setVisibility(View.GONE);broker.setVisibility(View.VISIBLE);bar.setVisibility(View.VISIBLE);
+        attempt++;relayEnabled=true;transferring=false;brokerVisible=true;portal.setVisibility(View.GONE);broker.setVisibility(View.VISIBLE);bar.setVisibility(View.VISIBLE);
         info.setText("Entrando na Pocket Option oficial. Selecione a conta demonstrativa.");
         broker.loadUrl("https://m.pocketoption.com/pt/login/");
     }
 
     private void handleBrokerMessage(String raw){
-        if (raw==null || raw.length()>22000) return;
+        if(raw==null || raw.length()>1100000 || !relayEnabled || !WebPolicy.allowed(portal.getUrl(),false))return;
         try {
             JSONObject envelope=new JSONObject(raw);
-            if ("real".equals(envelope.optString("type"))) {
-                attempt++;transferring=false;info.setText("Conta real detectada. Selecione a conta DEMO para analisar.");
-                portal.evaluateJavascript("window.pocketNativeDisconnect && window.pocketNativeDisconnect()",null);return;
+            if("real".equals(envelope.optString("type"))){
+                info.setText("Selecione a conta DEMO para analisar.");
+                portal.evaluateJavascript("window.pocketNativePause && window.pocketNativePause()",null);return;
             }
-            if (!"demo".equals(envelope.optString("type")) || transferring) return;
-            String packet=envelope.getString("packet");
-            JSONArray event=new JSONArray(packet.startsWith("42")?packet.substring(2):packet);
-            JSONObject auth=event.getJSONObject(1);
-            if (!"auth".equals(event.getString(0)) || !(auth.get("isDemo") instanceof Number) || auth.getInt("isDemo")!=1
-                || auth.getLong("uid")<=0 || auth.getString("session").length()<10 || auth.getString("session").length()>16000) return;
-            if (!WebPolicy.allowed(portal.getUrl(),false)) return;
-            transferring=true;final long ticket=++attempt;
-            info.setText("Sessão DEMO detectada. Validando a conexão do analisador…");
-            // JSONObject.quote keeps the packet data from becoming JavaScript code. Never log or store the session.
-            portal.evaluateJavascript("window.pocketNativeSession && window.pocketNativeSession("+JSONObject.quote(packet)+")",null);
-            root.postDelayed(()->{if(!destroyed && ticket==attempt && transferring){transferring=false;info.setText("A leitura ainda não foi confirmada. Volte ao analisador para conferir a mensagem ou reconecte.");}},35000);
-        } catch (Exception ignored) { /* Never print broker packets or credentials. */ }
+            if(!"feed".equals(envelope.optString("type")))return;
+            info.setText("Leitura da própria sessão DEMO no celular. Aguardando a primeira cotação para retornar ao gráfico.");
+            portal.evaluateJavascript("window.pocketNativeMarket && window.pocketNativeMarket("+JSONObject.quote(raw)+")",null);
+        }catch(Exception ignored) { }
     }
 
     private void showPortal(){
@@ -128,7 +126,7 @@ public final class MainActivity extends Activity {
         brokerVisible=false;broker.setVisibility(View.GONE);bar.setVisibility(View.GONE);portal.setVisibility(View.VISIBLE);
         // The broker view stays in memory. Authentication is never persisted by the native bridge.
     }
-    private void clearBroker(){attempt++;transferring=false;broker.stopLoading();broker.loadUrl("about:blank");showPortal();}
+    private void clearBroker(){relayEnabled=false;attempt++;transferring=false;broker.stopLoading();broker.loadUrl("about:blank");showPortal();}
     @Override public void onBackPressed(){if(brokerVisible){showPortal();}else{super.onBackPressed();}}
     @Override protected void onDestroy(){destroyed=true;attempt++;if(portal!=null){portal.stopLoading();portal.destroy();}if(broker!=null){broker.stopLoading();broker.destroy();}super.onDestroy();}
 }
