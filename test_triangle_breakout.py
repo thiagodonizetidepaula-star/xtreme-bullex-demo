@@ -59,12 +59,20 @@ class Tests(unittest.TestCase):
                 e.bars.extend(candles(kind))
                 with patch.object(TriangleBreakout,'pivot',side_effect=pivots),\
                      patch('triangle_breakout.candle_psychology',return_value={'ready':True,'body_pct':73,'reason':'Força confirmada'}):
-                    self.assertEqual(e.evaluate(BASE+42*60),'call')
+                    signal=e.evaluate(BASE+42*60)
                 self.assertEqual(e.triangles[0]['kind'],{'ascending':'ascendente','descending':'descendente','symmetric':'simétrico'}[kind])
-                self.assertEqual(e.triangles[0]['state'],'rompimento')
-                self.assertEqual(e.direction,'call')
-                self.assertEqual(e.last_entry['event'],'rompimento')
                 self.assertEqual(len(e.trendlines),2)
+                if kind=='ascending':
+                    self.assertEqual(signal,'call')
+                    self.assertEqual(e.triangles[0]['state'],'rompimento')
+                    self.assertEqual(e.direction,'call')
+                    self.assertEqual(e.last_entry['event'],'rompimento')
+                else:
+                    # No delayed trade: the prior close was already outside
+                    # a descending upper boundary (not a fresh crossing).
+                    self.assertIsNone(signal)
+                    self.assertEqual(e.triangles[0]['state'],'confirmado')
+                    self.assertIsNone(e.last_entry)
 
     def test_descending_support_break_put(self):
         e=TriangleBreakout(60);e.bars.extend(candles('descending','put'))
