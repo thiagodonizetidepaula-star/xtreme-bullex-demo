@@ -57,6 +57,56 @@
  const configInfo=document.createElement('div');configInfo.className='xt-section-heading';
  configInfo.innerHTML='<h2>⚙ Configurações</h2><p>Altere somente quando o automático estiver parado.</p>';
  panes.settings.append(configInfo,controlsCard,...connectionCards);
+ const connectionCard=connectionCards[0]||null;
+ const legacyInput=by('ssid'),legacyConnect=by('connect');
+ const legacyLabel=legacyInput?.closest('label');
+ const brokerInstructions=connectionCard?.querySelector('details');
+ const platformButton=document.createElement('button');
+ platformButton.id='xt-platform-connect';
+ platformButton.type='button';
+ platformButton.className='xt-platform-connect';
+ platformButton.textContent='CONECTAR PELA PLATAFORMA · DEMO';
+ const platformInfo=document.createElement('p');
+ platformInfo.id='xt-platform-info';
+ platformInfo.className='hint';
+ platformInfo.setAttribute('role','status');
+ const legacyManual=document.createElement('details');
+ legacyManual.className='xt-manual-legacy';
+ const legacySummary=document.createElement('summary');
+ legacySummary.textContent='Método técnico antigo · SSID (opcional)';
+ legacyManual.append(legacySummary);
+ // Preserve original form and Android handoff IDs without cloning credentials.
+ if(legacyLabel)legacyManual.append(legacyLabel);
+ if(legacyConnect)legacyManual.append(legacyConnect);
+ if(brokerInstructions)legacyManual.append(brokerInstructions);
+ if(connectionCard){
+  const connectionTitle=connectionCard.querySelector('h2');
+  if(connectionTitle)connectionTitle.textContent='Conexão com a plataforma';
+  connectionCard.insertBefore(platformButton,by('disconnect'));
+  platformButton.after(platformInfo,legacyManual);
+ }
+ const isNative=()=>Boolean(window.XtremeAppBridge&&typeof window.XtremeAppBridge.postMessage==='function');
+ const renderConnectionChoice=()=>{
+  if(!connectionCard)return;
+  const native=isNative(),connected=Boolean(snapshot?.demo_confirmed);
+  platformButton.disabled=busy||Boolean(snapshot?.connecting)||connected;
+  platformButton.textContent=connected?'DEMO CONFIRMADA':native?'CONECTAR PELA PLATAFORMA · DEMO':'ABRIR SITE OFICIAL DA POCKET OPTION';
+  platformInfo.textContent=connected?'Sessão DEMO confirmada pelo Xtreme Tiger.':
+    native?'Entre pela plataforma no navegador interno do Android. Após sua autorização, o bot tentará conectar somente a conta DEMO, sem copiar SSID.':
+    'No navegador web, abrir o site oficial NÃO conecta o bot. Para conexão via plataforma sem SSID, use o aplicativo Android com a integração nativa.';
+  legacyManual.hidden=native;
+ };
+ platformButton.addEventListener('click',()=>{
+  if(platformButton.disabled)return;
+  if(isNative()){
+   // Android checks exact HTTPS source origin and displays a consent dialog.
+   window.XtremeAppBridge.postMessage('connect-demo');
+   platformInfo.textContent='Aguardando autorização de conexão DEMO no Android.';
+  }else{
+   window.open('https://pocketoption.com/','_blank','noopener,noreferrer');
+   platformInfo.textContent='Plataforma oficial aberta. No navegador este acesso não autentica o motor do bot.';
+  }
+ });
  const connectionDetail=by('connectionDetail');if(connectionDetail)panes.settings.append(connectionDetail);
  const guide=connectionCards[1]?.querySelector('p');
  if(guide&&guide.textContent.length>450){
@@ -71,7 +121,10 @@
  liveHead.className='xt-live-head';
  liveHead.innerHTML='<div><div class="xt-overline">MERCADO DEMO · AO VIVO</div><strong id="xt-active-asset">Aguardando conexão</strong><span id="xt-active-mode">Sem estratégia ativa</span></div><button id="xt-settings-shortcut" type="button" aria-label="Abrir configurações e conexão">⚙ Ajustar</button>';
  panes.operation.append(liveHead);
- liveHead.querySelector('button').addEventListener('click',()=>selectTab('settings'));
+ liveHead.querySelector('button').addEventListener('click',()=>{
+  if(!snapshot?.demo_confirmed&&isNative())platformButton.click();
+  else selectTab('settings');
+ });
  const scoreStrip=document.createElement('div');scoreStrip.className='xt-score-strip';
  scoreStrip.innerHTML='<div><small>WINS</small><strong id="xt-wins">0</strong></div><div><small>LOSSES</small><strong id="xt-losses">0</strong></div><div><small>WIN RATE DA SESSÃO</small><strong id="xt-winrate">—</strong></div>';
  panes.operation.append(scoreStrip);
@@ -174,6 +227,8 @@
   by('xt-active-asset').textContent=s.demo_confirmed?pair:'DEMO desconectada';
   const profile=by('expiryProfile'),exp=by('expiry');
   by('xt-active-mode').textContent=(profile?.selectedOptions?.[0]?.textContent||'Análise')+' · '+clean(exp?.selectedOptions?.[0]?.textContent);
+  liveHead.querySelector('button').textContent=
+   s.demo_confirmed?'⚙ Ajustar':isNative()?'Conectar DEMO':'⚙ Conexão';
   pause.disabled=!Boolean(s.auto)||Boolean(s.pending?.id);
   if(paused&&!s.auto)by('xt-flame-caption').textContent='Pausado: novas entradas paradas. Para retomar, toque Iniciar.';
   const all=Array.isArray(s.history)?s.history:[];
@@ -181,6 +236,7 @@
   by('xt-wins').textContent=String(wins);
   by('xt-losses').textContent=String(losses);
   by('xt-winrate').textContent=wins+losses?Math.round(100*wins/(wins+losses))+'%':'—';
+  renderConnectionChoice();
   updateHistory(s);
   tickClock();
  }
