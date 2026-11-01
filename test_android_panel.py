@@ -8,7 +8,7 @@ class AndroidPanelRenderTests(unittest.TestCase):
         source=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf-8')
         self.assertIn('function render(){',source)
         body=source.split('function render(){',1)[1].split('async function poll(){',1)[0]
-        declaration="const isZigzag=['zigzag','zigzag_fast','zigzag_m2','zigzag_zones','triangle'].includes"
+        declaration="const isZigzag=true; // Only ZIGZAG + FRACTAL selectable in V32."
         self.assertIn(declaration,body)
         flag_decl=body.index(declaration)
         # The first occurrence of the lexical binding must be its declaration;
@@ -17,12 +17,14 @@ class AndroidPanelRenderTests(unittest.TestCase):
         self.assertGreater(body.index("$('fastStrategyWrap').hidden=isZigzag"),flag_decl)
         self.assertIn('const expiry=Number(',body)
 
-    def test_three_zigzag_modes_remain_available(self):
+    def test_single_zigzag_strategy_has_separate_analysis_timeframes(self):
         html=(Path(__file__).parent/'static'/'index.html').read_text(encoding='utf-8')
-        self.assertIn('option value="zigzag"',html)
-        self.assertIn('option value="zigzag_fast"',html)
-        self.assertIn('option value="zigzag_m2"',html)
-        self.assertIn('option value="triangle"',html)
+        self.assertEqual(html.count('option value="zigzag_fast"'),1)
+        self.assertNotIn('option value="triangle"',html)
+        self.assertNotIn('option value="fast"',html)
+        self.assertIn('id="zigzagTimeframe"',html)
+        self.assertIn('option value="60">M1',html)
+        self.assertIn('option value="120">M2',html)
 
 
 if __name__=='__main__':
