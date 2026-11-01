@@ -174,7 +174,8 @@ class PriceActionZonesTests(unittest.TestCase):
         root=Path(__file__).parent
         script=(root/'static'/'app.js').read_text(encoding='utf8')
         html=(root/'static'/'index.html').read_text(encoding='utf8')
-        self.assertIn('option value="zigzag_zones"',html)
+        self.assertIn('option value="zigzag_fast"',html)
+        self.assertNotIn('option value="zigzag_zones"',html)
         self.assertIn('zone_mode:',script)
         self.assertIn('drawZoneChart',script)
         self.assertIn('series.forming',script)
