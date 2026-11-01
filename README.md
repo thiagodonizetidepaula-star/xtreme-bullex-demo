@@ -1,3 +1,55 @@
+## V25 · TRIÂNGULO BREAKOUT — PRICE ACTION · observação primeiro
+
+Added as a separate, opt-in strategy to the existing Android/Web Xtreme Tiger and
+existing verified Pocket Option DEMO scanner. **Existing profiles, login, orders,
+placar and history are preserved.** This strategy reads real, closed, consecutive
+5-second, M1, M2 or M5 candles using live DEMO ticks or verified prior broker
+history. No screenshots or made-up price lines are used.
+
+The engine confirms highs/lows using **two later CLOSED candles** (Fractal 2),
+detects:
+- **Ascending:** two roughly horizontal resistance swing highs and ascending
+  swing lows; convergence and positive wedge width are required.
+- **Descending:** roughly horizontal support swing lows and lower highs.
+- **Symmetric:** lower swing highs and higher swing lows.
+- **Breakout:** fresh candle closes beyond converging boundary by >=0.22×ATR,
+  closing beyond prior candle high (CALL) or low (PUT), with strong body,
+  trend-aware candle psychology and no overlapping previous order.
+- **Retest:** later closed candle rejects the already-broken boundary, confirms
+  the breakout direction, and passes body, wick and lateralization checks.
+  User can choose breakout, retest or both.
+- **False break:** a wick only or closure inside the zone never triggers a signal.
+- **Optional EMA 8/21 or ADX >=18** filters; ATR margin is built into the
+  strategy. Horizontal support/resistance zones and the two colored triangle
+  edges are drawn from confirmed historical pivots.
+
+The chart renders identified triangles and real candle data for 5s/M1/M2/M5,
+with a translucent forming bar. **Observation mode is always the default** and
+does **not** send orders. In observation mode, the server logs the symbol,
+timeframe, expiry, pattern, direction, approximate signal-close price and time,
+separately from the broker's real order history.
+
+Before DEMO automatic mode can be enabled, the server needs a chronological
+out-of-sample paper validation for the EXACT symbol/timeframe/expiry and a
+verified broker DEMO expiry. No sample = blocked. Backtesting uses a full
+walk-forward, at least 250 valid consecutive bars, train 70% then holdout 30%,
+at least 60 train signals and 25 holdout signals, and positive payout-adjusted
+net results in both sets. Group performance by UTC hour. Simulated entry uses
+the next completed bar's opening price, so it is NOT proof of broker fills,
+profitability or timing. Expirations below candle timeframe are explicitly
+*not* validatable by those OHLC bars and remain blocked pending tick-level
+outcome data. Report status and reasons in the app.
+
+Initial supported expiration choices: 3s,5s,60s,120s,180s,300s subject to
+the chosen analysis timeframe. The separate automatic demo path still enforces
+fresh quotes, DEMO session, payout minimum, stake controls, cooldown, stop
+win/loss, single pending order and max operations. It never operates real money
+or auto-activates merely because the app was opened.
+
+**IMPORTANT:** This is a research/DEMO strategy, not a confirmed profitable
+trading system. A walk-forward paper pass alone cannot prove real order
+execution quality, and small sample results cannot justify live trading.
+
 ## V24 — Gráfico ao vivo e zonas Price Action (DEMO)
 
 Selectable **GRÁFICO AO VIVO · SUPORTE, RESISTÊNCIA E PRICE ACTION 5s** mode in the existing Android/web app (no new APK or server). The graph uses actual fresh Pocket Option DEMO quote ticks; it shows **closed 5-second candles** plus a visually translucent forming candle, which is **never traded**. Only chart streams actually received are displayed, not the screenshot price/asset and not fabricated prices.
