@@ -192,13 +192,7 @@ $('triangleTimeframe').onchange=()=>{if(!snapshot.auto){
  if(Number($('triangleTimeframe').value)!==5){$('triangleSensitivity').value='strict';if($('triangleExecution').value==='trial')$('triangleExecution').value='observe';}
  populateExpiry();render()}};
 for(const id of ['triangleEntry','triangleEMA','triangleADX','triangleSensitivity'])$(id).onchange=()=>render();
-$('triangleExecution').onchange=()=>{
- if($('triangleExecution').value==='trial'){
-  $('amount').value='1';$('limit').value='1';
-  $('autoSignalStatus').textContent='TESTE ÚNICO DEMO: valor 1, no máximo UMA ordem, somente com candles reais e sinal confirmado.';
- }
- render();
-};
+$('triangleExecution').onchange=()=>render(); // Legacy hidden controls never change stake or max operations.
 $('fastStrategy').onchange=()=>render();
 function selectedQuickStrategy(){
  const n=Number($('expiry').value);
