@@ -51,7 +51,7 @@
   }
   function dispatch(name,data){
    if(name==='successauth'){socketState.ready=true;if(!chosen||!sockets.get(chosen)?.ready)chosen=socket;}
-   if(name!=='successauth'&&!socketState.ready)return;
+   if(name!=='successauth'&&!socketState.ready&&name!=='updateAssets')return;
    if((name==='updateAssets'||name==='updateStream')&&socketState.ready)chosen=socket;
    event(name,data);
   }
