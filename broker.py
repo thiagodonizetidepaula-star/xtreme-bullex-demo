@@ -715,6 +715,8 @@ class Broker:
             if type(analysis_timeframe) is not int or analysis_timeframe not in (5,60,120):
                 raise ValueError('Timeframe de análise inválido: escolha 5s, M1 ou M2.')
             allowed={5:(3,5,60),60:(60,),120:(60,120,180)}
+            if zone_mode:
+                allowed[5]=(3,5,60,120,180)
             if strategy=='zigzag_fractal' and (c.get('scan_all') is not True or
                 expiry not in allowed[analysis_timeframe]):
                 raise ValueError('ZigZag/Fractal: candles 5s aceitam expiração 3s, 5s ou 60s; M1 aceita 60s; M2 aceita 60s, 120s ou 180s.')
