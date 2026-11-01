@@ -71,19 +71,13 @@ $('startSignalAuto').onclick=async()=>{
    render();return;
   }
  }
- const scanAll=['zigzag','zigzag_fast','zigzag_m2','zigzag_zones','triangle'].includes($('expiryProfile').value);
+ const scanAll=true; // V32: one user-facing strategy, scanning available DEMO OTC assets.
  if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
  const params={
-  symbol:scanAll?'':symbol,strategy:scanAll?'zigzag_fractal':'standard',scan_all:scanAll,
-   analysis_timeframe:scanAll?($('expiryProfile').value==='triangle'?Number($('triangleTimeframe').value):$('expiryProfile').value==='zigzag_m2'?120:['zigzag_fast','zigzag_zones'].includes($('expiryProfile').value)?5:60):60,
-   triangle_mode:$('expiryProfile').value==='triangle',
-   triangle_observe:$('triangleExecution').value==='observe',
-   triangle_trial_only:$('triangleExecution').value==='trial',
-   triangle_sensitivity:$('triangleSensitivity').value,
-   triangle_entry:$('triangleEntry').value,
-   triangle_ema:$('triangleEMA').checked,
-   triangle_adx:$('triangleADX').checked,
-   zone_mode:$('expiryProfile').value==='zigzag_zones',
+  symbol:'',strategy:'zigzag_fractal',scan_all:true,
+   analysis_timeframe:Number($('zigzagTimeframe').value),
+   triangle_mode:false,triangle_observe:false,triangle_trial_only:false,
+   zone_mode:false,
   expiry:Number($('expiry').value),fast_strategy:selectedQuickStrategy(),
   amount:Number($('amount').value),
   stop_win:Number($('stop_win').value),
@@ -100,7 +94,7 @@ $('startSignalAuto').onclick=async()=>{
   snapshot=await api('status');
   render();
   $('autoSignalStatus').textContent=snapshot.auto?
-   (params.triangle_mode&&params.triangle_observe?'OBSERVAÇÃO DE TRIÂNGULOS ATIVA: lendo candles e traçando padrões; SEM ORDENS.':params.triangle_trial_only?'TESTE DEMO ÚNICO: aguardando triângulo confirmado para enviar no máximo 1 ordem de valor 1.':scanAll?'VARREDURA DEMO ATIVA: esperando confirmação técnica para BUY/SELL.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
+   'ZIGZAG + FRACTAL DEMO ATIVO: buscando BUY/SELL confirmados até o limite configurado.':
    'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
  }catch(e){
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
@@ -166,11 +160,13 @@ const expiryChoices={
  triangle:[[3,'3 segundos · requer ticks'],[5,'5 segundos'],[60,'M1 · 1 minuto'],[120,'M2 · 2 minutos'],[180,'M3 · 3 minutos'],[300,'M5 · 5 minutos']]
 };
 const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120,zigzag_zones:60,triangle:5};
+const rememberedZigzagByTimeframe={5:5,60:60,120:120};
 function populateExpiry(preferred=null){
  const profile=$('expiryProfile').value;
- const values=profile==='triangle'?expiryChoices.triangle.filter(e=>e[0]>=Number($('triangleTimeframe').value)):expiryChoices[profile];
+ const timeframe=Number($('zigzagTimeframe').value);
+ const values=({5:expiryChoices.zigzag_fast,60:expiryChoices.zigzag,120:expiryChoices.zigzag_m2})[timeframe]||expiryChoices.zigzag_fast;
  const allowed=values.map(entry=>entry[0]);
- const desired=preferred==null?rememberedExpiry[profile]:Number(preferred);
+ const desired=preferred==null?rememberedZigzagByTimeframe[timeframe]:Number(preferred);
  const selected=allowed.includes(Number(desired))?Number(desired):allowed[0];
  const select=$('expiry');
  select.replaceChildren();
@@ -181,10 +177,15 @@ function populateExpiry(preferred=null){
  }
  select.value=String(selected);
  rememberedExpiry[profile]=selected;
+ rememberedZigzagByTimeframe[timeframe]=selected;
 }
 $('expiryProfile').onchange=()=>{
  if(snapshot.auto)return;
- if($('expiryProfile').value==='triangle')$('triangleExecution').value='observe';
+ $('expiryProfile').value='zigzag_fast';
+ populateExpiry();render();
+};
+$('zigzagTimeframe').onchange=()=>{
+ if(snapshot.auto)return;
  populateExpiry();render();
 };
 $('triangleTimeframe').onchange=()=>{if(!snapshot.auto){
@@ -205,6 +206,7 @@ function selectedQuickStrategy(){
 }
 $('expiry').onchange=()=>{
  rememberedExpiry[$('expiryProfile').value]=Number($('expiry').value);
+ rememberedZigzagByTimeframe[Number($('zigzagTimeframe').value)]=Number($('expiry').value);
  render();
 };
 $('pause_after').onchange=()=>render();
@@ -222,15 +224,13 @@ $('resetHistory').onclick=async()=>{
 };
 function render(){
  const s=snapshot||{};
- // Reopen the same active strategy even if the Android WebView refreshed.
- if(s.auto&&(Number(s.auto_expiry)!==Number($('expiry').value)||
-              (s.auto_strategy==='zigzag_fractal'&&$('expiryProfile').value!==(s.triangle_mode?'triangle':s.zone_mode?'zigzag_zones':({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag'))))){
-  $('expiryProfile').value=s.auto_strategy==='zigzag_fractal'?(s.triangle_mode?'triangle':s.zone_mode?'zigzag_zones':({5:'zigzag_fast',60:'zigzag',120:'zigzag_m2'}[s.scan_timeframe]||'zigzag')):Number(s.auto_expiry)>=60?'m5':'fast';
-  if(s.triangle_mode){
-   $('triangleTimeframe').value=String(s.scan_timeframe);
-   $('triangleSensitivity').value=s.triangle_sensitivity||'strict';
-   $('triangleExecution').value=s.triangle_trial_only?'trial':s.triangle_observe?'observe':'demo';
-  }
+ // Keep only the selected ZigZag + Fractal profile when the WebView refreshes.
+ // If a legacy triangle/standard session exists, user must stop it manually.
+ if(s.auto&&s.auto_strategy==='zigzag_fractal'&&!s.triangle_mode&&!s.zone_mode&&
+    (Number(s.auto_expiry)!==Number($('expiry').value)||
+     Number(s.scan_timeframe)!==Number($('zigzagTimeframe').value))){
+  $('expiryProfile').value='zigzag_fast';
+  $('zigzagTimeframe').value=String(s.scan_timeframe);
   populateExpiry(Number(s.auto_expiry));
  }
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
@@ -255,9 +255,9 @@ function render(){
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
  const expiry=Number($('expiry').value),isM1=expiry>=60;
- const isZigzag=['zigzag','zigzag_fast','zigzag_m2','zigzag_zones','triangle'].includes($('expiryProfile').value);
+ const isZigzag=true; // Only ZIGZAG + FRACTAL selectable in V32.
  $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
- const triangleSelected=$('expiryProfile').value==='triangle';
+ const triangleSelected=false;
  $('triangleSettings').hidden=!triangleSelected;
  $('triangleTimeframe').disabled=!!s.auto;
  $('triangleEntry').disabled=!!s.auto;
@@ -289,9 +289,9 @@ function render(){
   'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.') +
   (!triangleDemoAvailable?' · AUTO DEMO CONTÍNUO BLOQUEADO até validação independente.':' · AUTO DEMO elegível após confirmação do usuário.')+
   (triangleTrialAvailable?' · TESTE CONTROLADO: gráfico 5s, expiração '+selectedTriangleExpiry+'s, UMA ordem valor 1, se houver sinal.':'');
- $('startSignalAuto').textContent=triangleSelected&&$('triangleExecution').value==='observe'?'INICIAR OBSERVAÇÃO · SEM ORDENS':triangleSelected&&$('triangleExecution').value==='trial'?'TESTAR UMA ENTRADA DEMO · VALOR 1':'INICIAR AUTOMÁTICO DEMO';
+ $('startSignalAuto').textContent='INICIAR AUTOMÁTICO DEMO';
  const radar=s.radar||{};
- const chartTf=radar.candle_seconds||($('expiryProfile').value==='triangle'?Number($('triangleTimeframe').value):$('expiryProfile').value==='zigzag_m2'?120:['zigzag_fast','zigzag_zones'].includes($('expiryProfile').value)?5:60);
+ const chartTf=radar.candle_seconds||Number($('zigzagTimeframe').value);
  const chartTfLabel={5:'5s',60:'M1',120:'M2',300:'M5'}[chartTf]||'M1';
  const exhaustionActive=[3,5].includes(expiry)&&selectedQuickStrategy()==='exhaustion';
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
@@ -376,11 +376,12 @@ function render(){
  }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
   $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
     (s.auto_stop_reason?' • '+s.auto_stop_reason:'')+
-    '. Para ativar, escolha valor 1 (primeiro teste demo) e toque em INICIAR.';
+    '. Configure a quantidade de operações e toque INICIAR. A primeira expiração ainda não validada exige valor 1 DEMO.';
  }
  $('amount').disabled=!!s.auto;
  $('expiry').disabled=!!s.auto;
  $('expiryProfile').disabled=!!s.auto;
+ $('zigzagTimeframe').disabled=!!s.auto;
  $('fastStrategy').disabled=!!s.auto;
  $('pause_after').disabled=!!s.auto;
  $('min_payout').disabled=!!s.auto;
