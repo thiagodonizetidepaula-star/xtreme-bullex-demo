@@ -35,7 +35,6 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.rgb(11,15,23));
         root.setOnApplyWindowInsetsListener((v,insets)-> {v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         bar = new LinearLayout(this); bar.setPadding(12,6,12,6); bar.setOrientation(LinearLayout.VERTICAL); bar.setVisibility(View.GONE);
@@ -95,6 +94,7 @@ public final class MainActivity extends Activity {
     }
 
     private void openBroker(){
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         attempt++;transferring=false;brokerVisible=true;portal.setVisibility(View.GONE);broker.setVisibility(View.VISIBLE);bar.setVisibility(View.VISIBLE);
         info.setText("Entrando na Pocket Option oficial. Selecione a conta demonstrativa.");
         broker.loadUrl("https://m.pocketoption.com/pt/login/");
@@ -124,6 +124,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showPortal(){
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
         brokerVisible=false;broker.setVisibility(View.GONE);bar.setVisibility(View.GONE);portal.setVisibility(View.VISIBLE);
         // The broker view stays in memory. Authentication is never persisted by the native bridge.
     }

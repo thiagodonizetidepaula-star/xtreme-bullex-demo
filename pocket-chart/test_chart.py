@@ -9,6 +9,17 @@ class FakeSocket:
     def close(self):pass
 
 class ChartTests(unittest.TestCase):
+    def test_catalog_automatically_subscribes_open_asset(self):
+        f=Feed({});f.ws=FakeSocket();f.connected=True
+        row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD OTC';row[14]=True
+        f.event('updateAssets',[row])
+        self.assertEqual(f.symbol,'EURUSD_otc')
+        self.assertTrue(any('subscribeSymbol' in p for p in f.ws.sent))
+        f.event('updateAssets',[row]);self.assertEqual(f.epoch,1)
+    def test_catalog_does_not_select_closed_asset(self):
+        f=Feed({});f.ws=FakeSocket();f.connected=True
+        row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD OTC';row[14]=False
+        f.event('updateAssets',[row]);self.assertEqual(f.symbol,'')
     def feed(self):
         f=Feed({});f.ws=FakeSocket();f.connected=True;f.assets={'EURUSD_otc':{'symbol':'EURUSD_otc','name':'EURUSD OTC','available':True}}
         f.select('EURUSD_otc',60);return f

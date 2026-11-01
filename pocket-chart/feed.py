@@ -59,9 +59,10 @@ class Feed:
         if name=='successauth':
             self.connected=True;self.message='Sessão conectada. Aguardando catálogo de ativos.'
             self.send('indicator/load');self.send('favorite/load')
+            self.ensure_selected()
         elif name=='updateAssets' and isinstance(d,list):
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'available':bool(r[14]),'otc':r[1].endswith('_otc')} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str)}
-            self.message='Escolha um ativo para iniciar o gráfico.'
+            self.ensure_selected()
         elif name=='updateStream' and isinstance(d,list):
             for r in d:
                 if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol:self.tick(float(r[1]),float(r[2]))
@@ -75,6 +76,13 @@ class Feed:
         elif name in ('errorauth','failauth'):
             self.message='Sessão recusada. Atualize a sessão demonstrativa.';self.closed=True
             if self.ws:self.ws.close()
+    def ensure_selected(self):
+        if not self.connected or self.symbol:return
+        available=sorted(s for s,a in self.assets.items() if a['available'])
+        if not available:
+            self.message='Sessão conectada, mas nenhum ativo aberto foi recebido da corretora.'
+            return
+        self.select('EURUSD_otc' if 'EURUSD_otc' in available else available[0],self.period)
     def select(self,symbol,period):
         with self.lock:
             if not self.connected:raise ValueError('Conecte a sessão antes de escolher o ativo.')

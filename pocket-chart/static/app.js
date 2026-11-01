@@ -31,7 +31,7 @@ window.pocketNativeSession=async raw=>{
   const deadline=Date.now()+28000;
   while(ticket===nativeAttempt&&Date.now()<deadline){
    const s=await api('status');
-   if(s.connected&&s.assets?.length){await poll();window.PocketLensNative?.postMessage('connected');toast('Conta demonstrativa conectada. Escolha o ativo e toque em Analisar.');return;}
+   if(s.connected&&s.assets?.length){await poll();window.PocketLensNative?.postMessage('connected');toast('Sessão demo confirmada. Aguardando velas do ativo selecionado.');return;}
    await new Promise(resolve=>setTimeout(resolve,700));
   }
   if(ticket!==nativeAttempt)return;
