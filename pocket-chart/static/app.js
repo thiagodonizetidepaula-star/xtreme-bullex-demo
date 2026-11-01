@@ -83,12 +83,12 @@ function updateSignal(){
  $('signalTitle').className=s?(s.direction==='BUY'?'buy':'sell'):'';
  $('signalTitle').textContent=s?(s.direction==='BUY'?'↑ COMPRA':'↓ VENDA')+(live?' · confirmado agora':' · sinal anterior'):'Aguardando confirmação';
  $('signalDetail').textContent=s?s.reason+(s.confluences?.length?' · '+s.confluences.length+' condições técnicas':'')+' · '+new Date(s.time*1000).toLocaleTimeString('pt-BR')+' · horizonte '+(Number.isFinite(exp)&&exp>=1&&exp<=86400?duration(exp):'inválido'):'Toque na região + rejeição ou engolfo em vela fechada.';
- $('context').textContent=state?.structure?.reason||'Pivôs confirmados, sem antecipar velas.';
+ $('context').textContent=(state?.bars?.length<6&&state?.history_status)||state?.structure?.reason||'Pivôs confirmados, sem antecipar velas.';
 }
 function html(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function renderAnalysis(){
  const a=state?.analysis,m=a?.indicators||{},h=a?.higher||{},live=fresh();
- $('analysisState').textContent=live?(m.count>=24?'Atualizada':'Aquecendo'):'Sem cotação atual';
+ $('analysisState').textContent=live?(m.count>=6?'Price Action ativo':'Recuperando histórico'):'Sem cotação atual';
  $('analysisState').className='pill'+(live?' live':'');
  $('scenarioSummary').textContent=live?(a?.summary||'Aguardando velas fechadas para calcular a estrutura.'):'Leitura suspensa sem cotação atual. Níveis históricos são apenas referência.';
  const bias={up:'Alta',down:'Baixa',neutral:'Neutro'};
@@ -108,7 +108,7 @@ async function poll(){
  $('status').title=state.message||'';$('status').className='pill'+(fresh()?' live':'');
  const a=state.assets.find(a=>a.symbol===state.symbol);$('chartTitle').textContent=state.symbol?(a?.name||state.symbol)+' / '+duration(state.period):'Escolha sua perspectiva';
  $('count').textContent=(state.bars?.length||0)+' velas fechadas';
- $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'')+(state.diagnostic?.clockVerified&&Math.abs(state.diagnostic.clockOffset)>3?' · diferença de relógio: '+state.diagnostic.clockOffset+'s':'')+(state.diagnostic?' · preços no celular: '+(state.diagnostic.streamRows??'—')+' / recebidos: '+state.diagnostic.receivedRows+' / ativo: '+state.diagnostic.selectedRows+' · comandos: '+(state.diagnostic.commandsSent??'—'):'');
+ $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'')+(state.diagnostic?.clockVerified&&Math.abs(state.diagnostic.clockOffset)>3?' · diferença de relógio: '+state.diagnostic.clockOffset+'s':'')+(state.history_status?' · '+state.history_status:'')+(state.diagnostic?' · preços no celular: '+(state.diagnostic.streamRows??'—')+' / recebidos: '+state.diagnostic.receivedRows+' / ativo: '+state.diagnostic.selectedRows+' · comandos: '+(state.diagnostic.commandsSent??'—'):'');
  const last=state.current||state.bars?.at(-1);$('ohlc').textContent=last?'O '+price(last.open)+'   H '+price(last.high)+'   L '+price(last.low)+'   C '+price(last.close):authRejected?state.message:'Aguardando cotações da Pocket Option';
  $('empty').hidden=!!(last);if(!last&&state.connected){$('empty').querySelector('h2').textContent='Sessão conectada';$('empty').querySelector('p').textContent='Aguardando preços do ativo selecionado. A leitura ao vivo será confirmada quando chegar a primeira cotação.';}else if(!last&&state.symbol){$('empty').querySelector('h2').textContent='Conexão interrompida';$('empty').querySelector('p').textContent=state.message;}else{$('empty').querySelector('h2').textContent='Seu gráfico começa aqui';$('empty').querySelector('p').textContent='Conecte a Pocket Option e escolha um ativo. As linhas serão traçadas com os dados recebidos.';}
  if(nativeRelay&&window.PocketLensNative){
@@ -213,7 +213,7 @@ let executionState=null,executionSeen=0,lastForwardedSignal='';
 function renderExecution(){
  const e=executionState,ready=!!(e?.version===2&&Date.now()-executionSeen<4000&&state?.connected);
  $('autoStart').disabled=!ready;$('autoPause').disabled=!ready;
- $('executionMessage').textContent=ready?e.message:'Instale a edição Automático Demo e conecte a conta demo para iniciar.';
+ $('executionMessage').textContent=ready?e.message:(state?.connected?'O gráfico está conectado, mas o aplicativo instalado não confirmou o módulo Android Automático Demo v2 (edição 1.0.4-test). A análise ao vivo, sozinha, não envia ordens.':'Conecte com o aplicativo Android edição Automático Demo 1.0.4-test e confirme a conta DEMO para liberar o botão.');
  const rows=e?.orders||[];const count=s=>rows.filter(r=>r.status===s).length;
  $('brokerScore').textContent='WIN '+count('win')+' · LOSS '+count('loss')+' · EMPATE '+count('tie')+' · Pendentes '+rows.filter(r=>['sending','open','unknown'].includes(r.status)).length+' · Resultado demo '+Number(e?.net||0).toFixed(2);
  $('brokerHistory').innerHTML=rows.slice(-20).reverse().map(r=>'<p>'+html(r.asset)+' · '+html(r.direction.toUpperCase())+' · '+html(r.amount)+' · '+html(duration(r.expiry))+' · '+html(({sending:'Enviando',open:'Aceita',unknown:'Sem confirmação',rejected:'Recusada',win:'WIN',loss:'LOSS',tie:'Empate'})[r.status]||r.status)+(r.net!=null?' · '+html(r.net):'')+'</p>').join('');
