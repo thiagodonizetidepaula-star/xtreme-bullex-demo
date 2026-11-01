@@ -9,6 +9,7 @@
 <option value="zigzag_fast">ZIGZAG + FRACTAL + LINHA + PRICE ACTION + FORÇA DAS VELAS · 5s</option>
 <option value="zigzag_m2">ZIGZAG + FRACTAL + LINHA · ANÁLISE M2</option>
 <option value="zigzag_zones">GRÁFICO AO VIVO · SUPORTE, RESISTÊNCIA E PRICE ACTION 5s</option>
+<option value="triangle">TRIÂNGULO BREAKOUT — PRICE ACTION</option>
 </select></label>
 <label>EXPIRAÇÃO
 <select id="expiry" aria-label="Expiração da ordem DEMO">
@@ -24,6 +25,18 @@
 <option value="exhaustion" selected>ÚLTIMO SUSPIRO · esgotamento</option>
 <option value="trend">TENDÊNCIA · continuação</option>
 </select></label></div>
+<div id="triangleSettings" class="triangle-settings" hidden>
+ <div class="row"><strong>TRIÂNGULO BREAKOUT — PRICE ACTION</strong><span class="hint">Validação primeiro</span></div>
+ <label>TIMEFRAME DA ANÁLISE
+ <select id="triangleTimeframe"><option value="5">5 segundos</option><option value="60" selected>M1</option><option value="120">M2</option><option value="300">M5</option></select></label>
+ <label>ENTRADA
+ <select id="triangleEntry"><option value="both" selected>Rompimento e reteste</option><option value="breakout">Somente rompimento</option><option value="retest">Somente reteste</option></select></label>
+ <label>EXECUÇÃO
+ <select id="triangleExecution"><option value="observe" selected>OBSERVAÇÃO · sem ordens</option><option value="demo">DEMO automático · somente após backtest e validação</option></select></label>
+ <label><input type="checkbox" id="triangleEMA"> Exigir alinhamento EMA 8/21</label>
+ <label><input type="checkbox" id="triangleADX"> Exigir ADX mínimo (18)</label>
+ <p id="triangleValidation" class="hint" role="status">AGUARDANDO DADOS REAIS. Nenhuma estratégia aprovada. Padrões desenhados não geram ordem até validar a combinação de ativo, timeframe e expiração.</p>
+</div>
 <button id="subscribe" class="secondary load-symbol">ACOMPANHAR ESTE ATIVO</button>
 <div class="offer-panel">
 <div class="offer-overline">SINAL · LEITURA CONTÍNUA</div><div id="strategyProfile" class="hint">MODOS RÁPIDO OU M5→M1 · CONTA DEMO</div>
@@ -39,6 +52,7 @@
 <p id="zoneLegend" class="hint" hidden>VERDE = suporte / AZUL = resistência / faixas = regiões / vela apagada = ainda não fechou. Nenhuma ordem é enviada apenas ao tocar a linha.</p>
 <p id="trendlineDiagnostic" class="hint">A linha verde será desenhada quando houver dois topos descendentes confirmados e cotações reais válidas.</p>
 <p id="candlePsychology" class="hint" role="status">PSICOLOGIA DE CANDLES: aguardando velas fechadas e sinais de força</p>
+<p id="triangleDrawingStatus" class="hint" role="status" hidden>Padrões de triângulo serão traçados apenas com pivôs confirmados.</p>
 </div>
 <div class="trade-mode"><label for="tradeMode">MODO DE OPERAÇÃO</label><select id="tradeMode" aria-label="Modo de operação"><option value="manual">MANUAL · Eu decido</option><option value="automatic" selected>AUTOMÁTICO · seguir sinal do perfil</option></select></div>
 <div id="manualActions"><button id="executeSignal" class="execute-signal" disabled>AGUARDANDO SINAL</button></div>
@@ -54,7 +68,7 @@
 <button id="resolvePending" type="button" class="secondary" disabled>LIBERAR PENDÊNCIA CONFERIDA</button>
 <p id="pendingRecoveryResult" class="hint" role="status" aria-live="polite"></p>
 </div><div class="reset-row"><button id="resetHistory" class="secondary" type="button">ZERAR PLACAR E HISTÓRICO</button><span id="resetMessage" role="status" class="hint">Exige confirmação e nenhuma operação pendente.</span></div></div><details class="card activity"><summary>Diagnóstico e avisos (opcional)</summary><p id="storage" class="hint">Status do armazenamento</p><ul id="events"></ul></details></section><aside><div class="card"><h2>01 / Conectar corretora</h2><label>Sessão demo (SSID)<textarea id="ssid" rows="3" autocomplete="off" spellcheck="false" placeholder='42["auth",{…}]'></textarea></label><button id="connect">Conectar Pocket Option</button><button id="disconnect" class="secondary">Desconectar</button><details><summary>Como obter a sessão demo</summary><ol><li>No computador, abra a Pocket Option oficial e selecione a conta demo.</li><li>Abra F12 → Network/Rede → WS e recarregue a plataforma.</li><li>Abra a conexão socket.io e a aba Messages/Mensagens.</li><li>Copie a mensagem enviada que começa com 42["auth",…] e contém "isDemo":1.</li><li>Cole somente no campo acima. Não envie no chat ou por mensagem.</li></ol><p>A sessão dá acesso à conta: fica somente na memória do servidor e é descartada ao desconectar. Pode expirar. Não pedimos a senha da corretora.</p></details><p class="hint">Integração comunitária, sem vínculo oficial. A disponibilidade depende da corretora e da rede.</p></div><div class="card"><h2>CONFIGURAÇÕES DA ENTRADA</h2>
-<p>Perfis RÁPIDO e M5→M1 acompanham um ativo OTC. No perfil ZIGZAG + FRACTAL + LINHA, escolha análise M1 com expiração de 1 minuto, análise 5s com expiração de 3s, 5s ou 1min, ou análise M2 com expiração selecionável M1, M2 e M3. O bot tenta monitorar cada ativo aberto, incluindo OTC, com payout mínimo e traça uma resistência a partir de dois topos fractais descendentes já confirmados. SELL exige fechamento real da perninha ZigZag de alta, Fractal 2 vermelho e resistência ainda intacta. BUY exige fundo fractal verde confirmado e dois candles fechados no timeframe da análise acima da resistência rompida. No perfil GRÁFICO AO VIVO, suporta linha verde ascendente e resistência azul descendente, regiões horizontais, rompimento ou reversão com confirmação por candle real e filtros de psicologia. No gráfico de 5 segundos, BUY/SELL exige Price Action, contagem de pelo menos 2 candles de 3 na mesma cor e corpo forte, sem doji, pavios grandes ou lateralização: o candle fechado deve romper a máxima/mínima do candle anterior com fechamento direcional; tocar a linha ou deixar apenas pavio não autoriza entrada. Os ativos só são elegíveis quando recebem cotações reais, recentes e contínuas. Nem todos os ativos solicitados necessariamente enviam cotações pela integração não oficial; o painel mostra quantos realmente estão recebendo preços. Ative INICIAR AUTOMÁTICO DEMO para começar; nunca usa conta real.</p>
+<p>Nova estratégia TRIÂNGULO BREAKOUT — PRICE ACTION: triângulos ascendentes, descendentes e simétricos, com confirmação de pivôs, rompimento/reteste, ATR, candles fortes e filtros EMA/ADX opcionais. Começa em OBSERVAÇÃO, sem ordens. Somente combinações com dados suficientes, backtest cronológico e validação fora da amostra podem ser consideradas para DEMO automático. Não há aprovação presumida. Perfis RÁPIDO e M5→M1 acompanham um ativo OTC. No perfil ZIGZAG + FRACTAL + LINHA, escolha análise M1 com expiração de 1 minuto, análise 5s com expiração de 3s, 5s ou 1min, ou análise M2 com expiração selecionável M1, M2 e M3. O bot tenta monitorar cada ativo aberto, incluindo OTC, com payout mínimo e traça uma resistência a partir de dois topos fractais descendentes já confirmados. SELL exige fechamento real da perninha ZigZag de alta, Fractal 2 vermelho e resistência ainda intacta. BUY exige fundo fractal verde confirmado e dois candles fechados no timeframe da análise acima da resistência rompida. No perfil GRÁFICO AO VIVO, suporta linha verde ascendente e resistência azul descendente, regiões horizontais, rompimento ou reversão com confirmação por candle real e filtros de psicologia. No gráfico de 5 segundos, BUY/SELL exige Price Action, contagem de pelo menos 2 candles de 3 na mesma cor e corpo forte, sem doji, pavios grandes ou lateralização: o candle fechado deve romper a máxima/mínima do candle anterior com fechamento direcional; tocar a linha ou deixar apenas pavio não autoriza entrada. Os ativos só são elegíveis quando recebem cotações reais, recentes e contínuas. Nem todos os ativos solicitados necessariamente enviam cotações pela integração não oficial; o painel mostra quantos realmente estão recebendo preços. Ative INICIAR AUTOMÁTICO DEMO para começar; nunca usa conta real.</p>
 <label>Valor da entrada DEMO<input id="amount" type="number" value="1" min="1" max="100" step="0.01"></label>
 <label>Payout mínimo %<input id="min_payout" type="number" value="88" min="88" max="100"></label>
 <div class="fields"><label>Stop Win<input id="stop_win" type="number" value="20" min="1" max="10000"></label><label>Stop Loss<input id="stop_loss" type="number" value="20" min="1" max="10000"></label><label>Máx. operações<input id="limit" type="number" value="10" min="1" max="100"></label></div>
