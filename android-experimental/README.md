@@ -1,3 +1,11 @@
+## Android V18 — Conexão pela plataforma dentro da interface V31
+
+- With the Xtreme web **V31** loaded in the Android app, tap **CONECTAR PELA PLATAFORMA · DEMO** directly under ⚙ Configurações, or **Conectar DEMO** on the operation screen when disconnected. This is now equivalent to the pre-existing native **CONECTAR POCKET DEMO** button.
+- A strongly scoped WebMessage listener is registered on the Xtreme WebView for the EXACT `https://xtreme-pocket-5s.onrender.com` HTTPS origin and **main frame**. It accepts only the literal string `connect-demo`. It only opens the existing Android confirmation dialog; no orders or account credentials are injected by this command.
+- Upon explicit user consent, the separate broker WebView opens the **official Pocket Option platform**, and the existing experimental demo-only packet detector attempts a one-time handoff to the original hidden server connection form. The backend's **DEMO CONFIRMADA** remains mandatory. Cookie sharing with Chrome is not available; broker page changes, WebView unsupported sites, regional access restrictions, or missing WebSocket packets may prevent success.
+- The V31 web form SSID entry is not shown in native Android. On a Windows/macOS browser, the button can ONLY open the official broker site — no official OAuth was found and browser sessions cannot be read by this bot. Never claim successful DEMO connection from opening a login page.
+- This is a **debug APK** for the existing Android experiment, not a production release. V18 uses a separate debug signature; if upgrading from V17 or an earlier debug build fails, uninstall only the older experimental app before installing V18. Keep the official Pocket Option application separate. Do not use real funds.
+
 # Xtreme Tiger — Android proof of concept (NOT RELEASED)
 
 This folder is an **isolated experiment** for a user's own Pocket Option **DEMO** account on Android. It does not modify the Xtreme Tiger web app on Render and must not be treated as a working Pocket Option connection.
