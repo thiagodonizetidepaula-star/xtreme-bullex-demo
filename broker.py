@@ -127,6 +127,7 @@ class Broker:
     def __init__(self,auth,persist=lambda row:None):
         self.auth=auth; self.persist=persist; self.lock=threading.RLock(); self.ws=None
         self.connected=False; self.connecting=False; self.demo_confirmed=False; self.balance=None
+        self.connection_state='desconectado';self.connection_failure='';self.connection_attempt=0
         self.assets={}; self.symbol=''; self.ticks=deque(maxlen=600); self.received=0; self.price_time=0; self.quote_samples=deque(maxlen=80)
         self.message='Desconectado'; self.pending=None; self.history=[]; self.events=deque(maxlen=100)
         self.auto=False; self.auto_trial=False; self.auto_started_at=0; self.validated=False; self.validated_expiries=set(); self.auto_expiry=5
@@ -170,6 +171,7 @@ class Broker:
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
         self.connecting=True
+        self.connection_state='conectando';self.connection_failure=''
         threading.Thread(target=self.run,daemon=True).start()
         threading.Thread(target=self.keepalive_loop,daemon=True).start()
     def send_keepalive(self):
@@ -196,29 +198,62 @@ class Broker:
         if not self.ws: raise ValueError('Conexão indisponível.')
         self.ws.send('42'+json.dumps([event] if data is None else [event,data],separators=(',',':')))
     def run(self):
-        for url in DEMO_URLS:
-            if self.closed: break
+        # Retry the transport at most twice per endpoint. No order replay.
+        for attempt, url in enumerate(DEMO_URLS * 2,1):
+            if self.closed or self.pending:break
+            self.connection_attempt=attempt
+            self.connection_state='conectando'
+            self.connecting=True
             self.binary=None; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None
             self.validation_message='Nova conexão DEMO: valide manualmente a expiração desejada.'; self.received=0; self.price_time=0; self.ticks.clear(); self.quote_samples.clear(); self.minute_engine=MinuteSignals(); self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.radar=Radar(ZigZagFractalTrend);self.scan_queue.clear()
             self.history_queue.clear();self.history_requests.clear();self.history_requested.clear()
-            self.log('Conectando ao servidor demo…')
-            self.ws=websocket.WebSocketApp(url,on_message=self.on_message,on_error=self.on_error,on_close=self.on_close)
-            watchdog=threading.Timer(25,lambda: self.ws.close() if not self.connected and self.ws else None); watchdog.daemon=True; watchdog.start()
-            self.ws.run_forever(origin='https://pocketoption.com',sslopt={'cert_reqs':ssl.CERT_REQUIRED,'check_hostname':True},ping_interval=20,ping_timeout=10)
-            watchdog.cancel()
-            if self.closed or self.connected or self.pending: break
-        self.connecting=False; self.connected=False; self.auto=False
-        if not self.closed:self.log('Conexão encerrada. Confira a sessão demo e reconecte. Nenhuma ordem é reenviada automaticamente.')
+            self.log('Conectando à Pocket Option DEMO · tentativa %d/4…'%attempt)
+            self.ws=websocket.WebSocketApp(url,on_message=self.on_message,
+                                            on_error=self.on_error,on_close=self.on_close)
+            socket=self.ws
+            watchdog=threading.Timer(25,lambda:socket.close()
+                if not (self.connected and self.demo_confirmed) and not self.closed else None)
+            watchdog.daemon=True;watchdog.start()
+            try:
+                socket.run_forever(origin='https://pocketoption.com',
+                    sslopt={'cert_reqs':ssl.CERT_REQUIRED,'check_hostname':True},
+                    ping_interval=20,ping_timeout=10)
+            except Exception:
+                # Never log credentials or raw upstream exceptions.
+                self.connection_state='falha_rede'
+                self.connection_failure='Conexão WebSocket interrompida no servidor.'
+            finally:watchdog.cancel()
+            if self.closed or self.pending:break
+            if not self.connection_failure:
+                self.connection_failure='A conexão DEMO terminou sem confirmação da corretora.'
+            if attempt<4:time.sleep(1.0)
+        self.connecting=False;self.connected=False;self.demo_confirmed=False;self.auto=False
+        if not self.closed:
+            self.connection_state='desconectado'
+            self.log((self.connection_failure or 'Conexão DEMO encerrada.')+
+                ' Tentativas encerradas; toque CONECTAR POCKET DEMO novamente. Nenhuma ordem foi repetida.')
         self.keepalive_stop.set()
     def on_error(self,ws,error):
-        # Never log upstream payloads or authentication material.
-        self.log('Falha de conexão com a Pocket Option. Sessão expirada, bloqueio de rede ou servidor indisponível.')
+        # Classify errors without disclosing URL payloads, cookies or tokens.
+        label=str(error).lower()
+        if '429' in label:reason='A corretora limitou novas conexões (429).'
+        elif '403' in label or '401' in label:reason='Servidor da corretora recusou HTTP 401/403.'
+        elif 'timed out' in label or 'timeout' in label:reason='Tempo esgotado ao alcançar a corretora.'
+        elif 'ssl' in label or 'certificate' in label:reason='Falha TLS/certificado de conexão.'
+        elif 'getaddrinfo' in label or 'name or service not known' in label:
+            reason='DNS do servidor não resolveu o endereço da corretora.'
+        else:reason='Falha de comunicação WebSocket com a corretora.'
+        self.connection_state='falha_rede'
+        self.connection_failure=reason
+        self.log(reason)
     def on_close(self,ws,*args):
         with self.lock:
             if self.auto:self.auto_stop_reason='Conexão DEMO encerrada. Reconecte para reativar o automático.'
             self.connected=False; self.auto=False; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
+            if not self.closed and not self.connection_failure:
+                self.connection_failure='Conexão Pocket Option DEMO encerrada antes da confirmação.'
             self.last_signal=None;self.last_signal_at=0
             self.validation_message='Sessão encerrada: reconecte e valide manualmente a expiração escolhida.'
             if self.pending:self.log('Conexão perdida com ordem pendente. Verifique o resultado na corretora antes de reconectar.')
@@ -239,6 +274,8 @@ class Broker:
                     self.closed=True;self.connected=False;self.demo_confirmed=False
                     self.auto=False;self.validated=False;self.validated_expiries.clear();self.keepalive_stop.set()
                     self.auto_stop_reason='Conexão DEMO encerrada pela corretora (41).'
+                    self.connection_state='encerrada_corretora'
+                    self.connection_failure='A corretora encerrou a sessão (41). Gere nova sessão DEMO.'
                     self.log('A Pocket Option encerrou a conexão (código 41). Motivo não informado. Reconecte à conta DEMO.')
                     ws.close()
                 elif message.startswith('451-'):
@@ -250,7 +287,7 @@ class Broker:
             self.auto=False; self.log('Mensagem da corretora não reconhecida. Automático pausado.')
     def event(self,name,d):
         if name=='successauth':
-            self.connected=True;self.connecting=False;self.log('Autenticado. Aguardando confirmação do saldo demo e catálogo.');self.send('indicator/load');self.send('favorite/load')
+            self.connected=True;self.connecting=False;self.connection_state='autenticada';self.connection_failure='';self.log('Autenticado. Aguardando confirmação do saldo demo e catálogo.');self.send('indicator/load');self.send('favorite/load')
         elif name=='successupdateBalance' and isinstance(d,dict):
             previously_demo=self.demo_confirmed
             if 'isDemo' in d:
@@ -258,6 +295,8 @@ class Broker:
                 if not self.demo_confirmed:self.auto=False;self.close();return
             b=d.get('balance')
             if isinstance(b,(int,float)) and math.isfinite(b):self.balance=b
+            if self.demo_confirmed:
+                self.connection_state='demo_confirmada';self.connection_failure=''
             if self.demo_confirmed and not previously_demo:self.log('Conta demo confirmada. Selecione um ativo para receber preços.')
         elif name=='updateAssets' and isinstance(d,list):
             self.assets={r[1]:{'symbol':r[1],'name':str(r[2]),'payout':float(r[5]),'available':bool(r[14])} for r in d if isinstance(r,list) and len(r)>14 and isinstance(r[1],str) and isinstance(r[5],(int,float))}
@@ -432,6 +471,8 @@ class Broker:
                                                  'Automático bloqueado para esta duração.'%(duration,requested))
                     self.history.append(p);self.history=self.history[-300:];self.pending=None;self.last_closed_at=time.time();self.save(p);self.log('Resultado confirmado: '+p['status'])
         elif name.lower()=='notauthorized':
+            self.connection_state='autenticacao_recusada'
+            self.connection_failure='Sessão DEMO recusada. Gere nova autenticação no navegador.'
             self.auto=False;self.validated=False
             self.log('Autenticação DEMO recusada pela corretora. Gere uma nova sessão no navegador interno.')
             self.close()
@@ -938,6 +979,8 @@ class Broker:
                     'history_requested':len(self.history_requested),
                     'history_loaded_count':self.history_loaded_count,
                     'history_unmatched':self.history_unmatched,
+                    'connection_state':self.connection_state,'connection_failure':self.connection_failure,
+                    'connection_attempt':self.connection_attempt,
                     'connected':self.connected,'connecting':self.connecting,'demo_confirmed':self.demo_confirmed,'balance':self.balance,'assets':list(self.assets.values()),'symbol':self.symbol,'ticks':list(self.ticks)[-200:],'age':round(max(0,time.time()-self.received),1) if self.received else None,'source_offset_s':round(time.time()-self.price_time,1) if self.price_time else None,'quote_verified':self.fresh_quote(),'last_app_ping_age':round(time.time()-self.last_app_ping,1) if self.last_app_ping else None,'message':self.message,'auto':self.auto,'auto_expiry':self.auto_expiry,'auto_trial':self.auto_trial,'auto_stop_reason':self.auto_stop_reason,
                     'pause_after':self.pause_after,'filter_lateral':self.lateral_filter,'market_quality':self.market_quality,
                     'auto_waiting_prices':bool(self.auto and age>3),
