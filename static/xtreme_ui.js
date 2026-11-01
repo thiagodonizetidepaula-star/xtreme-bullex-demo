@@ -132,7 +132,7 @@
    buttons[id].tabIndex=current?0:-1;
    buttons[id].classList.toggle('active',current);
   }
-  window.scrollTo?.({top:0,behavior:'instant'});
+  window.scrollTo?.({top:0,behavior:'auto'});
   // Redraw chart when an invisible canvas becomes visible again.
   if(name==='operation'&&typeof drawTrendlineChart==='function'&&snapshot?.radar){
    try{drawTrendlineChart(snapshot.radar)}catch(_e){}
