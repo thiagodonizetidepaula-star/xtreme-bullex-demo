@@ -137,6 +137,7 @@ class Radar:
             if isinstance(source,dict):
                 forming={k:source[k] for k in ('t','open','high','low','close') if k in source}
         chart={'symbol':chart_symbol or '',
+               'zone_mode':bool(chart_watch and getattr(chart_watch.engine,'zone_mode',False)),
                'candle_seconds':getattr(chart_watch.engine,'bar_seconds',60) if chart_watch else 60,
                'candles':list(chart_watch.engine.bars)[-80:] if chart_watch else [],
                'forming':forming,
