@@ -784,7 +784,7 @@ class Broker:
             # use the full configured stake until official settlement validates
             # the exact requested expiry.
             trial=expiry not in self.validated_expiries
-            if trial and vals[0]!=1:
+            if trial and vals[0]!=1 and not (triangle_mode and triangle_observe):
                 raise ValueError('Para o primeiro teste automático de %ds use valor 1 na conta DEMO.'%expiry)
             desired=c.get('symbol')
             # The selected UI asset is authoritative. Previously an already
@@ -829,7 +829,7 @@ class Broker:
             self.market_quality=('Buscando histórico ZigZag/Fractal + linha de tendência em %s'%{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe]) if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
-            self.auto_trial=trial;self.auto_started_at=time.time();self.auto=True
+            self.auto_trial=(trial and not (triangle_mode and triangle_observe));self.auto_started_at=time.time();self.auto=True
             self.auto_stop_reason='';self.feed_lag_warning=False
             if strategy=='zigzag_fractal':
                 self.radar=radar
