@@ -145,6 +145,7 @@ class Radar:
                'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None,
                'trendlines':getattr(chart_watch.engine,'trendlines',[]) if chart_watch else [],
                'triangles':getattr(chart_watch.engine,'triangles',[]) if chart_watch else [],
+               'false_breakout':getattr(chart_watch.engine,'false_breakout',None) if chart_watch else None,
                'zones':getattr(chart_watch.engine,'zones',[]) if chart_watch else [],
                'last_entry':getattr(chart_watch.engine,'last_entry',None) if chart_watch else None,
                'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None}
