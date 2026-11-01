@@ -6,7 +6,8 @@
  const sockets=new Map(),stats={streamPackets:0,streamRows:0,commandsReceived:0,commandsSent:0,parseErrors:0};
  setInterval(()=>{if(demo&&ready)emit([{event:'diagnostic',data:{...stats,sockets:sockets.size}}]);},4000);
  const emit=events=>window.PocketLensSession.postMessage(JSON.stringify({type:'feed',events}));
- const execution=createDemoExecution({emit,valid:()=>!!(demo&&ready&&chosen&&sockets.get(chosen)?.demo&&chosen.readyState===Native.OPEN),send:(event,data)=>chosen.send('42'+JSON.stringify([event,data]))});
+ const brokerReady=()=>!!(demo&&ready&&chosen&&sockets.get(chosen)?.demo&&sockets.get(chosen)?.ready&&chosen.readyState===Native.OPEN);
+ const execution=createDemoExecution({emit,valid:brokerReady,send:(event,data)=>chosen.send('42'+JSON.stringify([event,data]))});
  setInterval(()=>execution.pulse(),1000);
  const flush=()=>{timer=null;if(ready&&demo&&stream.length){emit([{event:'updateStream',data:stream.splice(0)}]);}else stream=[];};
  function catalogRows(rows){return rows.filter(r=>Array.isArray(r)&&r.length>14&&typeof r[1]==='string').slice(0,2000).map(r=>{const out=Array(15).fill(0);out[1]=r[1];out[2]=String(r[2]);out[14]=!!r[14];return out;});}
@@ -30,9 +31,12 @@
   if(name==='errorauth'||name==='failauth'){ready=false;emit([{event:name,data:{}}]);}
  }
  window.pocketLensMarketCommand=commands=>{
-  if(!ready||!demo||!chosen||chosen.readyState!==Native.OPEN||!Array.isArray(commands))return;
-  for(const c of commands)if(c&&['demoStart','demoPause','demoHeartbeat','demoSignal'].includes(c.event))execution.command(c);
+  if(!Array.isArray(commands))return;
+  // Control requests must receive a status even if the broker socket has gone stale.
+  // A hidden Android WebView may throttle timers; heartbeat must emit synchronously.
+  for(const c of commands.slice(0,32))if(c&&['demoStart','demoPause','demoHeartbeat','demoSignal'].includes(c.event))execution.command(c);
   stats.commandsReceived+=commands.length;
+  if(!brokerReady())return; // Never send broker read commands without an authenticated DEMO socket.
   for(const c of commands.slice(0,32))if(c&&allowed.has(c.event)){chosen.send('42'+JSON.stringify(c.data==null?[c.event]:[c.event,c.data]));stats.commandsSent++;}
  };
  window.WebSocket=new Proxy(Native,{construct(Target,args){
@@ -47,8 +51,8 @@
   }
   function dispatch(name,data){
    if(name==='successauth'){socketState.ready=true;if(!chosen||!sockets.get(chosen)?.ready)chosen=socket;}
-   if(name!=='successauth'&&name!=='updateAssets'&&!socketState.ready)return;
-   if(name==='updateAssets'||name==='updateStream')chosen=socket;
+   if(name!=='successauth'&&!socketState.ready)return;
+   if((name==='updateAssets'||name==='updateStream')&&socketState.ready)chosen=socket;
    event(name,data);
   }
   socket.send=function(data){const result=Reflect.apply(send,this,arguments);
@@ -144,7 +148,7 @@ function createDemoExecution(io){
    }
   }
  }
- function command(c){try{if(c.event==='demoStart')configure(c.data);else if(c.event==='demoPause')stop('Pausado pelo usuário');else if(c.event==='demoHeartbeat')heartbeat=Date.now();else if(c.event==='demoSignal')signal(c.data);}catch(e){stop(e.message);} }
+ function command(c){try{if(c.event==='demoStart')configure(c.data);else if(c.event==='demoPause')stop('Pausado pelo usuário');else if(c.event==='demoHeartbeat'){heartbeat=Date.now();pulse();}else if(c.event==='demoSignal')signal(c.data);}catch(e){stop(e.message);} }
  function pulse(){
   if(enabled&&(!io.valid()||Date.now()-heartbeat>6000))stop('Sessão ou painel interrompido; automático pausado');
   for(const o of pending())if((o.status==='sending'&&Date.now()/1000-o.sent_at>8)||(o.status==='open'&&Date.now()/1000-o.sent_at>o.expiry+30)){o.status='unknown';stop('Ordem sem confirmação; automático pausado. Confira na corretora.');}
