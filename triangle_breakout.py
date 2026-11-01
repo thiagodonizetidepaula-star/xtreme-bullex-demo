@@ -9,6 +9,7 @@ from collections import deque
 from statistics import median
 import math
 from candle_psychology import candle_psychology
+from triangle_quality import balanced_quality
 
 
 class VerifiedBars:
@@ -93,13 +94,17 @@ class TriangleBreakout:
     warmup_bars=34
 
     def __init__(self,period=5,entry_style='both',use_adx=False,use_ema=False,
-                 atr_margin=.22):
+                 atr_margin=.22,sensitivity='strict'):
         if period not in (5,60,120,300):raise ValueError('Timeframe inválido')
         if entry_style not in ('breakout','retest','both'):raise ValueError('Entrada inválida')
         if type(use_adx) is not bool or type(use_ema) is not bool:
             raise ValueError('Indicador auxiliar inválido')
         if not isinstance(atr_margin,(int,float)) or not .1<=atr_margin<=.75:
             raise ValueError('Margem ATR inválida')
+        if sensitivity not in ('strict','balanced') or (sensitivity=='balanced' and period!=5):
+            raise ValueError('Leitura equilibrada disponível somente no gráfico real de 5 segundos')
+        self.sensitivity=sensitivity
+        self.warmup_bars=26 if sensitivity=='balanced' else 34
         self.bar_seconds=period
         self.timeframe={5:'5s',60:'M1',120:'M2',300:'M5'}[period]
         self.collector=VerifiedBars(period)
@@ -107,7 +112,7 @@ class TriangleBreakout:
         self.entry_style=entry_style
         self.use_adx=use_adx
         self.use_ema=use_ema
-        self.atr_margin=float(atr_margin)
+        self.atr_margin=.15 if sensitivity=='balanced' else float(atr_margin)
         self.direction=None;self.signal_at=0.;self.strength=None
         self.reason='Observação: procurando triângulos com pivôs confirmados'
         self.triangles=[];self.trendlines=[];self.zones=[]
@@ -172,11 +177,11 @@ class TriangleBreakout:
         lower=self.line(b,l1,l2,'low','support')
         diff_high=b[h2]['high']-b[h1]['high']
         diff_low=b[l2]['low']-b[l1]['low']
-        tolerance=.60*a
+        tolerance=(.70 if self.sensitivity=='balanced' else .60)*a
         # 2 horizontal tests (distinct confirmed pivots) + higher lows.
-        ascending=(abs(diff_high)<=tolerance and diff_low>=.40*a)
-        descending=(abs(diff_low)<=tolerance and diff_high<=-.40*a)
-        symmetric=(diff_high<=-.40*a and diff_low>=.40*a)
+        ascending=(abs(diff_high)<=tolerance and diff_low>=(.32 if self.sensitivity=='balanced' else .40)*a)
+        descending=(abs(diff_low)<=tolerance and diff_high<=-(.32 if self.sensitivity=='balanced' else .40)*a)
+        symmetric=(diff_high<=-(.32 if self.sensitivity=='balanced' else .40)*a and diff_low>=(.32 if self.sensitivity=='balanced' else .40)*a)
         name=('ascendente' if ascending else 'descendente' if descending else
               'simétrico' if symmetric else None)
         if not name:
@@ -194,7 +199,7 @@ class TriangleBreakout:
         first=max(h1,l1);end=max(h2,l2)
         old_gap=self.level(upper,first)-self.level(lower,first)
         last_gap=self.level(upper,end)-self.level(lower,end)
-        if not (.45*a<last_gap<old_gap and old_gap<35*a):
+        if not ((.32 if self.sensitivity=='balanced' else .45)*a<last_gap<old_gap and old_gap<35*a):
             self.reason='Triângulo inválido: linhas não convergem';return None
         self.trendlines=[upper,lower]
         self.trendline=upper
@@ -259,7 +264,7 @@ class TriangleBreakout:
                        cur['close']<low1-margin and cur['close']<prev['low'] and cur['close']<cur['open'])
         if breakout_up or breakout_down:
             direction='call' if breakout_up else 'put'
-            breakout_quality=candle_psychology(b,direction)
+            breakout_quality=(balanced_quality(b,direction) if self.sensitivity=='balanced' else candle_psychology(b,direction))
             self.candle_quality=breakout_quality
             # A bad breakout candle must not create a later retest setup.
             # This avoids trading a wick or low-volume indecision as though
@@ -281,7 +286,7 @@ class TriangleBreakout:
         if (self.last_signal_bar is not None and
             cur['t']-self.last_signal_bar<3*self.bar_seconds):
             self.reason='Padrão já sinalizado recentemente';return None
-        quality=candle_psychology(b,direction)
+        quality=(balanced_quality(b,direction) if self.sensitivity=='balanced' else candle_psychology(b,direction))
         self.candle_quality=quality
         if not quality.get('ready'):
             self.reason='Bloqueado: '+quality.get('reason','candle sem força')
