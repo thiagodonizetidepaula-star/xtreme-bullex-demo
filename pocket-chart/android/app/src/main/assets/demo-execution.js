@@ -67,7 +67,7 @@ function createDemoExecution(io){
    }
   }
  }
- function command(c){try{if(c.event==='demoStart')configure(c.data);else if(c.event==='demoPause')stop('Pausado pelo usuário');else if(c.event==='demoHeartbeat')heartbeat=Date.now();else if(c.event==='demoSignal')signal(c.data);}catch(e){stop(e.message);} }
+ function command(c){try{if(c.event==='demoStart')configure(c.data);else if(c.event==='demoPause')stop('Pausado pelo usuário');else if(c.event==='demoHeartbeat'){heartbeat=Date.now();pulse();}else if(c.event==='demoSignal')signal(c.data);}catch(e){stop(e.message);} }
  function pulse(){
   if(enabled&&(!io.valid()||Date.now()-heartbeat>6000))stop('Sessão ou painel interrompido; automático pausado');
   for(const o of pending())if((o.status==='sending'&&Date.now()/1000-o.sent_at>8)||(o.status==='open'&&Date.now()/1000-o.sent_at>o.expiry+30)){o.status='unknown';stop('Ordem sem confirmação; automático pausado. Confira na corretora.');}
