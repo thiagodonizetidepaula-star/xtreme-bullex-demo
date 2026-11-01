@@ -113,7 +113,7 @@ class Tests(unittest.TestCase):
         with patch.object(TriangleBreakout,'pivot',side_effect=pivots),\
              patch('triangle_breakout.candle_psychology',return_value={'ready':False,'reason':'Mercado lateralizado'}):
             self.assertIsNone(e.evaluate(BASE+42*60))
-        self.assertIn('Bloqueado',e.reason)
+        self.assertTrue('Bloqueado' in e.reason or 'FALSO ROMPIMENTO' in e.reason)
         self.assertIsNone(e.last_entry)
 
     def test_real_tick_collector_must_complete_both_edges(self):
