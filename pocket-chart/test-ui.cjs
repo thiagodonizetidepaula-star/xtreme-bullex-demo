@@ -1,6 +1,6 @@
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 const elements=new Map();
-function element(id){if(!elements.has(id)){const e={value:'60',hidden:false,disabled:false,dataset:{},options:[],textContent:'',addEventListener(){},replaceChildren(){this.options=[];},add(o){this.options.push(o);},getContext(){return {};},getBoundingClientRect(){return {width:0,height:0};},querySelector(selector){return element(id+selector);}};elements.set(id,e);}return elements.get(id);}
+function element(id){if(!elements.has(id)){const e={value:'60',hidden:false,disabled:false,dataset:{},setAttribute(k,v){this[k]=v;},options:[],textContent:'',addEventListener(){},replaceChildren(){this.options=[];},add(o){this.options.push(o);},getContext(){return {};},getBoundingClientRect(){return {width:0,height:0};},querySelector(selector){return element(id+selector);}};elements.set(id,e);}return elements.get(id);}
 let fixture={connected:true,fresh:false,assets:[],bars:[],signals:[],symbol:'EURUSD_otc',period:60,message:'Aguardando preços',structure:{}};
 const context={document:{getElementById:element},window:{devicePixelRatio:1},Option:function(t,v){this.text=t;this.value=v;},ResizeObserver:class{observe(){}},setInterval(){},clearTimeout(){},setTimeout,Date,JSON,Number,Math,Promise,fetch:async()=>({ok:true,status:200,json:async()=>fixture})};
 vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/static/app.js','utf8'),context);
@@ -16,5 +16,7 @@ vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/static/app
  element('dismissSignal').onclick();context.renderSignalBook();assert.equal(element('signalAlert').hidden,true);
  row.id='three';row.status='negative';await context.poll();assert.equal(element('alertTimer').textContent,'Negativa');
  row.announced_at-=100;context.renderSignalBook();assert.equal(element('signalAlert').hidden,true);
+ context.settingsView(true);assert.equal(element('chartView').hidden,true);assert.equal(element('settingsView').hidden,false);
+ context.settingsView(false);assert.equal(element('chartView').hidden,false);assert.equal(element('settingsView').hidden,true);
  console.log('Connection UI tests passed: connected state hides connection CTA, exposes disconnect and gates analysis.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

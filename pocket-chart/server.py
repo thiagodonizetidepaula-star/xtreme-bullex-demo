@@ -4,6 +4,7 @@ from pathlib import Path
 from http.cookies import SimpleCookie
 from feed import Feed,NativeFeed,parse_auth
 from analysis import TIMEFRAMES
+from trading_settings import DEFAULTS,validate
 
 BASE=Path(__file__).parent
 SUPA=os.environ.get('SUPABASE_URL','https://rpryjdvxbpiovcsudrfp.supabase.co').rstrip('/')
@@ -99,6 +100,9 @@ class Handler(BaseHTTPRequestHandler):
                 if session['feed']:session['feed'].close()
                 session['feed']=Feed(auth);session['feed'].start()
                 return self.reply(200,{'ok':True})
+            if path=='/api/trading-settings':
+                if post:session['trading_settings']=validate(body)
+                return self.reply(200,{'settings':session.get('trading_settings',dict(DEFAULTS)),'execution_ready':False,'verified_expiries':[]})
             if path=='/api/status' and not post:
                 f=session['feed']
                 out=f.snapshot() if f else {'connected':False,'assets':[],'bars':[],'signals':[],'fresh':False,'message':'Conecte uma sessão demonstrativa da Pocket Option.'}

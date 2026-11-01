@@ -198,3 +198,11 @@ function renderSignalBook(){
  $('alertEntry').textContent='Referência: '+price(r.entry_price)+' · '+new Date(r.announced_at*1000).toLocaleTimeString('pt-BR')+(fresh()?'':' · Cotações interrompidas');
  $('alertScore').textContent=$('scoreboard').textContent;
 }
+
+function settingsValues(){return {amount:Number($('tradeAmount').value),expiry:Number($('tradeExpiry').value),max_concurrent:Number($('tradeConcurrent').value),martingale:$('tradeMartingale').checked,multiplier:Number($('tradeMultiplier').value),max_steps:Number($('tradeSteps').value),stop_loss:Number($('tradeLoss').value),stop_win:Number($('tradeWin').value)};}
+function exposure(){const v=settingsValues();let total=0;for(let n=0;n<=(v.martingale?v.max_steps:0);n++)total+=v.amount*Math.pow(v.multiplier,n);$('tradeExposure').textContent=Number.isFinite(total)?'Exposição de uma sequência completa: '+total.toFixed(2)+' · Com '+v.max_concurrent+' sequências: '+(total*v.max_concurrent).toFixed(2)+'. Martingale aumenta o valor após perdas e não garante recuperação.':'';}
+function settingsView(show){$('chartView').hidden=show;$('settingsView').hidden=!show;$('chartTab').setAttribute('aria-pressed',String(!show));$('settingsTab').setAttribute('aria-pressed',String(show));if(!show)draw();}
+$('chartTab').onclick=()=>settingsView(false);
+$('settingsTab').onclick=async()=>{settingsView(true);try{const {settings:s}=await api('trading-settings');for(const [id,key] of [['tradeAmount','amount'],['tradeExpiry','expiry'],['tradeConcurrent','max_concurrent'],['tradeMultiplier','multiplier'],['tradeSteps','max_steps'],['tradeLoss','stop_loss'],['tradeWin','stop_win']])$(id).value=s[key];$('tradeMartingale').checked=s.martingale;exposure();}catch(e){$('tradeSettingsMessage').textContent=e.message;}};
+$('tradingSettingsForm').oninput=exposure;
+$('tradingSettingsForm').onsubmit=async e=>{e.preventDefault();try{await api('trading-settings',settingsValues());$('tradeSettingsMessage').textContent='Configurações salvas nesta sessão. Execução automática ainda indisponível.';}catch(err){$('tradeSettingsMessage').textContent=err.message;}};
