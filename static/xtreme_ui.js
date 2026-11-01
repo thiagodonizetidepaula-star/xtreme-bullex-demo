@@ -58,6 +58,12 @@
  configInfo.innerHTML='<h2>⚙ Configurações</h2><p>Altere somente quando o automático estiver parado.</p>';
  panes.settings.append(configInfo,controlsCard,...connectionCards);
  const connectionDetail=by('connectionDetail');if(connectionDetail)panes.settings.append(connectionDetail);
+ const guide=connectionCards[1]?.querySelector('p');
+ if(guide&&guide.textContent.length>450){
+  const guideBox=document.createElement('details');guideBox.className='xt-settings-help';
+  const guideSummary=document.createElement('summary');guideSummary.textContent='Como funcionam as estratégias e filtros';
+  guide.before(guideBox);guideBox.append(guideSummary,guide);
+ }
  if(activity)panes.settings.append(activity);
 
  const status=by('status');if(status)panes.operation.append(status);
@@ -66,6 +72,9 @@
  liveHead.innerHTML='<div><div class="xt-overline">MERCADO DEMO · AO VIVO</div><strong id="xt-active-asset">Aguardando conexão</strong><span id="xt-active-mode">Sem estratégia ativa</span></div><button id="xt-settings-shortcut" type="button" aria-label="Abrir configurações e conexão">⚙ Ajustar</button>';
  panes.operation.append(liveHead);
  liveHead.querySelector('button').addEventListener('click',()=>selectTab('settings'));
+ const scoreStrip=document.createElement('div');scoreStrip.className='xt-score-strip';
+ scoreStrip.innerHTML='<div><small>WINS</small><strong id="xt-wins">0</strong></div><div><small>LOSSES</small><strong id="xt-losses">0</strong></div><div><small>WIN RATE DA SESSÃO</small><strong id="xt-winrate">—</strong></div>';
+ panes.operation.append(scoreStrip);
 
  const timers=document.createElement('div');timers.className='xt-timers';
  timers.innerHTML=`
@@ -167,6 +176,11 @@
   by('xt-active-mode').textContent=(profile?.selectedOptions?.[0]?.textContent||'Análise')+' · '+clean(exp?.selectedOptions?.[0]?.textContent);
   pause.disabled=!Boolean(s.auto)||Boolean(s.pending?.id);
   if(paused&&!s.auto)by('xt-flame-caption').textContent='Pausado: novas entradas paradas. Para retomar, toque Iniciar.';
+  const all=Array.isArray(s.history)?s.history:[];
+  const wins=all.filter(o=>o.status==='WIN').length,losses=all.filter(o=>o.status==='LOSS').length;
+  by('xt-wins').textContent=String(wins);
+  by('xt-losses').textContent=String(losses);
+  by('xt-winrate').textContent=wins+losses?Math.round(100*wins/(wins+losses))+'%':'—';
   updateHistory(s);
   tickClock();
  }
@@ -181,7 +195,12 @@
    profile==='zigzag_m2'?120:profile==='m5'||profile==='zigzag'?60:5);
   const seconds=[5,60,120,300].includes(tf)?tf:5;
   const latestAge=s.age==null?Infinity:Number(s.age)+(Date.now()-lastPollTime)/1000;
-  const real=Boolean(s.connected&&s.demo_confirmed&&Number.isFinite(latestAge)&&latestAge<3);
+  const forming=chart.forming;
+  const chartLive=Boolean(Number(s.radar?.receiving)>0&&
+   forming&&Number.isFinite(Number(forming.t))&&
+   now-Number(forming.t)>=-1&&now-Number(forming.t)<seconds+3);
+  const real=Boolean(s.connected&&s.demo_confirmed&&(
+   (Number.isFinite(latestAge)&&latestAge<3)||chartLive));
   const candleClock=by('xt-candle-time'),flameClock=by('xt-flame-time');
   const flameFill=by('xt-flame-fill'),flame=by('xt-flame-progress');
   const subtitle=by('xt-chart-timeframe'),title=by('xt-flame-title'),caption=by('xt-flame-caption');
@@ -197,7 +216,7 @@
   }
   const candleLeft=(Math.floor(now/seconds)+1)*seconds-now;
   candleClock.textContent=real?mmss(candleLeft):'--:--';
-  subtitle.textContent=real?label+' · relógio estimado pelos ticks atuais':'Sem tick recente';
+  subtitle.textContent=real?label+' · relógio estimado por cotação recente':'Sem tick recente';
   let total=seconds,remaining=candleLeft;
   if(ongoing){
    total=Number(s.pending.expiry)||Number(by('expiry')?.value)||5;
