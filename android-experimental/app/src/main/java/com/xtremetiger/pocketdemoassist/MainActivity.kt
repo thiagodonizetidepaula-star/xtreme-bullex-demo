@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V18"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V19"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V18 DEMO: conexão via plataforma e painel simplificado V31. Apenas conta DEMO."
+            text = "V19 DEMO: ZigZag + Fractal • conexão pela plataforma no ⚙. Somente DEMO."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -151,9 +151,10 @@ class MainActivity : Activity() {
             addView(a, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(b, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        controls.addView(pair(openTiger, viewPlatform))
-        controls.addView(pair(openBroker, start))
-        controls.addView(pair(stop, discard))
+        // All user-facing strategies, settings and trade controls now live in
+        // the clean V32 web panel. Preserve two native fallback buttons ONLY
+        // on older Android builds lacking the native origin-scoped bridge.
+        controls.addView(pair(openTiger, openBroker))
         controls.addView(transferButton)
         connectionIssueText = TextView(this).apply {
             text = "Não foi possível abrir o site oficial."
@@ -228,6 +229,12 @@ class MainActivity : Activity() {
 
         probeSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) &&
                 WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+        if (probeSupported) {
+            // Hide V16-style six-button native controls so ⚙ Connect DEMO is
+            // the sole platform connection control inside the main dashboard.
+            controls.visibility = View.GONE
+            status.visibility = View.GONE
+        }
         if (probeSupported) {
             WebViewCompat.addWebMessageListener(
                 broker, "XtremeDemoBridge", brokerOrigins
