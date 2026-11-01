@@ -111,6 +111,20 @@ class ChartTests(unittest.TestCase):
         f=self.feed();f.last_source=1800000060
         f.history([{'time':1800000060,'open':1,'high':2,'low':.5,'close':1},[1800000000,1],[1800000059,1.1]])
         self.assertEqual(f.bars,{})
+    def test_history_retry_uses_broker_history_not_new_waited_candles(self):
+        f=self.feed()
+        base=1800000000
+        with patch('feed.time.time',return_value=base):f.tick(base,1.2)
+        self.assertEqual(f.history_attempts,1)
+        with patch('feed.time.time',return_value=base+9):f.tick(base+9,1.201)
+        self.assertEqual(f.history_attempts,2)
+        self.assertTrue(any('loadHistoryPeriod' in p for p in f.ws.sent))
+        self.assertIn('Buscando velas',f.snapshot()['history_status']) if f.history_attempts<5 else None
+    def test_short_real_history_can_draw_pivots_without_12_new_candles(self):
+        bars=[{'time':1800000000+i*60,'open':1,'high':1.02,'low':.98,'close':1.001} for i in range(9)]
+        bars[3]['low']=.95
+        self.assertNotIn('12 velas',structure(bars,60)['reason'])
+        self.assertTrue(structure(bars,60)['zones'])
     def test_pivot_requires_two_right_candles(self):
         bars=[{'time':1800000000+i*60,'open':1,'close':1,'low':.8,'high':1.2} for i in range(16)]
         bars[-2]['low']=.5
