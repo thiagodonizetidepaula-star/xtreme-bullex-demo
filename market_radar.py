@@ -138,11 +138,13 @@ class Radar:
                 forming={k:source[k] for k in ('t','open','high','low','close') if k in source}
         chart={'symbol':chart_symbol or '',
                'zone_mode':bool(chart_watch and getattr(chart_watch.engine,'zone_mode',False)),
+               'triangle_mode':bool(chart_watch and getattr(chart_watch.engine,'triangle_mode',False)),
                'candle_seconds':getattr(chart_watch.engine,'bar_seconds',60) if chart_watch else 60,
-               'candles':list(chart_watch.engine.bars)[-80:] if chart_watch else [],
+               'candles':list(chart_watch.engine.bars)[-100:] if chart_watch else [],
                'forming':forming,
                'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None,
                'trendlines':getattr(chart_watch.engine,'trendlines',[]) if chart_watch else [],
+               'triangles':getattr(chart_watch.engine,'triangles',[]) if chart_watch else [],
                'zones':getattr(chart_watch.engine,'zones',[]) if chart_watch else [],
                'last_entry':getattr(chart_watch.engine,'last_entry',None) if chart_watch else None,
                'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None}
