@@ -89,6 +89,25 @@ class Tests(unittest.TestCase):
             self.assertIsNone(e.evaluate(BASE+42*60))
         self.assertIsNone(e.last_entry)
 
+    def test_false_breakout_wick_inside_triangle_is_detected_and_blocked(self):
+        e=TriangleBreakout(60);b=candles('ascending')
+        b[-1].update(open=111.7,high=114.,low=111.6,close=111.85)
+        e.bars.extend(b)
+        with patch.object(TriangleBreakout,'pivot',side_effect=pivots):
+            self.assertIsNone(e.evaluate(BASE+42*60))
+        self.assertIn('FALSO ROMPIMENTO',e.reason)
+        self.assertEqual(e.false_breakout['kind'],'pavio_sem_fechamento')
+        self.assertEqual(e.false_breakout_count,1)
+        self.assertIsNone(e.retest_pending)
+
+    def test_invalid_breakout_does_not_arm_future_retest(self):
+        e=TriangleBreakout(60);e.bars.extend(candles('ascending'))
+        with patch.object(TriangleBreakout,'pivot',side_effect=pivots),\
+             patch('triangle_breakout.candle_psychology',return_value={'ready':False,'reason':'Doji'}):
+            self.assertIsNone(e.evaluate(BASE+42*60))
+        self.assertIn('força insuficiente',e.reason)
+        self.assertIsNone(e.retest_pending)
+
     def test_doji_and_lateralization_veto_even_if_triangle_breaks(self):
         e=TriangleBreakout(60);e.bars.extend(candles())
         with patch.object(TriangleBreakout,'pivot',side_effect=pivots),\
