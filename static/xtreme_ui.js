@@ -248,7 +248,7 @@
   const profile=by('expiryProfile')?.value;
   const tf=Number(chart.candle_seconds)||(
    profile==='triangle'?Number(by('triangleTimeframe')?.value||5):
-   profile==='zigzag_m2'?120:profile==='m5'||profile==='zigzag'?60:5);
+   Number(by('zigzagTimeframe')?.value||5));
   const seconds=[5,60,120,300].includes(tf)?tf:5;
   const latestAge=s.age==null?Infinity:Number(s.age)+(Date.now()-lastPollTime)/1000;
   const forming=chart.forming;
