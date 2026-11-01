@@ -3,7 +3,7 @@ import json,math,ssl,threading,time
 import statistics
 from collections import deque
 import websocket
-from analysis import TIMEFRAMES,valid_bar,structure,evaluate
+from analysis import TIMEFRAMES,valid_bar,structure,analysis_report,confirmed_signal
 
 URLS=('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket','wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 READ_EVENTS=frozenset(('auth','ps','indicator/load','favorite/load','subscribeSymbol','unsubscribeSymbol','changeSymbol','subfor','loadHistoryPeriod'))
@@ -138,7 +138,7 @@ class Feed:
             if complete:
                 self.bars[c['time']]={k:c[k] for k in ('time','open','high','low','close')}
                 if bucket==c['time']+self.period and t-bucket<=min(3,self.period*.25):
-                    s=evaluate(sorted(self.bars.values(),key=lambda b:b['time']),self.period)
+                    s=confirmed_signal(sorted(self.bars.values(),key=lambda b:b['time']),self.period)
                     if s:
                         s['confirmed_at']=time.time();self.signals.append(s)
             self.current=None
@@ -192,7 +192,7 @@ class Feed:
             ctx=structure(bars,self.period)
             current={k:self.current[k] for k in ('time','open','high','low','close')} if self.current else None
             return {'connected':self.connected,'message':self.message,'assets':sorted(self.assets.values(),key=lambda a:a['name']),
-                    'symbol':self.symbol,'period':self.period,'bars':bars,'current':current,'structure':ctx,'fresh':fresh,
+                    'symbol':self.symbol,'period':self.period,'bars':bars,'current':current,'structure':ctx,'analysis':analysis_report(bars,self.period,ctx),'fresh':fresh,
                     'age':round(now-self.received,1) if self.received else None,'source_time':self.last_source or None,'received_at':self.received or None,
                     'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested}
     def close(self):

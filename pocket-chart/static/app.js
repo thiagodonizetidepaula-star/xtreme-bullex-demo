@@ -69,7 +69,7 @@ $('apply').onclick=async()=>{
  await api('select',{symbol,period});view.offset=0;hover=null;await poll();}
  catch(e){toast(e.message);}finally{selectionBusy=false;$('apply').disabled=false;}
 };
-for(const id of ['zones','trends','arrows'])$(id).onchange=draw;
+for(const id of ['zones','trends','arrows','ideas'])$(id).onchange=draw;
 $('plus').onclick=()=>{view.size=Math.max(20,Math.round(view.size*.8));draw();};
 $('minus').onclick=()=>{view.size=Math.min(400,Math.round(view.size*1.25));draw();};
 $('reset').onclick=()=>{view={size:90,offset:0};hover=null;draw();};
@@ -80,8 +80,20 @@ function updateSignal(){
  const live=s&&fresh()&&Date.now()/1000-(s.confirmed_at||s.time)<=Math.min(5,(state.period||60)*.25);
  $('signalTitle').className=s?(s.direction==='BUY'?'buy':'sell'):'';
  $('signalTitle').textContent=s?(s.direction==='BUY'?'↑ COMPRA':'↓ VENDA')+(live?' · confirmado agora':' · sinal anterior'):'Aguardando confirmação';
- $('signalDetail').textContent=s?s.reason+' · '+new Date(s.time*1000).toLocaleTimeString('pt-BR')+' · horizonte '+(Number.isFinite(exp)&&exp>=1&&exp<=86400?duration(exp):'inválido'):'Toque na região + rejeição ou engolfo em vela fechada.';
+ $('signalDetail').textContent=s?s.reason+(s.confluences?.length?' · '+s.confluences.length+' condições técnicas':'')+' · '+new Date(s.time*1000).toLocaleTimeString('pt-BR')+' · horizonte '+(Number.isFinite(exp)&&exp>=1&&exp<=86400?duration(exp):'inválido'):'Toque na região + rejeição ou engolfo em vela fechada.';
  $('context').textContent=state?.structure?.reason||'Pivôs confirmados, sem antecipar velas.';
+}
+function html(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderAnalysis(){
+ const a=state?.analysis,m=a?.indicators||{},h=a?.higher||{},live=fresh();
+ $('analysisState').textContent=live?(m.count>=24?'Atualizada':'Aquecendo'):'Sem cotação atual';
+ $('analysisState').className='pill'+(live?' live':'');
+ $('scenarioSummary').textContent=live?(a?.summary||'Aguardando velas fechadas para calcular a estrutura.'):'Leitura suspensa sem cotação atual. Níveis históricos são apenas referência.';
+ const bias={up:'Alta',down:'Baixa',neutral:'Neutro'};
+ const metrics=[['EMA21',price(m.ema21)],['RSI14',Number.isFinite(m.rsi)?m.rsi.toFixed(1):'Aquecendo'],['ADX14',Number.isFinite(m.adx)?m.adx.toFixed(1):'Aquecendo'],['ATR14',price(m.atr)],['Período superior '+duration(h.period||300),h.count>=24?(bias[h.bias]||'Neutro'):'Histórico insuficiente']];
+ $('technicalMetrics').innerHTML=metrics.map(([k,v])=>'<div><small>'+html(k)+'</small><strong>'+html(v)+'</strong></div>').join('');
+ $('setupList').innerHTML=(a?.setups||[]).map(s=>'<article class="setupCard '+(s.direction==='SELL'?'sellCard':'')+'"><h3>'+html(s.direction==='BUY'?'↑ POSSÍVEL COMPRA':'↓ POSSÍVEL VENDA')+' · '+html(price(s.price))+'</h3><p>'+html(s.explanation)+'</p><p><b>Confirmação:</b> '+html(s.confirmation)+'</p><p><b>Invalida:</b> fechamento '+(s.direction==='BUY'?'abaixo de ':'acima de ')+html(price(s.invalidation))+'.</p><p>'+html(s.alternative)+'</p><p class="blocked">'+html(!live?'Sem sinal ativo: aguardando cotação atual.':s.cautions?.length?s.cautions.join(' '):s.near?'Preço na proximidade da região; aguarde o padrão.':'Aguarde o preço alcançar a região.')+'</p></article>').join('')||'<p class="setupEmpty">Sem região próxima suficientemente definida. Aguardar é parte da análise.</p>';
+ $('analysisCautions').textContent=(a?.cautions||[]).join(' ');
 }
 async function poll(){
  if(!active||polling)return;polling=true;
@@ -101,7 +113,7 @@ async function poll(){
   const commands=await api('native-commands');nativeCommands(commands.commands);
   if(nativeConnecting&&fresh()&&state.current){nativeConnecting=false;window.PocketLensNative.postMessage('connected');toast('Primeira cotação real recebida da sessão demo no celular.');}
  }
- updateSignal();draw();
+ renderAnalysis();updateSignal();draw();
  }catch(e){if(active){$('status').textContent='Sem conexão';$('status').className='pill';if(state)state.fresh=false;$('feedMessage').textContent=e.message;updateSignal();}}
  finally{polling=false;}
 }
@@ -132,6 +144,20 @@ function draw(){
  }
  if($('trends').checked)for(const line of state?.structure?.lines||[]){ctx.strokeStyle=line.kind==='support'?'#65e4b1':'#b59aff';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(tx(line.start.time),y(line.start.price));ctx.lineTo(tx(line.end.time),y(line.end.price));ctx.stroke();}ctx.lineWidth=1;
  for(const b of data){const xx=tx(b.time);if(xx<left-step||xx>left+pw)continue;const color=b.close>=b.open?'#65dcb0':'#eb7186';ctx.strokeStyle=color;ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(xx,y(b.high));ctx.lineTo(xx,y(b.low));ctx.stroke();const bw=Math.max(1,Math.min(13,step*.62));ctx.fillRect(xx-bw/2,Math.min(y(b.open),y(b.close)),bw,Math.max(1,Math.abs(y(b.open)-y(b.close))));}
+ if($('trends').checked){
+  const reference=state?.structure?.reference;
+  if(reference){ctx.strokeStyle='#8d9caf';ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(tx(reference.start.time),y(reference.start.price));ctx.lineTo(tx(reference.end.time),y(reference.end.price));ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#a1afc3';ctx.fillText('Referência provisória',left+10,top+14);}
+  const ema=state?.analysis?.overlays?.ema21||[];
+  if(ema.length){ctx.strokeStyle='#d5b66e88';ctx.lineWidth=1;ctx.beginPath();ema.forEach((p,i)=>i?ctx.lineTo(tx(p.time),y(p.price)):ctx.moveTo(tx(p.time),y(p.price)));ctx.stroke();}
+  for(const line of state?.structure?.lines||[]){const xx=Math.min(left+pw-105,Math.max(left+5,tx(line.end.time)-90)),yy=y(line.end.price);ctx.fillStyle=line.kind==='support'?'#65e4b1':'#b59aff';ctx.fillText((line.label||'Tendência')+' · '+(line.touches||2)+' toques',xx,Math.max(top+12,Math.min(top+ph-6,yy-7)));}
+ }
+ if($('ideas').checked)for(const s of state?.analysis?.setups||[]){
+  const yy=y(s.price),xx=left+pw-12;if(yy<top+15||yy>top+ph-15)continue;
+  const color=!fresh()||s.state==='blocked'?'#8995a9':s.direction==='BUY'?'#65e4b1':'#b59aff';
+  ctx.strokeStyle=color;ctx.setLineDash([2,5]);ctx.beginPath();ctx.moveTo(Math.max(left,tx(data.at(-1).time)),yy);ctx.lineTo(xx,yy);ctx.stroke();ctx.setLineDash([]);
+  const dir=s.direction==='BUY'?-1:1;ctx.beginPath();ctx.moveTo(xx,yy+dir*7);ctx.lineTo(xx-5,yy-dir*2);ctx.lineTo(xx+5,yy-dir*2);ctx.closePath();ctx.stroke();
+  ctx.fillStyle=color;ctx.textAlign='right';ctx.fillText((s.direction==='BUY'?'? COMPRA ':'? VENDA ')+price(s.price),xx-10,yy-8);ctx.textAlign='left';
+ }
  if($('arrows').checked)for(const s of state?.signals||[]){
   const xx=tx(s.time);if(xx<left||xx>left+pw)continue;const buy=s.direction==='BUY',b=data.find(b=>b.time===s.candle_time),yy=y(b?(buy?b.low:b.high):s.price)+(buy?20:-20);
   ctx.fillStyle=buy?'#65e4b1':'#ff8796';ctx.beginPath();ctx.moveTo(xx,yy+(buy?-9:9));ctx.lineTo(xx-5,yy);ctx.lineTo(xx-2,yy);ctx.lineTo(xx-2,yy+(buy?7:-7));ctx.lineTo(xx+2,yy+(buy?7:-7));ctx.lineTo(xx+2,yy);ctx.lineTo(xx+5,yy);ctx.closePath();ctx.fill();
