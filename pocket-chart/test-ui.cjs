@@ -8,5 +8,6 @@ vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/static/app
  assert.equal(element('connectOpen').textContent,'Desconectar');assert.equal(element('emptyConnect').hidden,true);assert.equal(element('emptyh2').textContent,'Sessão conectada');assert.equal(element('apply').disabled,false);
  fixture={...fixture,connected:false};await context.poll();
  assert.equal(element('connectOpen').textContent,'Conectar');assert.equal(element('emptyConnect').hidden,false);assert.equal(element('apply').disabled,true);
+ fixture={...fixture,connected:true,fresh:true,source_time:Date.now()/1000-3600,received_at:Date.now()/1000};await context.poll();assert.equal(context.fresh(),true,'verified source offset uses receipt freshness');
  console.log('Connection UI tests passed: connected state hides connection CTA, exposes disconnect and gates analysis.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

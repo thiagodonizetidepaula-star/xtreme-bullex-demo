@@ -1,11 +1,23 @@
 """Read-only Pocket Option adapter. Only allowlisted market data events can leave."""
 import json,math,ssl,threading,time
+import statistics
 from collections import deque
 import websocket
 from analysis import TIMEFRAMES,valid_bar,structure,evaluate
 
 URLS=('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket','wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 READ_EVENTS=frozenset(('auth','ps','indicator/load','favorite/load','subscribeSymbol','unsubscribeSymbol','changeSymbol','subfor','loadHistoryPeriod'))
+
+def source_timestamp(value):
+    """Recognize Unix seconds/milliseconds/microseconds/nanoseconds explicitly."""
+    try:
+        t=float(value)
+        if not math.isfinite(t):return None
+        for divisor in (1,1000,1000000,1000000000):
+            stamp=t/divisor
+            if 946684800<=stamp<=4133980800:return stamp
+    except (TypeError,ValueError,OverflowError):pass
+    return None
 
 def parse_auth(raw):
     try:
@@ -112,10 +124,12 @@ class Feed:
         idx=str(time.time_ns()//1000000);self.requests[idx]=(self.symbol,self.period,self.epoch)
         self.send('loadHistoryPeriod',{'asset':self.symbol,'index':int(idx),'offset':min(172800,self.period*300),'period':self.period,'time':int(self.last_source)//self.period*self.period})
         self.history_requested=True;self.last_history=time.time()
+    def source_now(self):return time.time()
     def tick(self,t,p):
-        if t>1e12:t/=1000
+        t=source_timestamp(t)
+        if t is None:return
         # Strict source time + local arrival freshness: stale packets cannot issue signals.
-        if not math.isfinite(t) or not math.isfinite(p) or p<=0 or t<=self.last_source or abs(time.time()-t)>30:return
+        if not math.isfinite(p) or p<=0 or t<=self.last_source or abs(self.source_now()-t)>30:return
         self.last_source=t;self.received=time.time();bucket=int(t)//self.period*self.period
         if self.current and bucket>self.current['time']:
             c=self.current
@@ -125,7 +139,8 @@ class Feed:
                 self.bars[c['time']]={k:c[k] for k in ('time','open','high','low','close')}
                 if bucket==c['time']+self.period and t-bucket<=min(3,self.period*.25):
                     s=evaluate(sorted(self.bars.values(),key=lambda b:b['time']),self.period)
-                    if s:self.signals.append(s)
+                    if s:
+                        s['confirmed_at']=time.time();self.signals.append(s)
             self.current=None
         if self.current is None:
             self.current={'time':bucket,'open':p,'high':p,'low':p,'close':p,'first':t,'last':t,'max_gap':0}
@@ -142,8 +157,9 @@ class Feed:
         for r in rows[:50000]:
             if isinstance(r,(list,tuple)) and len(r)>=2 or isinstance(r,dict) and 'price' in r:
                 try:
-                    t=float(r[0] if isinstance(r,(list,tuple)) else r.get('time',r.get('t',0)))
-                    p=float(r[1] if isinstance(r,(list,tuple)) else r['price']);t=t/1000 if t>1e12 else t
+                    t=source_timestamp(r[0] if isinstance(r,(list,tuple)) else r.get('time',r.get('t',0)))
+                    if t is None:continue
+                    p=float(r[1] if isinstance(r,(list,tuple)) else r['price'])
                     if not math.isfinite(t) or not math.isfinite(p) or p<=0:continue
                     bucket=int(t)//self.period*self.period
                     if start-500*self.period<=bucket<start:grouped.setdefault(bucket,[]).append((t,p))
@@ -151,7 +167,8 @@ class Feed:
                 continue
             if not isinstance(r,dict):continue
             try:
-                t=float(r.get('time',r.get('t',0)));t=t/1000 if t>1e12 else t
+                t=source_timestamp(r.get('time',r.get('t',0)))
+                if t is None:continue
                 b={'time':int(t),**{k:float(r[k]) for k in ('open','high','low','close')}}
                 if valid_bar(b) and b['time']%self.period==0 and start-500*self.period<=b['time']<start:
                     self.bars.setdefault(b['time'],b)
@@ -170,13 +187,13 @@ class Feed:
             if self.connected and now-self.last_ping>=20:
                 try:self.send('ps');self.last_ping=now
                 except Exception:self.connected=False
-            fresh=bool(self.connected and self.received and now-self.received<=3 and abs(now-self.last_source)<=3)
+            fresh=bool(self.connected and self.received and now-self.received<=3 and abs(self.source_now()-self.last_source)<=3)
             bars=sorted(self.bars.values(),key=lambda b:b['time'])[-400:]
             ctx=structure(bars,self.period)
             current={k:self.current[k] for k in ('time','open','high','low','close')} if self.current else None
             return {'connected':self.connected,'message':self.message,'assets':sorted(self.assets.values(),key=lambda a:a['name']),
                     'symbol':self.symbol,'period':self.period,'bars':bars,'current':current,'structure':ctx,'fresh':fresh,
-                    'age':round(now-self.received,1) if self.received else None,'source_time':self.last_source or None,
+                    'age':round(now-self.received,1) if self.received else None,'source_time':self.last_source or None,'received_at':self.received or None,
                     'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested}
     def close(self):
         self.closed=True;self.connected=False;self.auth={}
@@ -187,6 +204,48 @@ class NativeFeed(Feed):
     def __init__(self):
         super().__init__({});self.commands=deque(maxlen=32);self.message='Abra a Pocket Option no Android e selecione DEMO.'
         self.diagnostic={};self.stream_rows=0;self.selected_rows=0;self.native_seen=0;self.last_diagnostic_log=0
+        self.clock_samples=deque(maxlen=8);self.clock_offset=0.;self.clock_verified=False;self.rejected_clock=0;self.last_raw_lag=None
+    def source_now(self):return time.time()-self.clock_offset if self.clock_verified else time.time()
+    def select(self,symbol,period):
+        previous=(self.symbol,self.period)
+        super().select(symbol,period)
+        if previous!=(self.symbol,self.period):
+            self.clock_samples.clear();self.clock_verified=False;self.clock_offset=0.;self.last_raw_lag=None
+    def tick(self,t,p):
+        stamp=source_timestamp(t)
+        # Some transports invert price/time. Only swap when exactly one field
+        # has an unambiguous Unix epoch; do not guess both ambiguous fields.
+        if stamp is None:
+            alternate=source_timestamp(p)
+            if alternate is not None:stamp,p=alternate,t
+        if stamp is None or not math.isfinite(p) or p<=0:
+            self.rejected_clock+=1;return
+        now=time.time();lag=now-stamp;self.last_raw_lag=round(lag,3)
+        if self.clock_verified and abs(lag-self.clock_offset)>3:
+            self.clock_verified=False;self.clock_samples.clear();self.current=None
+            self.bars.clear();self.signals.clear();self.last_source=0
+            self.history_requested=False;self.requests.clear();self.epoch+=1
+        if abs(lag)<=3:
+            self.clock_offset=0.;self.clock_verified=True
+        else:
+            if not self.clock_verified:
+                if self.clock_samples:
+                    wall,source=self.clock_samples[-1]
+                    if now-wall>5:self.clock_samples.clear()
+                    elif now-wall<.2 or stamp<=source:
+                        self.rejected_clock+=1;return
+                self.clock_samples.append((now,stamp))
+                first_wall,first_source=self.clock_samples[0]
+                elapsed=now-first_wall;advance=stamp-first_source
+                if len(self.clock_samples)>=4 and elapsed>=3 and abs(advance-elapsed)<=max(1,elapsed*.2):
+                    offsets=[w-s for w,s in self.clock_samples]
+                    if max(offsets)-min(offsets)<=2:
+                        self.clock_offset=statistics.median(offsets);self.clock_verified=True
+                if not self.clock_verified:
+                    self.rejected_clock+=1
+                    self.message='Preços recebidos; validando o avanço do relógio da corretora.'
+                    return
+        super().tick(stamp,p)
     def start(self):pass
     def send(self,event,data=None):
         if event not in READ_EVENTS or event=='auth':raise ValueError('Comando de leitura inválido.')
@@ -204,7 +263,7 @@ class NativeFeed(Feed):
                 if name=='diagnostic' and isinstance(data,dict):
                     self.diagnostic={k:int(v) for k,v in data.items() if k in ('streamPackets','streamRows','commandsReceived','commandsSent','parseErrors','sockets') and type(v) is int and 0<=v<=1000000000}
                     if time.time()-self.last_diagnostic_log>15:
-                        print(json.dumps({'component':'native-market','receivedRows':self.stream_rows,'selectedRows':self.selected_rows,**self.diagnostic}),flush=True)
+                        print(json.dumps({'component':'native-market','receivedRows':self.stream_rows,'selectedRows':self.selected_rows,'clockVerified':self.clock_verified,'sourceLag':self.last_raw_lag,'clockOffset':round(self.clock_offset,3),'clockRejected':self.rejected_clock,**self.diagnostic}),flush=True)
                         self.last_diagnostic_log=time.time()
                     continue
                 if name=='updateStream' and isinstance(data,list):
@@ -220,6 +279,7 @@ class NativeFeed(Feed):
             result['connected']=False;result['fresh']=False
             result['message']='O Android parou de transmitir dados. Volte à conta demo ou reconecte.'
         result['diagnostic']={**self.diagnostic,'receivedRows':self.stream_rows,'selectedRows':self.selected_rows,
+                              'clockVerified':self.clock_verified,'sourceLag':self.last_raw_lag,'clockOffset':round(self.clock_offset,3),'clockRejected':self.rejected_clock,
                               'relayAge':round(time.time()-self.native_seen,1) if self.native_seen else None}
         return result
     def close(self):

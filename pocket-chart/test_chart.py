@@ -1,7 +1,7 @@
 import json,time,unittest
 from unittest.mock import patch
 from analysis import structure,evaluate,valid_bar
-from feed import Feed,NativeFeed,parse_auth
+from feed import Feed,NativeFeed,parse_auth,source_timestamp
 
 class FakeSocket:
     def __init__(self):self.sent=[]
@@ -9,6 +9,34 @@ class FakeSocket:
     def close(self):pass
 
 class ChartTests(unittest.TestCase):
+    def test_epoch_unit_normalization(self):
+        for divisor in (1,1000,1000000,1000000000):self.assertEqual(source_timestamp(1800000000*divisor),1800000000)
+        self.assertIsNone(source_timestamp(1.2));self.assertIsNone(source_timestamp(float('inf')))
+    def test_native_clock_offset_requires_observed_progress(self):
+        f=NativeFeed();f.connected=True;f.symbol='EURUSD_otc'
+        base=1800000000
+        for i in range(4):
+            with patch('feed.time.time',return_value=base+i):f.tick(base-3600+i,1.2)
+        self.assertTrue(f.clock_verified);self.assertAlmostEqual(f.clock_offset,3600)
+        with patch('feed.time.time',return_value=base+3):
+            self.assertTrue(f.snapshot()['fresh']);self.assertIsNotNone(f.current)
+        with patch('feed.time.time',return_value=base+10):self.assertFalse(f.snapshot()['fresh'])
+    def test_frozen_or_burst_old_quotes_do_not_verify_clock(self):
+        for frozen in (True,False):
+            f=NativeFeed();f.connected=True
+            for i in range(8):
+                with patch('feed.time.time',return_value=1800000000+(i if frozen else i*.01)):
+                    f.tick(1799996400+(0 if frozen else i),1.2)
+            self.assertFalse(f.clock_verified);self.assertIsNone(f.current)
+    def test_reversed_price_timestamp_fields_are_unambiguous(self):
+        f=NativeFeed();f.connected=True
+        with patch('feed.time.time',return_value=1800000000):f.tick(1.2,1800000000*1000)
+        self.assertEqual(f.current['close'],1.2);self.assertEqual(f.last_source,1800000000)
+    def test_clock_jump_clears_old_candle_context(self):
+        f=NativeFeed();f.connected=True
+        with patch('feed.time.time',return_value=1800000000):f.tick(1800000000,1.2)
+        with patch('feed.time.time',return_value=1800000001):f.tick(1800003601,1.2)
+        self.assertFalse(f.clock_verified);self.assertIsNone(f.current);self.assertFalse(f.bars)
     def test_native_feed_uses_existing_socket_without_auth_replay(self):
         f=NativeFeed()
         f.ingest([{'event':'successauth','data':{}}])

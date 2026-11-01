@@ -74,10 +74,10 @@ $('plus').onclick=()=>{view.size=Math.max(20,Math.round(view.size*.8));draw();};
 $('minus').onclick=()=>{view.size=Math.min(400,Math.round(view.size*1.25));draw();};
 $('reset').onclick=()=>{view={size:90,offset:0};hover=null;draw();};
 $('full').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.workspace').requestFullscreen();}catch{toast('Tela cheia não está disponível neste navegador.');}};
-function fresh(){return !!(state?.fresh&&Date.now()/1000-state.source_time<=4);}
+function fresh(){return !!(state?.fresh&&Math.abs(Date.now()/1000-(state.received_at||state.source_time))<=4);}
 function updateSignal(){
  const s=state?.signals?.at(-1),exp=Number($('expiry').value==='custom'?$('customExpiry').value:$('expiry').value);
- const live=s&&fresh()&&Date.now()/1000-s.time<=Math.min(5,(state.period||60)*.25);
+ const live=s&&fresh()&&Date.now()/1000-(s.confirmed_at||s.time)<=Math.min(5,(state.period||60)*.25);
  $('signalTitle').className=s?(s.direction==='BUY'?'buy':'sell'):'';
  $('signalTitle').textContent=s?(s.direction==='BUY'?'↑ COMPRA':'↓ VENDA')+(live?' · confirmado agora':' · sinal anterior'):'Aguardando confirmação';
  $('signalDetail').textContent=s?s.reason+' · '+new Date(s.time*1000).toLocaleTimeString('pt-BR')+' · horizonte '+(Number.isFinite(exp)&&exp>=1&&exp<=86400?duration(exp):'inválido'):'Toque na região + rejeição ou engolfo em vela fechada.';
@@ -94,7 +94,7 @@ async function poll(){
  $('status').title=state.message||'';$('status').className='pill'+(fresh()?' live':'');
  const a=state.assets.find(a=>a.symbol===state.symbol);$('chartTitle').textContent=state.symbol?(a?.name||state.symbol)+' / '+duration(state.period):'Escolha sua perspectiva';
  $('count').textContent=(state.bars?.length||0)+' velas fechadas';
- $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'')+(state.diagnostic?' · preços no celular: '+(state.diagnostic.streamRows??'—')+' / recebidos: '+state.diagnostic.receivedRows+' / ativo: '+state.diagnostic.selectedRows+' · comandos: '+(state.diagnostic.commandsSent??'—'):'');
+ $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'')+(state.diagnostic?.clockVerified&&Math.abs(state.diagnostic.clockOffset)>3?' · diferença de relógio: '+state.diagnostic.clockOffset+'s':'')+(state.diagnostic?' · preços no celular: '+(state.diagnostic.streamRows??'—')+' / recebidos: '+state.diagnostic.receivedRows+' / ativo: '+state.diagnostic.selectedRows+' · comandos: '+(state.diagnostic.commandsSent??'—'):'');
  const last=state.current||state.bars?.at(-1);$('ohlc').textContent=last?'O '+price(last.open)+'   H '+price(last.high)+'   L '+price(last.low)+'   C '+price(last.close):authRejected?state.message:'Aguardando cotações da Pocket Option';
  $('empty').hidden=!!(last);if(!last&&state.connected){$('empty').querySelector('h2').textContent='Sessão conectada';$('empty').querySelector('p').textContent='Aguardando preços do ativo selecionado. A leitura ao vivo será confirmada quando chegar a primeira cotação.';}else if(!last&&state.symbol){$('empty').querySelector('h2').textContent='Conexão interrompida';$('empty').querySelector('p').textContent=state.message;}else{$('empty').querySelector('h2').textContent='Seu gráfico começa aqui';$('empty').querySelector('p').textContent='Conecte a Pocket Option e escolha um ativo. As linhas serão traçadas com os dados recebidos.';}
  if(nativeRelay&&window.PocketLensNative){
@@ -149,5 +149,5 @@ canvas.onpointerup=()=>{drag=null;};canvas.onpointercancel=()=>{drag=null;};canv
 canvas.addEventListener('wheel',e=>{e.preventDefault();view.size=Math.max(20,Math.min(400,Math.round(view.size*(e.deltaY>0?1.12:.88))));draw();},{passive:false});
 new ResizeObserver(draw).observe($('chartBox'));
 setInterval(()=>{if(active)poll();},1000);
-setInterval(()=>{const n=Date.now()/1000;$('clock').textContent=new Date().toLocaleTimeString('pt-BR')+' · horário local';$('countdown').textContent=state?.symbol&&fresh()?Math.ceil(state.period-(n%state.period))+'s':'—';if(state&&!fresh()){$('status').textContent=state.connected?'● Aguardando dados':'Desconectado';$('status').className='pill';}updateSignal();},250);
+setInterval(()=>{const n=Date.now()/1000;$('clock').textContent=new Date().toLocaleTimeString('pt-BR')+' · horário local';$('countdown').textContent=state?.symbol&&fresh()?Math.ceil(state.period-((state.source_time+(n-(state.received_at||n)))%state.period))+'s':'—';if(state&&!fresh()){$('status').textContent=state.connected?'● Aguardando dados':'Desconectado';$('status').className='pill';}updateSignal();},250);
 (async()=>{try{await api('status');showApp();}catch{showLogin();}})();

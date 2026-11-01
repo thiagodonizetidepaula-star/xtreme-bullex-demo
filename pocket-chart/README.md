@@ -23,3 +23,7 @@ Horizonte em segundos ou minutos é um parâmetro visual de análise, NÃO catá
 ## Limitações verificáveis
 
 Testes automatizados cobrem integridade temporal, isolamento de ativos e períodos, auth demonstrativa, bloqueio de eventos de ordens e regras causais. Sem uma sessão autenticada Pocket Option fornecida pelo usuário, não é possível comprovar catálogo, cotação e histórico reais no ambiente publicado. A disponibilidade do feed pode depender de rede, região e validade da sessão. Render Free pode suspender em inatividade.
+
+## Validação temporal do relay
+
+Timestamps Unix em segundos, milissegundos, microssegundos e nanossegundos são normalizados. Campos preço/tempo só são invertidos quando apenas um é um timestamp reconhecível. Uma fonte com diferença de relógio precisa de pelo menos quatro amostras distintas, ao longo de três segundos, avançando no mesmo ritmo do recebimento e com diferença estável. Preços congelados e rajadas antigas não validam o relógio. Saltos reiniciam contexto e sinais. A interface usa horário de recebimento para verificar interrupções; a diferença da fonte fica explícita no rodapé. Os horários originais das velas são preservados. A confirmação de sinais tem horário local separado. Essa validação é temporal, não uma garantia de rentabilidade nem prova independente do relógio da corretora.
