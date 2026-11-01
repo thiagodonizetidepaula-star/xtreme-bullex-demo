@@ -1,3 +1,15 @@
+## V32 — Uma única estratégia visível: ZIGZAG + FRACTAL · automático DEMO com múltiplas entradas
+
+The clean V31 Android/Web panel now exposes **ZIGZAG + FRACTAL only** in the strategy dropdown. User selects a separate chart timeframe:
+- **5s closed candles:** broker expirations 3s, 5s or M1 (60s).
+- **M1:** expiry 60s.
+- **M2:** expiry 60s, 120s or 180s.
+Existing triangle/price-action engines remain in source for regression and historical compatibility, but are not selectable in the V32 screen or auto order path.
+
+The same existing REAL DEMO ZigZag/Fractal scanner is explicitly configured with `strategy=zigzag_fractal`, `scan_all=true`, `triangle_mode=false`, `triangle_trial_only=false`, `zone_mode=false`. It is a **continuous risk-capped session**, not the old one-shot experimental triangle test. The maximum number of orders is user-configurable **1–1000** (default 20). The bot can submit multiple independent entries after each **confirmed broker outcome**. No overlapping pending orders, payout below minimum, stale quote, duplicate signal, stopped session, Stop Win/Stop Loss or violated cooldown can trigger an order. Auto still requires manual start and only a confirmed DEMO account. First-ever expiry validation remains stake-limited to 1 DEMO, but is **not** a one-operation cap for ZigZag. A session is also time-bounded (currently 60 minutes), independent of the configured order cap; it is not guaranteed to remain active 24/7. Trade-count maximum is NOT a guarantee that the bot will find or send that many trades.
+
+The Android native overlay from V16 is a separately installed APK; the newer native experiment can simplify it but changes to the Render web UI cannot rewrite the installed native APK automatically.
+
 ## V31 — Conectar pela plataforma (Android) sem copiar SSID
 
 The redesigned Xtreme Tiger settings now prioritize **CONECTAR PELA PLATAFORMA · DEMO** on Android V18 or later, using an origin-scoped `XtremeAppBridge` WebMessage listener. The Android app opens the **official HTTPS Pocket Option site in its in-app WebView** only after explicit user confirmation. The pre-existing experimental Android document-start probe can pick up an outbound **DEMO** authentication packet and hand it to the existing server connection only for that consented attempt. The backend still validates isDemo=1 and confirms the account and balance. A WebView login is **not** proof of bot connection until the backend reports **DEMO CONFIRMADA**.
