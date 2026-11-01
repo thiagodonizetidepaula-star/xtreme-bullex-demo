@@ -826,7 +826,7 @@ class Broker:
             if self.auto:raise ValueError('O automático DEMO já está ativo.')
             vals=[float(c.get(k,0)) for k in ('amount','stop_win','stop_loss','min_payout')]
             limit=int(c.get('limit',0))
-            if not all(math.isfinite(v) for v in vals) or not 1<=vals[0]<=100 or not 1<=vals[1]<=10000 or not 1<=vals[2]<=10000 or not 1<=limit<=100 or not 0<=vals[3]<=100:
+            if not all(math.isfinite(v) for v in vals) or not 1<=vals[0]<=100 or not 1<=vals[1]<=10000 or not 1<=vals[2]<=10000 or not 1<=limit<=1000 or not 0<=vals[3]<=100:
                 raise ValueError('Revise os limites do automático.')
             if triangle_trial_only:
                 if vals[0]!=1:
