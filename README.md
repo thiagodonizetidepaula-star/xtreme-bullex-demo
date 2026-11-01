@@ -1,3 +1,14 @@
+## V30 — Xtreme Tiger: painel limpo de operações (Android web/PC)
+
+The existing authenticated app now uses a mobile-first **three-tab** UI:
+- **Operação**: current DEMO asset and connection, prominent WIN / LOSS and session win-rate, live candle-close countdown based only on a recent real broker feed, orange animated flame countdown for candle close **or** a pending DEMO option expiration, original signal, original start/stop controls and a **Pausar** shortcut. Pausar deliberately calls the existing stop endpoint (halts new entries; restart manually). Chart is hidden in a collapsible section but reads the exact same real quote data.
+- **⚙ Configurações**: existing asset, strategy, analysis timeframe, option expiry, quick tick-based input modes, optional triangle filters, operator mode, DEMO session connection and settings for stake, minimum payout, stop win/loss, maximum orders and cooldown. **Martingale is visibly disabled** because the current backend does not implement a tested gale system; no fictitious button or live progression is introduced.
+- **Histórico**: real server DEMO session history, outcome, asset, direction, expiry, time and net amount; existing reset-history action is preserved. Diagnostics remain available under settings.
+
+A V30 UI is served via `/xtreme_ui.js` and `/xtreme_ui.css` on the existing server and loads *after* original `/app.js`; it only relocates original DOM nodes and reuses their event listeners. It does not change Pocket Option authentication, Supabase, the DEMO order protocol, risk constraints or strategy logic. It never counts down to a *guaranteed trade*: absent a pending order, the flame means **time until the next candle closes**; trades still require a validated signal and user-chosen automatic DEMO mode. Timer is withheld if quotes are stale or account is disconnected. Countdown uses client clock and therefore is an estimate, not the broker's guaranteed settlement clock.
+
+The gray Android-native buttons belong to the older installed APK WebView shell and **cannot be removed from the web repository** alone. The cleaner V30 content will appear inside the embedded web view as well as on desktop; updating native overlay requires a new separately signed Android APK. No APK was created by this web update.
+
 ## V27 — TRIÂNGULO BREAKOUT 5s: leitura equilibrada + expiração 3s/5s DEMO
 
 The triangle strategy can be explicitly configured with **real closed 5-second chart candles** and **3-second or 5-second option expiry**. These are separate clocks. The Android/web selector defaults to 5s analysis for *new* triangle selections; earlier active M1/M2/M5 selections are preserved. The 3/5-second choices only appear with 5s analysis because M1 candles cannot establish a 3s outcome.
