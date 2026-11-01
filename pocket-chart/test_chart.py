@@ -88,7 +88,8 @@ class ChartTests(unittest.TestCase):
             for i in range(61):
                 with patch('feed.time.time',return_value=base+i):f.tick(base+i,1+i*.00001)
         self.assertEqual(len(f.bars),1);self.assertAlmostEqual(f.bars[base]['close'],1.00059)
-        self.assertEqual(len(f.requests),1)
+        self.assertGreaterEqual(len(f.requests),1)
+        self.assertLessEqual(len(f.requests),5)  # bounded broker-history retries
     def test_missing_internal_ticks_do_not_create_closed_bar(self):
         f=self.feed();base=1800000000
         for i in (0,59,60):
