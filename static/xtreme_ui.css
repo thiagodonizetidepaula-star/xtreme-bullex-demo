@@ -140,3 +140,15 @@ main{max-width:900px;padding:22px 18px;margin:0 auto}
 }
 @media(max-width:355px){.xt-tab span:last-child{font-size:10px}.xt-clock{font-size:26px}.xt-flame-time{font-size:24px}}
 @media(prefers-reduced-motion:reduce){.xt-flame-fill{animation:none;transition:none}.xt-pane{animation:none}}
+
+.xt-score-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:11px 0}
+.xt-score-strip>div{padding:13px;background:#131f2e;border:1px solid #2b3c50;border-radius:13px;min-width:0}
+.xt-score-strip small{display:block;color:#95a8bd;font-size:10px;letter-spacing:.8px}
+.xt-score-strip strong{display:block;font-size:30px;font-variant-numeric:tabular-nums;margin-top:5px}
+.xt-score-strip>div:first-child strong{color:#72e6ae}
+.xt-score-strip>div:nth-child(2) strong{color:#f79ca6}
+.xt-score-strip>div:last-child strong{color:#dbe9fa;font-size:24px;margin-top:10px}
+.xt-pane-settings .xt-settings-help{padding:10px;background:#152239;border:1px solid #2a4059;border-radius:9px;margin-bottom:16px}
+.xt-settings-help summary{color:#a4e3c7;font-size:12px}
+.xt-settings-help p{font-size:11px;line-height:1.6}
+@media(max-width:400px){.xt-score-strip>div{padding:11px}.xt-score-strip strong{font-size:26px}}
