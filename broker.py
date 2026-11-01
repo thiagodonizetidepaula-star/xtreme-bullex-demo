@@ -515,7 +515,7 @@ class Broker:
             anchor=int(watch.price_time)
             try:
                 self.send('loadHistoryPeriod',{'asset':sym,'index':idx,
-                    'offset':9000,'period':period,
+                    'offset':min(172800,period*500) if self.triangle_mode else 9000,'period':period,
                     'time':anchor if period==5 else anchor//period*period})
             except Exception:
                 self.log('Histórico não disponível; estratégia seguirá somente candles reais novos.')
@@ -547,6 +547,22 @@ class Broker:
                 self.log('3s DEMO: sinal atrasado >1s; entrada descartada, sem ordem')
                 continue
             selected_direction=watch.last_signal
+            if self.triangle_mode:
+                key=(symbol,self.scan_timeframe,self.auto_expiry)
+                report=self.triangle_reports.get(key,{})
+                if (self.triangle_observe or report.get('status')!='PAPER_APROVADO' or
+                    self.auto_expiry not in self.validated_expiries):
+                    price=(watch.engine.bars[-1]['close'] if watch.engine.bars else None)
+                    self.triangle_observations.append({
+                        'time':now,'asset':symbol,'timeframe':self.scan_timeframe,
+                        'expiry':self.auto_expiry,'direction':selected_direction,
+                        'price':price,'payout':asset.get('payout'),
+                        'pattern':watch.engine.pattern,'status':'OBSERVADO_SEM_ORDEM'})
+                    watch.last_signal=None;watch.signal_received=0
+                    self.scan_signals+=1
+                    self.log('TRIÂNGULO OBSERVADO '+symbol+' · '+watch.engine.pattern+
+                             ' · SEM ORDEM (validação cronológica pendente).')
+                    continue
             try:self.order(selected_direction,1.0 if self.auto_trial else self.amount,self.auto_expiry,symbol=symbol)
             except ValueError as e:
                 self.auto=False;self.auto_trial=False
@@ -871,8 +887,28 @@ class Broker:
                 self.auto_stop_reason='Ordem sem resultado após expiração e prazo extra de 30s. Confira a corretora antes de reiniciar.'
                 self.save(self.pending)
                 self.log(self.auto_stop_reason)
+            if self.auto and self.triangle_mode and now-self.triangle_last_report>30:
+                # Validate observed real streams, at most a few assets per
+                # status call; never infer profitability from 3s expiry on 5s bars.
+                keys=sorted(self.radar.watches,
+                            key=lambda sym:len(self.radar.watches[sym].engine.bars),
+                            reverse=True)
+                for sym in keys[:3]:
+                    watch=self.radar.watches[sym]
+                    if len(watch.engine.bars)<250:continue
+                    asset=self.assets.get(sym,{})
+                    key=(sym,self.scan_timeframe,self.auto_expiry)
+                    self.triangle_reports[key]=walkforward(
+                        list(watch.engine.bars),sym,self.scan_timeframe,
+                        self.auto_expiry,asset.get('payout',0),
+                        self.triangle_entry,self.triangle_adx,self.triangle_ema)
+                self.triangle_last_report=now
             radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
-            return {'auto_strategy':self.auto_strategy,'zone_mode':self.zone_mode,'scan_timeframe':self.scan_timeframe,'radar':radar_status,'scan_signals':self.scan_signals,
+            return {'auto_strategy':self.auto_strategy,'zone_mode':self.zone_mode,'triangle_mode':self.triangle_mode,'triangle_observe':self.triangle_observe,
+                    'triangle_reports':list(self.triangle_reports.values())[-10:],
+                    'triangle_observations':list(self.triangle_observations)[-12:],
+                    'triangle_entry':getattr(self,'triangle_entry','both'),
+                    'scan_timeframe':self.scan_timeframe,'radar':radar_status,'scan_signals':self.scan_signals,
                     'history_requested':len(self.history_requested),
                     'history_loaded_count':self.history_loaded_count,
                     'history_unmatched':self.history_unmatched,
