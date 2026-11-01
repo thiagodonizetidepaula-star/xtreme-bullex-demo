@@ -60,7 +60,7 @@ class Tests(unittest.TestCase):
 
     def test_android_web_ui_forces_observation_and_explains_connection(self):
         text=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf8')
-        self.assertIn("if($('expiryProfile').value==='triangle')$('triangleExecution').value='observe';",text)
+        self.assertIn("triangle_mode:false,triangle_observe:false,triangle_trial_only:false",text)
         self.assertIn("triangleDemoOption.disabled=!triangleDemoAvailable",text)
         self.assertIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",text)
         self.assertIn('DEMO DESCONECTADA: conecte pelo botão',text)
