@@ -4,6 +4,7 @@ const c={Date:{now:()=>now},Math,Number,Map,Set,Error};vm.createContext(c);vm.ru
 const e=c.createDemoExecution({valid:()=>valid,send:(event,data)=>sent.push({event,data}),emit:x=>reports.push(x[0].data)});
 const s={amount:1,expiry:3,max_concurrent:2,martingale:true,multiplier:2,max_steps:1,stop_loss:10,stop_win:10};
 e.command({event:'demoStart',data:s});assert.equal(reports.at(-1).enabled,false,'unknown demo balance blocks');
+const hb=reports.length;e.command({event:'demoHeartbeat'});assert.equal(reports.length,hb+1,'heartbeat must emit a report without background timer');
 e.event('successupdateBalance',{isDemo:1,balance:100});let r=Array(15).fill(0);r[1]='A';r[5]=90;r[14]=true;e.event('updateAssets',[r]);e.event('updateStream',[['A',now/1000,1]]);
 e.command({event:'demoStart',data:s});assert.equal(reports.at(-1).enabled,true);
 const signal=id=>e.command({event:'demoSignal',data:{id,symbol:'A',direction:'BUY',confirmed_at:now/1000}});
