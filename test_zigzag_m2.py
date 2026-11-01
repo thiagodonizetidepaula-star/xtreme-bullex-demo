@@ -134,7 +134,8 @@ class Tests(unittest.TestCase):
         root=Path(__file__).parent
         js=(root/'static'/'app.js').read_text(encoding='utf-8')
         html=(root/'static'/'index.html').read_text(encoding='utf-8')
-        self.assertIn('option value="zigzag_m2"',html)
+        self.assertIn('id="zigzagTimeframe"',html)
+        self.assertIn('option value="120">M2',html)
         self.assertIn("zigzag_m2:[[60,",js)
         self.assertIn("[120,'M2",js)
         self.assertIn("[180,'M3",js)
