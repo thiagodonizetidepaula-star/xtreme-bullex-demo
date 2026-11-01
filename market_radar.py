@@ -133,7 +133,7 @@ class Radar:
             chart_symbol=self.last_symbol;chart_watch=self.watches[self.last_symbol]
         forming=None
         if chart_watch and chart_watch.fresh(now):
-            source=getattr(chart_watch.engine.collector,'current',None)
+            source=getattr(getattr(chart_watch.engine,'collector',None),'current',None)
             if isinstance(source,dict):
                 forming={k:source[k] for k in ('t','open','high','low','close') if k in source}
         chart={'symbol':chart_symbol or '',
