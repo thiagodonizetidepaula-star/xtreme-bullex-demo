@@ -13,7 +13,15 @@ def parse_auth(raw):
         p=a[1]
         if a[0]!='auth' or type(p['isDemo']) is not int or p['isDemo']!=1:raise ValueError()
         if not isinstance(p['session'],str) or not 10<=len(p['session'])<=16000 or type(p['uid']) is not int or p['uid']<=0:raise ValueError()
-        return {'session':p['session'],'uid':p['uid'],'isDemo':1,'platform':2,'isFastHistory':True,'isOptimized':True}
+        # Reuse the demo client's original protocol options. Overwriting platform=1
+        # with platform=2 can cause the broker to reject an otherwise valid SSID.
+        platform=p.get('platform',2)
+        if type(platform) is not int or platform not in (1,2):raise ValueError()
+        fast=p.get('isFastHistory',True)
+        optimized=p.get('isOptimized',True)
+        if type(fast) is not bool or type(optimized) is not bool:raise ValueError()
+        return {'session':p['session'],'uid':p['uid'],'isDemo':1,
+                'platform':platform,'isFastHistory':fast,'isOptimized':optimized}
     except (ValueError,IndexError,KeyError,TypeError,AttributeError):raise ValueError('Informe o pacote auth da sessão demonstrativa (isDemo: 1).') from None
 
 class Feed:
@@ -39,7 +47,9 @@ class Feed:
             if self.received or self.closed:break
         self.connected=False
         if not self.closed:self.message='Conexão encerrada. Reconecte uma sessão demonstrativa atual.'
-    def on_error(self,*args):self.message='Falha de conexão. A sessão pode ter expirado ou o servidor pode estar indisponível.'
+    def on_error(self,*args):
+        # Never log or expose raw protocol messages, tokens or session IDs.
+        if not self.closed:self.message='Falha de conexão. A sessão pode ter expirado ou o servidor pode estar indisponível.'
     def on_close(self,*args):self.connected=False
     def on_message(self,ws,msg):
         try:
@@ -50,7 +60,9 @@ class Feed:
                 elif msg.startswith('0'):ws.send('40')
                 elif msg=='2':ws.send('3')
                 elif msg.startswith('40'):self.send('auth',self.auth)
-                elif msg=='41':self.message='A corretora encerrou a sessão. Reconecte.';self.connected=False;self.closed=True;ws.close()
+                elif msg=='41':
+                    if not self.closed:self.message='A corretora encerrou a sessão antes de confirmar as cotações. Entre novamente na conta DEMO.'
+                    self.connected=False;self.closed=True;ws.close()
                 elif msg.startswith('451-'):self.binary=json.loads(msg.split('-',1)[1])[0]
                 elif msg.startswith('42'):
                     p=json.loads(msg[2:]);self.event(p[0],p[1] if len(p)>1 else {})
@@ -73,8 +85,9 @@ class Feed:
         elif name=='updateHistoryNewFast' and isinstance(d,dict):
             # Unindexed responses may belong to an old timeframe. Never use them.
             pass
-        elif name in ('errorauth','failauth'):
-            self.message='Sessão recusada. Atualize a sessão demonstrativa.';self.closed=True
+        elif name in ('NotAuthorized','notauthorized','errorauth','failauth'):
+            self.message='Autenticação DEMO recusada pela corretora. Abra a Pocket Option, entre na conta DEMO e conecte novamente.'
+            self.connected=False;self.closed=True
             if self.ws:self.ws.close()
     def ensure_selected(self):
         if not self.connected or self.symbol:return
