@@ -1,0 +1,142 @@
+/* XTREME TIGER V30 · clean mobile operation shell
+   Visual-only. No modification to broker, account, auto strategy or stakes. */
+:root{--xt-bg:#090f19;--xt-panel:#111b2b;--xt-border:#263650;
+ --xt-primary:#8be6c2;--xt-text:#eff8ff;--xt-muted:#93a6bb}
+body{background:#090f19;color:var(--xt-text)}
+body>header{padding:13px max(18px,calc((100vw - 890px)/2));background:#0d1725;border-color:#233147}
+body>header .brand{font-size:16px;letter-spacing:.7px}
+body>header .brand b,body>header .mark{color:var(--xt-primary)}
+body>header .badge{background:#153126;color:#a2f1cd;border-color:#306b50}
+main{max-width:900px;padding:22px 18px;margin:0 auto}
+#dashboard .intro{margin-bottom:14px}
+#dashboard .intro .eyebrow{font-size:10px;color:#94b8ab}
+#dashboard .intro h1{font-size:20px;letter-spacing:-.3px;margin:4px 0}
+#dashboard .intro p{display:none}
+#dashboard .intro #logout{padding:9px 13px;background:#1a2a3b}
+.xt-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px}
+.xt-tab{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;
+ font-size:13px;border:1px solid #25384f;border-radius:13px;color:#9db1c7;
+ background:#101a29;padding:13px 8px;box-shadow:none}
+.xt-tab.active{color:#dffbf0;background:#193b33;border-color:#3e9b77;
+ box-shadow:inset 0 -2px 0 #6ce4b3}
+.xt-tab span:first-child{font-size:18px}
+.xt-tab:focus-visible{outline:2px solid #9ce5d0;outline-offset:2px}
+.xt-pane{animation:xt-appear .16s ease-out}
+@keyframes xt-appear{from{opacity:.6;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+.xt-pane>.card{background:transparent;border:none;padding:0;box-shadow:none}
+.xt-pane>.card>.row{display:none}
+.xt-pane>.card .stats{margin:15px 0;border:1px solid #26354a;background:#101b2b;
+ border-radius:15px;padding:13px 16px;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.xt-pane>.card .stats>div{min-width:0}
+.xt-pane>.card .stats small{color:#a2b6ca}
+.xt-pane>.card .stats strong{font-size:22px;color:#f1f8ff;margin-top:4px}
+.xt-live-head{display:flex;justify-content:space-between;align-items:center;gap:12px;
+ background:#111e2d;border:1px solid #273d50;border-radius:15px;padding:13px 15px;margin:10px 0}
+.xt-live-head strong{display:block;font-size:17px;margin:5px 0;color:#f4fff8;max-width:470px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xt-live-head span{display:block;font-size:11px;color:#9db4c5;line-height:1.4;
+ max-width:470px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.xt-live-head button{flex:none;color:#cbf1dc;background:#173d35;border:1px solid #307a5f;
+ font-size:12px;padding:10px 12px}
+.xt-overline{font-size:10px;font-weight:800;letter-spacing:1.6px;color:#a5bece}
+.xt-timers{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px}
+.xt-clock-card,.xt-flame-card{min-width:0;min-height:146px;background:linear-gradient(150deg,#18243a,#101b2a);
+ border:1px solid #2c4058;border-radius:16px;padding:15px 16px}
+.xt-clock{font-size:38px;line-height:1.25;font-weight:800;letter-spacing:-1px;margin:12px 0 6px;
+ font-variant-numeric:tabular-nums;color:#e8f7ff}
+.xt-clock-foot{color:#8ca8bd;font-size:11px}
+.xt-flame-card{background:linear-gradient(135deg,#27212a,#131d2d 72%);border-color:#664036}
+.xt-flame-card .xt-overline{color:#fbd6bd}
+.xt-flame-time{font-size:31px;font-weight:850;margin:7px 0 13px;color:#fff1e0;
+ font-variant-numeric:tabular-nums}
+.xt-flame-track{height:14px;position:relative;overflow:hidden;border-radius:99px;
+ background:#392c32;border:1px solid #59404a}
+.xt-flame-fill{height:100%;width:0;background:linear-gradient(90deg,#fd4d31 0%,#ff8235 42%,#ffda67 100%);
+ border-radius:99px;box-shadow:0 0 14px #ff6b32,0 0 5px #ff9d47;transition:width .14s linear;
+ animation:xt-fire 1.15s ease-in-out infinite alternate}
+.xt-near-end .xt-flame-fill{filter:brightness(1.3);box-shadow:0 0 21px #fc6b31}
+.xt-flame-caption{margin:9px 0 0;font-size:10px;color:#c7a89e;line-height:1.4}
+@keyframes xt-fire{from{filter:brightness(.96)}to{filter:brightness(1.16)}}
+#dashboard .status{border-left:2px solid #75daa9;background:#101e2b;color:#c3e6d7;
+ margin:0 0 10px;border-radius:11px;font-size:12px;padding:11px 13px}
+#dashboard .signal-console{margin:11px 0;padding:0;border:none;border-radius:0;
+ background:transparent;box-shadow:none}
+#dashboard .signal-tabs{display:none}
+#dashboard .offer-panel{padding:17px 16px;margin-bottom:12px;border-radius:15px;
+ border-color:#2c4057;background:#101d2e;box-shadow:none}
+#dashboard .offer-overline{font-size:10px;color:#a5bcd0}
+#dashboard .offer-pair{font-size:17px;margin:10px 0}
+#dashboard .offer-metrics{gap:8px}
+#dashboard .offer-metrics div{padding:10px 12px;background:#18283b}
+#dashboard .offer-metrics strong{font-size:18px}
+#dashboard .signal-direction{margin:15px 0 9px;font-size:23px}
+#dashboard .signal-meter{height:6px;opacity:.7}
+#dashboard .signal-meta{font-size:11px;line-height:1.5;margin:10px 0}
+#dashboard #warmupStatus{max-height:75px;overflow:auto}
+.xt-graph-details{margin:12px 0;border-radius:12px;border:1px solid #293c4a;
+ background:#0f1b27;padding:10px 12px}
+.xt-graph-details>summary{color:#b5e5cd;font-size:12px;font-weight:650}
+.xt-graph-details .trendline-panel{margin-top:13px}
+#dashboard #autoActions{display:flex;flex-wrap:wrap;gap:8px;padding:6px 0}
+#dashboard #startSignalAuto{flex:1 1 100%;min-height:54px;background:#2cb987;color:#031d18;
+ border:1px solid #5ce3b4;box-shadow:none;margin:3px 0}
+#dashboard #stopSignalAuto,#dashboard #xt-pause{flex:1 1 0;width:auto;min-width:110px;
+ min-height:45px;margin:0;border-radius:10px}
+#dashboard #xt-pause{background:#25344b;border-color:#425777;color:#e0ecfa}
+#dashboard #stopSignalAuto{background:#37242d;border-color:#78454f}
+#dashboard #autoSignalStatus{flex:1 1 100%;margin:6px 0;background:#101c2b;color:#a9becd;
+ border-left-color:#52977c}
+#dashboard #manualActions .execute-signal{min-height:54px;background:#2cb987;color:#032019}
+#dashboard #pending{margin:10px 0 0}
+#dashboard #progress{height:4px;margin:9px 0}
+#dashboard .xt-important-recovery{border:1px solid #995151;border-radius:12px;padding:12px}
+.xt-section-heading{margin:2px 0 14px}
+.xt-section-heading h2{font-size:22px;letter-spacing:-.3px;margin:0 0 5px}
+.xt-section-heading p{margin:0}
+.xt-pane .card{border:1px solid #26374d;background:#101a29;border-radius:15px}
+.xt-pane-settings .card{margin-bottom:13px;padding:17px}
+.xt-settings-card .signal-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 11px}
+.xt-settings-card .signal-fields>label:nth-child(1){grid-column:1 / -1}
+.xt-settings-card #triangleSettings{background:#152339;border:1px solid #30445d;border-radius:12px;
+ padding:13px;margin:13px 0}
+.xt-settings-card .trade-mode{margin:9px 0 0}
+.xt-settings-card #subscribe{margin:2px 0 11px}
+.xt-settings-card .hint{line-height:1.6}
+.xt-check{display:flex;align-items:center;gap:11px;font-size:13px;color:#adbed0}
+.xt-check input{width:19px;height:19px;margin:0;accent-color:#73cdb0}
+.xt-toggle-row{padding:13px 0;border-top:1px solid #2b3a4e}
+.xt-pane-settings label{font-size:12px}
+.xt-pane-settings input,.xt-pane-settings select{margin:6px 0 12px}
+.xt-pane-settings .mode-description{background:#111c2b;border-color:#2c405a}
+.xt-pane-settings #connectionDetail{margin-bottom:18px;padding:10px;border:1px solid #2e4561;border-radius:9px}
+.xt-pane-settings .activity{margin:12px 0}
+.xt-pane-history .xt-history{display:grid;gap:9px}
+.xt-history-row{display:flex;justify-content:space-between;align-items:center;gap:16px;
+ border:1px solid #293b52;background:#101d2d;padding:13px;border-radius:12px}
+.xt-history-row strong{display:block;font-size:13px}
+.xt-history-row small{display:block;margin-top:6px;color:#97a9bd;line-height:1.4}
+.xt-history-result{font-weight:800;font-size:13px;text-align:right;white-space:nowrap}
+.xt-history-result[data-outcome="WIN"]{color:#80e9b6}
+.xt-history-result[data-outcome="LOSS"]{color:#f5a1a8}
+.xt-empty{padding:30px 12px;text-align:center;border:1px dashed #39455a;border-radius:14px}
+.xt-pane-history .reset-row{margin-top:18px}
+#dashboard footer{color:#7e95ad;font-size:10px;margin:26px 0}
+@media(max-width:580px){
+ main{padding:14px 12px}
+ body>header{padding:12px 14px}
+ #dashboard .intro h1{font-size:18px}
+ .xt-nav{gap:6px}
+ .xt-tab{padding:11px 4px;font-size:11px;gap:4px}
+ .xt-tab span:first-child{font-size:17px}
+ .xt-timers{grid-template-columns:1fr 1.22fr;gap:8px}
+ .xt-clock-card,.xt-flame-card{padding:13px 12px;min-height:141px}
+ .xt-clock{font-size:31px}
+ .xt-flame-time{font-size:28px}
+ .xt-live-head{padding:12px}
+ .xt-live-head strong{font-size:15px}
+ #dashboard .offer-panel{padding:14px}
+ .xt-pane>.card .stats strong{font-size:21px}
+ .xt-pane-settings .card{padding:14px}
+}
+@media(max-width:355px){.xt-tab span:last-child{font-size:10px}.xt-clock{font-size:26px}.xt-flame-time{font-size:24px}}
+@media(prefers-reduced-motion:reduce){.xt-flame-fill{animation:none;transition:none}.xt-pane{animation:none}}
