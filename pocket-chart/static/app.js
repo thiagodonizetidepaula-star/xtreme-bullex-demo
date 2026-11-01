@@ -16,15 +16,35 @@ $('loginForm').addEventListener('submit',async e=>{
  try{await api('login',{email:$('email').value.trim(),password:$('password').value});$('password').value='';showApp();}
  catch(err){$('loginError').textContent=err.message;}finally{button.disabled=false;}
 });
-$('logout').onclick=async()=>{try{await api('logout',{});showLogin();}catch(e){toast(e.message);}};
-for(const id of ['connectOpen','emptyConnect'])$(id).onclick=()=>{$('connectError').textContent='';$('connection').showModal();};
+$('logout').onclick=async()=>{try{await api('logout',{});window.PocketLensNative?.postMessage('logout');showLogin();}catch(e){toast(e.message);}};
+for(const id of ['connectOpen','emptyConnect'])$(id).onclick=()=>{
+ if(window.PocketLensNative){nativeAttempt++;window.PocketLensNative.postMessage('connect');return;}
+ $('connectError').textContent='';$('connection').showModal();
+};
+let nativeAttempt=0;
+window.pocketNativeDisconnect=async()=>{nativeAttempt++;try{await api('disconnect',{});state=null;await poll();}catch{};};
+window.pocketNativeSession=async raw=>{
+ const ticket=++nativeAttempt;
+ try{
+  if(!active)throw new Error('Entre no Pocket Lens antes de conectar a corretora.');
+  await api('connect',{auth:raw});raw='';
+  const deadline=Date.now()+28000;
+  while(ticket===nativeAttempt&&Date.now()<deadline){
+   const s=await api('status');
+   if(s.connected&&s.assets?.length){await poll();window.PocketLensNative?.postMessage('connected');toast('Conta demonstrativa conectada. Escolha o ativo e toque em Analisar.');return;}
+   await new Promise(resolve=>setTimeout(resolve,700));
+  }
+  if(ticket!==nativeAttempt)return;
+  throw new Error('A Pocket Option não confirmou a conexão de leitura. Confira a sessão demo e tente novamente.');
+ }catch(err){toast(err.message);window.PocketLensNative?.postMessage('failed');}
+};
 $('closeDialog').onclick=()=>$('connection').close();
 $('connectForm').onsubmit=async e=>{
  e.preventDefault();e.submitter.disabled=true;$('connectError').textContent='';
  try{await api('connect',{auth:$('auth').value});$('auth').value='';$('connection').close();toast('Conectando à sessão demonstrativa…');await poll();}
  catch(err){$('connectError').textContent=err.message;}finally{e.submitter.disabled=false;}
 };
-$('disconnect').onclick=async()=>{try{await api('disconnect',{});state=null;await poll();$('connection').close();}catch(e){toast(e.message);}};
+$('disconnect').onclick=async()=>{try{nativeAttempt++;await api('disconnect',{});window.PocketLensNative?.postMessage('disconnect');state=null;await poll();$('connection').close();}catch(e){toast(e.message);}};
 function renderAssets(){
  const old=$('asset').value||state?.symbol||'',q=$('search').value.toLowerCase(),market=$('market').value;
  const all=state?.assets||[];

@@ -8,7 +8,7 @@ Python 3.11+. `pip install --require-hashes -r pocket-chart/requirements.txt`, d
 
 ## Conexão e dados
 
-Entrar com conta existente Mesa Trader e fornecer o pacote auth de uma sessão DEMO Pocket Option ativa. A interface explica como copiar pelo Network/WS no computador. Não há login oficial integrado ou captura automática de sessão. Os endpoints Socket.IO são não oficiais, herdados do adaptador existente, e podem mudar. Nenhuma conexão ao vivo foi verificada sem sessão do usuário.
+Entrar com conta existente Mesa Trader. A versão Android em `android/` abre a Pocket Option oficial e observa o pacote de sessão DEMO para encaminhá-lo ao backend próprio, sem cópia manual pelo usuário. O retorno ocorre apenas após autenticação e catálogo confirmados. Esse fluxo requer validação em aparelho real; não constitui API oficial da corretora. No navegador comum, permanece disponível a conexão manual via pacote auth. Os endpoints Socket.IO são não oficiais, herdados do adaptador existente, e podem mudar. Nenhuma conexão ao vivo foi verificada sem sessão do usuário.
 
 Catálogo vem de updateAssets, inclui todos os instrumentos abertos reportados pela sessão, sem lista estática e sem limite a OTC. Um ativo é analisado por vez. Fechados não entram na seleção. Sem catálogo, não inventa ativos.
 
