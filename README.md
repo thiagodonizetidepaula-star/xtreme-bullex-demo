@@ -1,3 +1,16 @@
+## V27 — TRIÂNGULO BREAKOUT 5s: leitura equilibrada + expiração 3s/5s DEMO
+
+The triangle strategy can be explicitly configured with **real closed 5-second chart candles** and **3-second or 5-second option expiry**. These are separate clocks. The Android/web selector defaults to 5s analysis for *new* triangle selections; earlier active M1/M2/M5 selections are preserved. The 3/5-second choices only appear with 5s analysis because M1 candles cannot establish a 3s outcome.
+
+**Balanced mode** reduces experimental candle thresholds (body >=52%, 2 of last 3 candles aligned, wick/close filters, ATR margin 0.15 instead of 0.22, 26 closed 5s candles for initial context instead of 34) while **still rejecting** doji, sideways, weak bodies, oversized wicks, old or incomplete candles, and false/wick-only breakouts. This does not imply higher accuracy. Original *strict* mode remains selectable and unchanged for previous timeframes.
+
+Three explicit execution modes:
+- **Observation:** zero orders, logs signal timestamps and direction. Default.
+- **One DEMO trial (3s or 5s ONLY):** user opts in explicitly and uses stake **exactly 1 (USD DEMO)**. Engine uses verified live quote feed and closed 5s triangle pivot/fractal/Price Action confirmation, broker's payout floor, cooldown and one pending order guard. It sends **at most one DEMO order** then automatically stops until user restarts. Trial verifies request/acknowledged official close and expiry duration; it **does not** declare the strategy profitable or approved for continuous operation. 3s signals older than 1 second are discarded.
+- **Continuous DEMO:** remains blocked until the original chronological holdout and broker-verified expiry approval, with original strict sensitivity. A trial result alone does not approve continuous operation. Real money is never enabled.
+
+UI shows clearly whether selected mode is observing, a one-shot test, or eligible for continuous validation. Prior trades and other strategy modes stay untouched. Synthetic unit tests are *not* an assertion that Pocket Option actually accepts and settles every 3s/5s option. In particular, 3s is more sensitive to delays, and expiry shorter than chart timeframe cannot be backtested using OHLC alone.
+
 ## V25 · TRIÂNGULO BREAKOUT — PRICE ACTION · observação primeiro
 
 Added as a separate, opt-in strategy to the existing Android/Web Xtreme Tiger and
