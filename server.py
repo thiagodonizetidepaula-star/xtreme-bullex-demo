@@ -6,6 +6,7 @@ BASE=Path(__file__).parent
 SUPA=os.environ.get('SUPABASE_URL','').rstrip('/')
 KEY=os.environ.get('SUPABASE_PUBLISHABLE_KEY','')
 CLIENTS={};LOCK=threading.RLock();AUTH_CACHE={};JOBS=queue.Queue(maxsize=1000)
+SERVER_STARTED_AT=time.time()
 
 def supa(path,token='',body=None,method=None,extra=None):
     h={'apikey':KEY,'Authorization':'Bearer '+(token or KEY),'Content-Type':'application/json'};h.update(extra or {})
@@ -90,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
     def handle_request(self,post):
         try:
             path=self.path.split('?')[0]
-            if path=='/health':return self.reply(200,{'ok':True,'mode':'demo-only','version':'1.0.0','storage_configured':bool(SUPA and KEY)})
+            if path=='/health':return self.reply(200,{'ok':True,'mode':'demo-only','version':'1.0.0','storage_configured':bool(SUPA and KEY),'uptime_seconds':round(time.time()-SERVER_STARTED_AT)})
             if path=='/config' and not post:return self.reply(200,{'url':SUPA,'key':KEY})
             files={'/':'index.html','/app.js':'app.js','/style.css':'style.css'}
             if path in files and not post:
@@ -121,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path=='/api/history' and not post:
                     return self.reply(200,supa('/rest/v1/pocket_tiger_demo_history?select=*&order=created_at.desc&limit=300',token))
                 if path=='/api/status' and not post:
-                    if not c:return self.reply(200,{'connected':False,'message':'Conecte sua sessão demo da Pocket Option.','assets':[],'ticks':[],'history':[],'events':[]})
+                    if not c:return self.reply(200,{'connected':False,'demo_confirmed':False,'connecting':False,'connection_state':'sem_sessao_no_servidor','connection_failure':'A sessão Pocket Option não está ativa no servidor. Reinícios do Render encerram conexões; toque CONECTAR POCKET DEMO com uma sessão atual.', 'message':'SEM SESSÃO DEMO NO SERVIDOR. Após reinício do Render, reconecte no Android. Nenhuma ordem é retomada automaticamente.','assets':[],'ticks':[],'history':[],'events':[]})
                     out=c['broker'].snapshot();out['storage']=c['storage'];return self.reply(200,out)
                 if not c:raise ValueError('Conecte a corretora primeiro.')
                 b=c['broker']
