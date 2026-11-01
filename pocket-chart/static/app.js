@@ -35,7 +35,8 @@ window.pocketNativeMarket=raw=>{
  if(!nativeRelay||!active)return;
  try{const packet=JSON.parse(raw);if(packet.type!=='feed'||!Array.isArray(packet.events))return;
   if(nativeQueue.length+packet.events.length>64){nativeRelay=false;toast('A transmissão ficou atrasada. Reconecte a conta demo.');return;}
-  nativeQueue.push(...packet.events);flushNative();
+  for(const e of packet.events)if(e.event==='demoExecution'){executionState=e.data;executionSeen=Date.now();renderExecution();}
+  nativeQueue.push(...packet.events.filter(e=>e.event!=='demoExecution'));flushNative();
  }catch{}
 };
 async function flushNative(){
@@ -114,7 +115,7 @@ async function poll(){
   const commands=await api('native-commands');nativeCommands(commands.commands);
   if(nativeConnecting&&fresh()&&state.current){nativeConnecting=false;window.PocketLensNative.postMessage('connected');toast('Primeira cotação real recebida da sessão demo no celular.');}
  }
- renderAnalysis();renderSignalBook();updateSignal();draw();
+ forwardExecutionSignal();renderAnalysis();renderSignalBook();updateSignal();draw();
  }catch(e){if(active){$('status').textContent='Sem conexão';$('status').className='pill';if(state)state.fresh=false;$('feedMessage').textContent=e.message;updateSignal();}}
  finally{polling=false;}
 }
@@ -206,4 +207,22 @@ function settingsView(show){$('chartView').hidden=show;$('settingsView').hidden=
 $('chartTab').onclick=()=>settingsView(false);
 $('settingsTab').onclick=async()=>{settingsView(true);try{const {settings:s}=await api('trading-settings');for(const [id,key] of [['tradeAmount','amount'],['tradeExpiry','expiry'],['tradeConcurrent','max_concurrent'],['tradeMultiplier','multiplier'],['tradeSteps','max_steps'],['tradeLoss','stop_loss'],['tradeWin','stop_win']])$(id).value=s[key];$('tradeMartingale').checked=s.martingale;exposure();}catch(e){$('tradeSettingsMessage').textContent=e.message;}};
 $('tradingSettingsForm').oninput=exposure;
-$('tradingSettingsForm').onsubmit=async e=>{e.preventDefault();try{await api('trading-settings',settingsValues());$('tradeSettingsMessage').textContent='Configurações salvas nesta sessão. Execução automática ainda indisponível.';}catch(err){$('tradeSettingsMessage').textContent=err.message;}};
+$('tradingSettingsForm').onsubmit=async e=>{e.preventDefault();try{await api('trading-settings',settingsValues());$('tradeSettingsMessage').textContent='Configurações salvas. Pause e inicie o automático para aplicar às próximas ordens.';}catch(err){$('tradeSettingsMessage').textContent=err.message;}};
+
+let executionState=null,executionSeen=0,lastForwardedSignal='';
+function renderExecution(){
+ const e=executionState,ready=!!(e?.version===2&&Date.now()-executionSeen<4000&&state?.connected);
+ $('autoStart').disabled=!ready;$('autoPause').disabled=!ready;
+ $('executionMessage').textContent=ready?e.message:'Instale a edição Automático Demo e conecte a conta demo para iniciar.';
+ const rows=e?.orders||[];const count=s=>rows.filter(r=>r.status===s).length;
+ $('brokerScore').textContent='WIN '+count('win')+' · LOSS '+count('loss')+' · EMPATE '+count('tie')+' · Pendentes '+rows.filter(r=>['sending','open','unknown'].includes(r.status)).length+' · Resultado demo '+Number(e?.net||0).toFixed(2);
+ $('brokerHistory').innerHTML=rows.slice(-20).reverse().map(r=>'<p>'+html(r.asset)+' · '+html(r.direction.toUpperCase())+' · '+html(r.amount)+' · '+html(duration(r.expiry))+' · '+html(({sending:'Enviando',open:'Aceita',unknown:'Sem confirmação',rejected:'Recusada',win:'WIN',loss:'LOSS',tie:'Empate'})[r.status]||r.status)+(r.net!=null?' · '+html(r.net):'')+'</p>').join('');
+}
+function forwardExecutionSignal(){
+ const s=state?.signals?.at(-1);if(!executionState?.enabled||!fresh()||!s?.id||s.id===lastForwardedSignal)return;
+ lastForwardedSignal=s.id;
+ if(Date.now()/1000-s.confirmed_at<=3)nativeCommands([{event:'demoSignal',data:{id:s.id,symbol:s.symbol,direction:s.direction,confirmed_at:s.confirmed_at}}]);
+}
+$('autoStart').onclick=async()=>{try{const v=settingsValues();await api('trading-settings',v);lastForwardedSignal=state?.signals?.at(-1)?.id||'';nativeCommands([{event:'demoStart',data:v}]);}catch(e){toast(e.message);}};
+$('autoPause').onclick=()=>nativeCommands([{event:'demoPause'}]);
+setInterval(()=>{if(active&&nativeRelay){nativeCommands([{event:'demoHeartbeat'}]);renderExecution();}},2000);

@@ -34,6 +34,6 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  for(const url of ['wss://po.market.evil.example/socket.io/','wss://evil.example/socket.io/','ws://demo-api-eu.po.market/socket.io/']){
   const x=setup();const s=new x.window.WebSocket(url);s.send(auth());assert.equal(x.messages.length,0);
  }
- const real=setup(),s=new real.window.WebSocket('wss://demo-api-eu.po.market/socket.io/');s.send(auth(0));assert.equal(real.messages[0].type,'real');s.fire('message','42["successauth",{}]');await wait(5);assert.equal(real.messages.length,1);
+ const real=setup(),s=new real.window.WebSocket('wss://demo-api-eu.po.market/socket.io/');s.send(auth(0));assert.ok(real.messages.some(m=>m.type==='real'));s.fire('message','42["successauth",{}]');await wait(5);assert.equal(real.sent.filter(m=>m.includes('openOrder')).length,0);
  console.log('Market relay tests passed: text/binary quotes, original socket only, no credential forwarding, no order commands, real-account rejection.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

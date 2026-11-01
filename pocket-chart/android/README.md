@@ -21,3 +21,9 @@ Compilação e testes automatizados não comprovam login na corretora. O teste r
 ## Atualização 1.0.3
 
 Acompanha múltiplos sockets demo simultâneos, mantendo a origem dos preços e encaminhando comandos somente a uma conexão demo pronta. Fechar um socket secundário não encerra a leitura de outro ativo. Diagnóstico transmite apenas contadores numéricos de preços e comandos, sem credenciais. Interface distingue sessão conectada de cotação ao vivo, oculta o convite para conectar quando autenticado e expõe Desconectar. Uma transmissão Android parada por mais de 15 segundos deixa de ser mostrada como conectada. A verificação em sessão real do usuário continua necessária.
+
+
+## Edição Automático Demo (1.0.4-test)
+A ponte inclui demo-execution.js embutido em session-bridge.js. Opera apenas após confirmação de saldo isDemo=1 e ativação explícita pelo usuário. Eventos de ordem são correlacionados por requestId e id oficial. O placar só aceita fechamento com preços e lucro compatíveis com o payout. Timeout pausa sem reenviar. Martingale usa o próximo sinal confirmado do mesmo ativo, com limite de níveis, concorrência e exposição. A ponte expõe versão 2 ao painel. Os prazos enviados são solicitações experimentais: recusa pausa, e não existe catálogo confirmado de expirações.
+
+Testes: node test-session-bridge.cjs; node test-demo-execution.cjs. APK desta entrega foi reempacotado a partir do APK anterior com atualização do asset JS e versão textual do manifesto, mantendo o código Java/Dex. Assinatura de teste nova, validada por apksigner; pode exigir desinstalar a edição anterior. Não houve teste autenticado com uma conta demo real nesta entrega.
