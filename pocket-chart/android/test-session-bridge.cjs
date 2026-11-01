@@ -20,6 +20,10 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  await wait(300);
  assert.equal(messages[0].events[0].event,'successauth');assert.equal(messages[1].events[0].event,'updateAssets');assert.equal(messages[2].events[0].event,'updateStream');
  assert.equal(JSON.stringify(messages).includes('FAKE_TEST_SECRET'),false);
+ // A report must be emitted even if the background WebView never runs its timer.
+ const initial=messages.length;
+ window.pocketLensMarketCommand([{event:'demoHeartbeat'}]);
+ assert.ok(messages.slice(initial).some(m=>m.events?.some(e=>e.event==='demoExecution'&&e.data.version===2)),'heartbeat must synchronously confirm Android execution bridge');
  const before=sent.length;
  window.pocketLensMarketCommand([{event:'openOrder',data:{amount:1}},{event:'auth',data:{}}]);assert.equal(sent.length,before);
  window.pocketLensMarketCommand([{event:'subscribeSymbol',data:'EURUSD_otc'}]);assert.equal(sent.length,before+1);
@@ -31,6 +35,9 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  assert.equal(messages.length,n+1,'market quotes survive another authenticated socket');
  other.fire('close');assert.notEqual(messages.at(-1).events[0].event,'disconnected','closing secondary socket does not disconnect active feed');
  socket.fire('close');assert.equal(messages.at(-1).events[0].event,'disconnected');
+ const stopped=messages.length;
+ window.pocketLensMarketCommand([{event:'demoStart',data:{amount:1,expiry:60,max_concurrent:1,martingale:false,multiplier:2,max_steps:1,stop_loss:20,stop_win:20}}]);
+ assert.ok(messages.slice(stopped).some(m=>m.events?.some(e=>e.event==='demoExecution'&&!e.data.enabled)),'stale broker must report why demo cannot start');
  for(const url of ['wss://po.market.evil.example/socket.io/','wss://evil.example/socket.io/','ws://demo-api-eu.po.market/socket.io/']){
   const x=setup();const s=new x.window.WebSocket(url);s.send(auth());assert.equal(x.messages.length,0);
  }
