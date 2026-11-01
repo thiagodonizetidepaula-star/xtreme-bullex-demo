@@ -12,12 +12,12 @@ def valid_bar(b):
 
 def structure(bars,period):
     bars=suffix(bars,period)[-160:]
-    if len(bars)<12:return {'lines':[],'zones':[],'reason':'Aguardando pelo menos 12 velas fechadas.'}
+    if len(bars)<6:return {'lines':[],'zones':[],'reason':'Histórico insuficiente para confirmar pivôs. Carregando velas anteriores da corretora.'}
     # A discontinuity starts a new context. Never bridge missing candles.
     for i in range(len(bars)-1,0,-1):
         if bars[i]['time']-bars[i-1]['time']!=period:
             bars=bars[i:];break
-    if len(bars)<12:return {'lines':[],'zones':[],'reason':'Histórico descontínuo; aguardando novas velas completas.'}
+    if len(bars)<6:return {'lines':[],'zones':[],'reason':'Histórico com lacunas; tente recuperar as velas anteriores da corretora.'}
     atr=indicators(bars)['atr'] or sum(b['high']-b['low'] for b in bars)/len(bars)
     tol=max(atr*.3,bars[-1]['close']*1e-7)
     peaks=[];troughs=[]
@@ -63,7 +63,7 @@ def structure(bars,period):
         if not any(abs(z['price']-v['price'])<=tol for v in merged):merged.append(z)
     zones=merged[:6]
     reference=None
-    if not lines and len(bars)>=12:
+    if not lines and len(bars)>=6:
         window=bars[-40:];n=len(window);xs=list(range(n));ys=[b['close'] for b in window];xm=(n-1)/2;ym=sum(ys)/n
         den=sum((x-xm)**2 for x in xs);slope=sum((x-xm)*(y-ym) for x,y in zip(xs,ys))/den
         variance=sum((y-ym)**2 for y in ys);error=sum((y-(ym+slope*(x-xm)))**2 for x,y in zip(xs,ys))
@@ -73,7 +73,7 @@ def structure(bars,period):
     return {'lines':lines,'reference':reference,'zones':zones,'atr':atr,'tolerance':tol,'reason':'Regiões por pivôs confirmados (2 velas à direita).'}
 
 def evaluate(bars,period):
-    if len(bars)<15:return None
+    if len(bars)<8:return None
     # Regions are fixed using only data preceding the signal candle.
     ctx=structure(bars[:-1],period)
     if not ctx.get('atr'):return None
@@ -87,7 +87,7 @@ def evaluate(bars,period):
         a,e=line['start'],line['end']
         price=a['price']+(e['price']-a['price'])*(b['time']-a['time'])/(e['time']-a['time'])
         candidates.append({'kind':line['kind'],'price':price,'touches':2,'trend':True})
-    if len(bars)>=16:
+    if len(bars)>=10:
         before=structure(bars[:-2],period);previous=bars[-2]
         for z in before.get('zones',[]):
             if z['touches']<2:continue
