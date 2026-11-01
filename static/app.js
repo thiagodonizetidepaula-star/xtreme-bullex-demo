@@ -62,6 +62,15 @@ $('startSignalAuto').onclick=async()=>{
  const ids=['amount','min_payout','stop_win','stop_loss','limit'];
  for(const id of ids){if(!$(id).reportValidity())return}
  const symbol=$('asset').value;
+ if($('expiryProfile').value==='triangle'&&$('triangleExecution').value==='demo'){
+  const hasHoldout=(snapshot.triangle_reports||[]).some(r=>r.timeframe===Number($('triangleTimeframe').value)&&r.expiry===Number($('expiry').value)&&r.status==='PAPER_APROVADO');
+  const expiryVerified=(snapshot.validated_expiries||[]).includes(Number($('expiry').value));
+  if(!hasHoldout||!expiryVerified){
+   $('triangleExecution').value='observe';
+   $('autoSignalStatus').textContent='DEMO AUTOMÁTICA NÃO LIBERADA. Selecionei OBSERVAÇÃO: primeiro conecte a conta DEMO e valide a combinação de ativo, timeframe e expiração. Nenhuma ordem será enviada.';
+   render();return;
+  }
+ }
  const scanAll=['zigzag','zigzag_fast','zigzag_m2','zigzag_zones','triangle'].includes($('expiryProfile').value);
  if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
  const params={
@@ -89,7 +98,7 @@ $('startSignalAuto').onclick=async()=>{
   snapshot=await api('status');
   render();
   $('autoSignalStatus').textContent=snapshot.auto?
-   (scanAll?'VARREDURA OTC ATIVA: traçando resistências; SELL abaixo da linha, BUY só após rompimento confirmado.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
+   (params.triangle_mode&&params.triangle_observe?'OBSERVAÇÃO DE TRIÂNGULOS ATIVA: lendo candles e traçando padrões; SEM ORDENS.':scanAll?'VARREDURA DEMO ATIVA: esperando confirmação técnica para BUY/SELL.':'BOT AUTOMÁTICO ATIVO: esperando sinal atual de compra ou venda.'):
    'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
  }catch(e){
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
@@ -173,6 +182,7 @@ function populateExpiry(preferred=null){
 }
 $('expiryProfile').onchange=()=>{
  if(snapshot.auto)return;
+ if($('expiryProfile').value==='triangle')$('triangleExecution').value='observe';
  populateExpiry();render();
 };
 $('triangleTimeframe').onchange=()=>{if(!snapshot.auto){populateExpiry();render()}};
@@ -233,11 +243,22 @@ function render(){
  if(s.auto&&s.triangle_mode){$('triangleTimeframe').value=String(s.scan_timeframe);}
  const recentReports=s.triangle_reports||[];
  const observations=s.triangle_observations||[];
- $('triangleValidation').textContent=recentReports.length?
+ const selectedTriangleTf=Number($('triangleTimeframe').value);
+ const selectedTriangleExpiry=Number($('expiry').value);
+ const triangleHoldoutReady=recentReports.some(r=>r.timeframe===selectedTriangleTf&&r.expiry===selectedTriangleExpiry&&r.status==='PAPER_APROVADO');
+ const triangleExpiryReady=(s.validated_expiries||[]).includes(selectedTriangleExpiry);
+ const triangleDemoAvailable=Boolean(s.connected&&s.demo_confirmed&&triangleHoldoutReady&&triangleExpiryReady);
+ const triangleDemoOption=$('triangleExecution').querySelector('option[value="demo"]');
+ if(triangleDemoOption)triangleDemoOption.disabled=!triangleDemoAvailable;
+ if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')$('triangleExecution').value='observe';
+ $('triangleValidation').textContent=!s.connected||!s.demo_confirmed?
+  'CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO e aguarde saldo e último tick. Em seguida, inicie OBSERVAÇÃO; nenhum sinal envia ordem.' :
+  (recentReports.length?
   recentReports.map(r=>r.symbol+' · '+({5:'5s',60:'M1',120:'M2',300:'M5'}[r.timeframe]||r.timeframe)+' / '+r.expiry+'s · '+
     r.status+' · TREINO '+r.train.trades+' ops / WIN '+(r.train.win_rate??'—')+'% / '+r.train.net+
     ' · TESTE '+r.test.trades+' ops / WIN '+(r.test.win_rate??'—')+'% / '+r.test.net+' · '+r.reason).join(' | ') :
-  'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.';
+  'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.') +
+  (!triangleDemoAvailable?' · AUTO DEMO BLOQUEADO: requer backtest fora da amostra positivo e expiração validada em DEMO.':' · AUTO DEMO elegível após confirmação do usuário.');
  $('startSignalAuto').textContent=triangleSelected&&$('triangleExecution').value==='observe'?'INICIAR OBSERVAÇÃO · SEM ORDENS':'INICIAR AUTOMÁTICO DEMO';
  const radar=s.radar||{};
  const chartTf=radar.candle_seconds||($('expiryProfile').value==='triangle'?Number($('triangleTimeframe').value):$('expiryProfile').value==='zigzag_m2'?120:['zigzag_fast','zigzag_zones'].includes($('expiryProfile').value)?5:60);
@@ -302,7 +323,9 @@ function render(){
  $('executeSignal').textContent=ready?'OPERAR '+direction+' • '+expiry+'s':'AGUARDANDO SINAL';
  $('startSignalAuto').disabled=busy||s.auto||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
  $('stopSignalAuto').disabled=busy||!s.auto;
- if(s.auto&&s.auto_strategy==='zigzag_fractal'){
+ if(s.auto&&s.triangle_mode&&s.triangle_observe){
+  $('autoSignalStatus').textContent='OBSERVAÇÃO TRIÂNGULO ATIVA · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+observations.length+' sinais observados · NENHUMA ORDEM AUTOMÁTICA.';
+ }else if(s.auto&&s.auto_strategy==='zigzag_fractal'){
   $('autoSignalStatus').textContent='VARREDURA OTC ATIVA • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
    ' operações · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+
    (s.pending?.id?'aguardando resultado oficial':s.auto_waiting_prices?'aguardando feeds reais':
@@ -316,6 +339,8 @@ function render(){
       (s.auto_expiry>=60?'analisando M5 e aguardando M1 · '+(s.m1_status||'M5 em aquecimento'):
       s.fast_strategy==='exhaustion'?'observando último suspiro e reação real nos ticks':'procurando sinal de tendência em ticks atuais') )+
    ' • expiração '+s.auto_expiry+'s'+(s.auto_trial?' • prazo ainda não verificado (valor 1 DEMO)':'')+' • filtro lateral ativo.';
+ }else if(!s.connected||!s.demo_confirmed){
+  $('autoSignalStatus').textContent='DEMO DESCONECTADA: conecte pelo botão CONECTAR POCKET DEMO no Android. Sem saldo confirmado e tick atual não existe leitura nem entrada.';
  }else if(!$('autoSignalStatus').textContent.startsWith('NÃO INICIADO:')){
   $('autoSignalStatus').textContent='AUTOMÁTICO PARADO'+
     (s.auto_stop_reason?' • '+s.auto_stop_reason:'')+
