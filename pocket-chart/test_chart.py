@@ -26,6 +26,10 @@ class ChartTests(unittest.TestCase):
         for event in ('auth','openOrder'):
             with self.assertRaises(ValueError):f.send(event,{})
         f.ingest([{'event':'openOrder','data':{'amount':1}}]);self.assertFalse(f.connected)
+    def test_native_stalled_relay_is_not_shown_connected(self):
+        f=NativeFeed();f.connected=True;f.native_seen=time.time()-30
+        self.assertFalse(f.snapshot()['connected'])
+        f.native_seen=time.time();self.assertTrue(f.snapshot()['connected'])
     def test_catalog_automatically_subscribes_open_asset(self):
         f=Feed({});f.ws=FakeSocket();f.connected=True
         row=[0]*15;row[1]='EURUSD_otc';row[2]='EUR USD OTC';row[14]=True

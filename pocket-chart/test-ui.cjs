@@ -1,0 +1,12 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+const elements=new Map();
+function element(id){if(!elements.has(id)){const e={value:'60',hidden:false,disabled:false,dataset:{},options:[],textContent:'',addEventListener(){},replaceChildren(){this.options=[];},add(o){this.options.push(o);},getContext(){return {};},getBoundingClientRect(){return {width:0,height:0};},querySelector(selector){return element(id+selector);}};elements.set(id,e);}return elements.get(id);}
+let fixture={connected:true,fresh:false,assets:[],bars:[],signals:[],symbol:'EURUSD_otc',period:60,message:'Aguardando preços',structure:{}};
+const context={document:{getElementById:element},window:{devicePixelRatio:1},Option:function(t,v){this.text=t;this.value=v;},ResizeObserver:class{observe(){}},setInterval(){},clearTimeout(){},setTimeout,Date,JSON,Number,Math,Promise,fetch:async()=>({ok:true,status:200,json:async()=>fixture})};
+vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/static/app.js','utf8'),context);
+(async()=>{await new Promise(r=>setTimeout(r,10));
+ assert.equal(element('connectOpen').textContent,'Desconectar');assert.equal(element('emptyConnect').hidden,true);assert.equal(element('emptyh2').textContent,'Sessão conectada');assert.equal(element('apply').disabled,false);
+ fixture={...fixture,connected:false};await context.poll();
+ assert.equal(element('connectOpen').textContent,'Conectar');assert.equal(element('emptyConnect').hidden,false);assert.equal(element('apply').disabled,true);
+ console.log('Connection UI tests passed: connected state hides connection CTA, exposes disconnect and gates analysis.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

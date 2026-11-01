@@ -186,6 +186,7 @@ class NativeFeed(Feed):
     """Analyze the existing demo socket on the phone. Never opens another login."""
     def __init__(self):
         super().__init__({});self.commands=deque(maxlen=32);self.message='Abra a Pocket Option no Android e selecione DEMO.'
+        self.diagnostic={};self.stream_rows=0;self.selected_rows=0;self.native_seen=0;self.last_diagnostic_log=0
     def start(self):pass
     def send(self,event,data=None):
         if event not in READ_EVENTS or event=='auth':raise ValueError('Comando de leitura inválido.')
@@ -199,9 +200,27 @@ class NativeFeed(Feed):
             for item in events:
                 if not isinstance(item,dict):continue
                 name=item.get('event');data=item.get('data')
+                self.native_seen=time.time()
+                if name=='diagnostic' and isinstance(data,dict):
+                    self.diagnostic={k:int(v) for k,v in data.items() if k in ('streamPackets','streamRows','commandsReceived','commandsSent','parseErrors','sockets') and type(v) is int and 0<=v<=1000000000}
+                    if time.time()-self.last_diagnostic_log>15:
+                        print(json.dumps({'component':'native-market','receivedRows':self.stream_rows,'selectedRows':self.selected_rows,**self.diagnostic}),flush=True)
+                        self.last_diagnostic_log=time.time()
+                    continue
+                if name=='updateStream' and isinstance(data,list):
+                    self.stream_rows+=len(data)
+                    self.selected_rows+=sum(1 for r in data if isinstance(r,list) and len(r)>=3 and r[0]==self.symbol)
                 if name=='disconnected':
                     self.connected=False;self.message='A conexão demo no celular foi encerrada. Reconecte pelo botão Conectar.'
                 elif name in ('successauth','updateAssets','updateStream','loadHistoryPeriodFast','errorauth','failauth'):
                     self.event(name,data)
+    def snapshot(self):
+        result=super().snapshot()
+        if self.connected and self.native_seen and time.time()-self.native_seen>15:
+            result['connected']=False;result['fresh']=False
+            result['message']='O Android parou de transmitir dados. Volte à conta demo ou reconecte.'
+        result['diagnostic']={**self.diagnostic,'receivedRows':self.stream_rows,'selectedRows':self.selected_rows,
+                              'relayAge':round(time.time()-self.native_seen,1) if self.native_seen else None}
+        return result
     def close(self):
         super().close();self.commands.clear()

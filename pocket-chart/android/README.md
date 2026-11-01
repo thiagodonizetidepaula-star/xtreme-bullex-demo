@@ -17,3 +17,7 @@ Execute `node test-session-bridge.cjs` para os testes de encaminhamento restrito
 ## Estado de validação
 
 Compilação e testes automatizados não comprovam login na corretora. O teste real exige um aparelho Android com WebView atualizado e uma sessão do titular. A corretora pode recusar WebViews ou mudar servidores/protocolo. Nesse caso o APK deve informar falha e continuar desconectado; não usa dados simulados. O app não tenta contornar CAPTCHA, 2FA, bloqueios ou certificados. Se a corretora não aceitar este fluxo, não existe confirmação de funcionamento apenas por abrir sua página.
+
+## Atualização 1.0.3
+
+Acompanha múltiplos sockets demo simultâneos, mantendo a origem dos preços e encaminhando comandos somente a uma conexão demo pronta. Fechar um socket secundário não encerra a leitura de outro ativo. Diagnóstico transmite apenas contadores numéricos de preços e comandos, sem credenciais. Interface distingue sessão conectada de cotação ao vivo, oculta o convite para conectar quando autenticado e expõe Desconectar. Uma transmissão Android parada por mais de 15 segundos deixa de ser mostrada como conectada. A verificação em sessão real do usuário continua necessária.

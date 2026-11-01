@@ -20,6 +20,7 @@ $('logout').onclick=async()=>{try{await api('logout',{});nativeRelay=false;nativ
 let nativeAttempt=0,nativeRelay=false,nativeConnecting=false,nativeSending=false,nativeQueue=[];
 function nativeCommands(commands){if(commands?.length)window.PocketLensNative?.postMessage(JSON.stringify({type:'commands',commands}));}
 for(const id of ['connectOpen','emptyConnect'])$(id).onclick=async()=>{
+ if(state?.connected){await window.pocketNativeDisconnect();window.PocketLensNative?.postMessage('disconnect');return;}
  if(window.PocketLensNative){
   try{nativeAttempt++;nativeRelay=false;nativeQueue=[];await api('native-start',{});nativeRelay=true;nativeConnecting=true;window.PocketLensNative.postMessage('connect');}
   catch(err){toast(err.message);}return;
@@ -29,7 +30,7 @@ for(const id of ['connectOpen','emptyConnect'])$(id).onclick=async()=>{
 window.pocketNativeDisconnect=async()=>{nativeAttempt++;nativeRelay=false;nativeConnecting=false;nativeQueue=[];try{await api('disconnect',{});state=null;await poll();}catch{};};
 window.pocketNativePause=async()=>{nativeAttempt++;nativeQueue=[];nativeConnecting=true;try{await api('native-start',{});nativeRelay=true;}catch(err){nativeRelay=false;toast(err.message);}};
 // Older APKs are not silently switched back to a manual session-code flow.
-window.pocketNativeSession=raw=>{raw='';toast('Atualize o APK para a versão 1.0.2: esta versão usa a conexão demo do próprio celular.');window.PocketLensNative?.postMessage('failed');};
+window.pocketNativeSession=raw=>{raw='';toast('Atualize o APK para a versão 1.0.3: esta versão usa a conexão demo do próprio celular.');window.PocketLensNative?.postMessage('failed');};
 window.pocketNativeMarket=raw=>{
  if(!nativeRelay||!active)return;
  try{const packet=JSON.parse(raw);if(packet.type!=='feed'||!Array.isArray(packet.events))return;
@@ -87,12 +88,15 @@ async function poll(){
  try{const next=await api('status');if(state&&(state.symbol!==next.symbol||state.period!==next.period||state.epoch!==next.epoch)){view.offset=0;hover=null;}
  state=next;renderAssets();const authRejected=!state.connected&&/recusada|encerrou a sessão/i.test(state.message||'');
  $('status').textContent=fresh()?'● Ao vivo':state.connected?'● Aguardando dados':authRejected?'Sessão recusada':'Desconectado';
+ $('connectOpen').textContent=state.connected?'Desconectar':nativeConnecting?'Reconectar':'Conectar';
+ $('emptyConnect').hidden=!!state.connected;
+ $('apply').disabled=!state.connected||selectionBusy;
  $('status').title=state.message||'';$('status').className='pill'+(fresh()?' live':'');
  const a=state.assets.find(a=>a.symbol===state.symbol);$('chartTitle').textContent=state.symbol?(a?.name||state.symbol)+' / '+duration(state.period):'Escolha sua perspectiva';
  $('count').textContent=(state.bars?.length||0)+' velas fechadas';
- $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'');
+ $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'')+(state.diagnostic?' · preços no celular: '+(state.diagnostic.streamRows??'—')+' / recebidos: '+state.diagnostic.receivedRows+' / ativo: '+state.diagnostic.selectedRows+' · comandos: '+(state.diagnostic.commandsSent??'—'):'');
  const last=state.current||state.bars?.at(-1);$('ohlc').textContent=last?'O '+price(last.open)+'   H '+price(last.high)+'   L '+price(last.low)+'   C '+price(last.close):authRejected?state.message:'Aguardando cotações da Pocket Option';
- $('empty').hidden=!!(last);if(!last&&state.symbol){$('empty').querySelector('h2').textContent='Aguardando as primeiras velas';$('empty').querySelector('p').textContent='O gráfico será exibido quando a corretora enviar cotações válidas.';}else{$('empty').querySelector('h2').textContent='Seu gráfico começa aqui';$('empty').querySelector('p').textContent='Conecte a Pocket Option e escolha um ativo. As linhas serão traçadas com os dados recebidos.';}
+ $('empty').hidden=!!(last);if(!last&&state.connected){$('empty').querySelector('h2').textContent='Sessão conectada';$('empty').querySelector('p').textContent='Aguardando preços do ativo selecionado. A leitura ao vivo será confirmada quando chegar a primeira cotação.';}else if(!last&&state.symbol){$('empty').querySelector('h2').textContent='Conexão interrompida';$('empty').querySelector('p').textContent=state.message;}else{$('empty').querySelector('h2').textContent='Seu gráfico começa aqui';$('empty').querySelector('p').textContent='Conecte a Pocket Option e escolha um ativo. As linhas serão traçadas com os dados recebidos.';}
  if(nativeRelay&&window.PocketLensNative){
   const commands=await api('native-commands');nativeCommands(commands.commands);
   if(nativeConnecting&&fresh()&&state.current){nativeConnecting=false;window.PocketLensNative.postMessage('connected');toast('Primeira cotação real recebida da sessão demo no celular.');}

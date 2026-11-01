@@ -6,7 +6,7 @@ function setup(){
  class Socket {constructor(url){this.url=url;this.readyState=1;this.listeners={};}send(data){sent.push(data);return 'sent';}addEventListener(type,cb){this.listeners[type]=cb;}fire(type,data){this.listeners[type]?.({data});}}
  Socket.OPEN=1;
  const window={WebSocket:Socket,PocketLensSession:{postMessage:m=>messages.push(JSON.parse(m))}};window.top=window;
- vm.runInNewContext(source,{window,URL,Reflect,Proxy,JSON,Number,setTimeout,TextDecoder,Promise,Set,Object,Array});return {window,messages,sent};
+ vm.runInNewContext(source,{window,URL,Reflect,Proxy,JSON,Number,setTimeout,setInterval:()=>0,TextDecoder,Promise,Set,Map,Object,Array});return {window,messages,sent};
 }
 const auth=(demo=1)=>'42'+JSON.stringify(['auth',{session:'FAKE_TEST_SECRET_NEVER_FORWARDED',uid:123,isDemo:demo}]);
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -26,6 +26,10 @@ const wait=ms=>new Promise(r=>setTimeout(r,ms));
  socket.fire('message','451-["updateStream",{"_placeholder":true,"num":0}]');
  socket.fire('message',new TextEncoder().encode(JSON.stringify([['EURUSD_otc',1800000001,1.21]])).buffer);
  await wait(300);assert.equal(messages.at(-1).events[0].event,'updateStream');
+ const other=new window.WebSocket('wss://try-demo-eu.po.market/socket.io/');other.send(auth());other.fire('message','42["successauth",{}]');await wait(5);
+ const n=messages.length;socket.fire('message','42'+JSON.stringify(['updateStream',[['EURUSD_otc',1800000002,1.22]]]));await wait(300);
+ assert.equal(messages.length,n+1,'market quotes survive another authenticated socket');
+ other.fire('close');assert.notEqual(messages.at(-1).events[0].event,'disconnected','closing secondary socket does not disconnect active feed');
  socket.fire('close');assert.equal(messages.at(-1).events[0].event,'disconnected');
  for(const url of ['wss://po.market.evil.example/socket.io/','wss://evil.example/socket.io/','ws://demo-api-eu.po.market/socket.io/']){
   const x=setup();const s=new x.window.WebSocket(url);s.send(auth());assert.equal(x.messages.length,0);
