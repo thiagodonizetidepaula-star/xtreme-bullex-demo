@@ -25,7 +25,7 @@
   button.innerHTML='<span aria-hidden="true">'+icon+'</span><span>'+title+'</span>';
   nav.append(button);buttons[name]=button;
   const pane=document.createElement('section');pane.id='xt-pane-'+name;
-  pane.className='xt-pane';pane.setAttribute('role','tabpanel');
+  pane.className='xt-pane xt-pane-'+name;pane.setAttribute('role','tabpanel');
   pane.setAttribute('aria-label',title);panes[name]=pane;
  }
  const footer=dash.querySelector('footer');
