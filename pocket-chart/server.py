@@ -105,7 +105,11 @@ class Handler(BaseHTTPRequestHandler):
                 out['timeframes']=TIMEFRAMES;return self.reply(200,out)
             if path=='/api/select' and post:
                 if not session['feed']:raise ValueError('Conecte a Pocket Option.')
-                session['feed'].select(body.get('symbol'),body.get('period'));return self.reply(200,{'ok':True})
+                expiry=body.get('expiry',60)
+                if type(expiry) is not int or not 1<=expiry<=86400:raise ValueError('Expiração inválida.')
+                session['feed'].select(body.get('symbol'),body.get('period'))
+                session['feed'].expiry=expiry
+                return self.reply(200,{'ok':True})
             if path=='/api/disconnect' and post:
                 if session['feed']:session['feed'].close()
                 session['feed']=None;return self.reply(200,{'ok':True})

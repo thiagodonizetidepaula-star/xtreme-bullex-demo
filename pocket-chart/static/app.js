@@ -9,7 +9,7 @@ async function api(path,body){
  const data=await r.json();
  if(!r.ok){if(r.status===401&&path!=='login')showLogin();throw new Error(data.error||'Falha no serviço.');}return data;
 }
-function showLogin(){active=false;state=null;$('app').hidden=true;$('login').hidden=false;draw();}
+function showLogin(){$('signalAlert').hidden=true;active=false;state=null;$('app').hidden=true;$('login').hidden=false;draw();}
 function showApp(){active=true;$('app').hidden=false;$('login').hidden=true;poll();}
 $('loginForm').addEventListener('submit',async e=>{
  e.preventDefault();const button=e.submitter;button.disabled=true;$('loginError').textContent='';
@@ -66,7 +66,8 @@ $('customExpiry').oninput=updateSignal;
 $('apply').onclick=async()=>{
  if(selectionBusy)return;selectionBusy=true;$('apply').disabled=true;
  try{const symbol=$('asset').value,period=Number($('timeframe').value);if(!symbol)throw new Error('Conecte e escolha um ativo disponível.');
- await api('select',{symbol,period});view.offset=0;hover=null;await poll();}
+ const expiry=Number($('expiry').value==='custom'?$('customExpiry').value:$('expiry').value);
+ await api('select',{symbol,period,expiry});view.offset=0;hover=null;await poll();}
  catch(e){toast(e.message);}finally{selectionBusy=false;$('apply').disabled=false;}
 };
 for(const id of ['zones','trends','arrows','ideas'])$(id).onchange=draw;
@@ -113,7 +114,7 @@ async function poll(){
   const commands=await api('native-commands');nativeCommands(commands.commands);
   if(nativeConnecting&&fresh()&&state.current){nativeConnecting=false;window.PocketLensNative.postMessage('connected');toast('Primeira cotação real recebida da sessão demo no celular.');}
  }
- renderAnalysis();updateSignal();draw();
+ renderAnalysis();renderSignalBook();updateSignal();draw();
  }catch(e){if(active){$('status').textContent='Sem conexão';$('status').className='pill';if(state)state.fresh=false;$('feedMessage').textContent=e.message;updateSignal();}}
  finally{polling=false;}
 }
@@ -175,5 +176,25 @@ canvas.onpointerup=()=>{drag=null;};canvas.onpointercancel=()=>{drag=null;};canv
 canvas.addEventListener('wheel',e=>{e.preventDefault();view.size=Math.max(20,Math.min(400,Math.round(view.size*(e.deltaY>0?1.12:.88))));draw();},{passive:false});
 new ResizeObserver(draw).observe($('chartBox'));
 setInterval(()=>{if(active)poll();},1000);
-setInterval(()=>{const n=Date.now()/1000;$('clock').textContent=new Date().toLocaleTimeString('pt-BR')+' · horário local';$('countdown').textContent=state?.symbol&&fresh()?Math.ceil(state.period-((state.source_time+(n-(state.received_at||n)))%state.period))+'s':'—';if(state&&!fresh()){$('status').textContent=state.connected?'● Aguardando dados':'Desconectado';$('status').className='pill';}updateSignal();},250);
+setInterval(()=>{const n=Date.now()/1000;$('clock').textContent=new Date().toLocaleTimeString('pt-BR')+' · horário local';$('countdown').textContent=state?.symbol&&fresh()?Math.ceil(state.period-((state.source_time+(n-(state.received_at||n)))%state.period))+'s':'—';if(state&&!fresh()){$('status').textContent=state.connected?'● Aguardando dados':'Desconectado';$('status').className='pill';}updateSignal();renderSignalBook();},250);
 (async()=>{try{await api('status');showApp();}catch{showLogin();}})();
+
+let dismissedSignal='',shownSignal='';
+$('dismissSignal').onclick=()=>{dismissedSignal=shownSignal;$('signalAlert').hidden=true;};
+const outcome={pending:'Em acompanhamento',positive:'Positiva',negative:'Negativa',tie:'Empate',inconclusive:'Sem conclusão'};
+function renderSignalBook(){
+ const book=state?.signal_book,rows=book?.rows||[],counts=book?.counts||{};
+ $('scoreboard').textContent='Positivas '+(counts.positive||0)+' · Negativas '+(counts.negative||0)+' · Empates '+(counts.tie||0)+' · Sem conclusão '+(counts.inconclusive||0)+' · Ativas '+(counts.pending||0);
+ $('signalHistory').innerHTML=rows.slice(-30).reverse().map(r=>'<article class="historyRow"><b>'+html(r.asset)+' · '+(r.direction==='BUY'?'CALL ↑':'PUT ↓')+'</b><span>'+html(outcome[r.status])+' · '+html(duration(r.expiry))+' · '+html(new Date(r.announced_at*1000).toLocaleTimeString('pt-BR'))+'</span><small>Referência '+html(price(r.entry_price))+(r.exit_price!=null?' → '+html(price(r.exit_price)):'')+'</small></article>').join('')||'<p class="muted">Aguardando um padrão confirmado ao vivo. Cenários em observação não entram no placar.</p>';
+ const r=rows.at(-1),now=Date.now()/1000;
+ if(!active||!r||r.id===dismissedSignal||now-r.announced_at>r.expiry+8){$('signalAlert').hidden=true;return;}
+ shownSignal=r.id;const remaining=Math.max(0,Math.ceil(r.expiry-(now-r.announced_at)));
+ $('signalAlert').hidden=false;$('signalAlert').className='signalAlert '+(r.direction==='BUY'?'callAlert':'putAlert');
+ $('alertDirection').textContent=r.direction==='BUY'?'↑ CALL · COMPRA':'↓ PUT · VENDA';
+ $('alertAsset').textContent=r.asset;
+ $('alertExpiry').textContent='Expiração teórica: '+duration(r.expiry)+' · Gráfico '+duration(r.period);
+ $('alertTimer').textContent=r.status==='pending'?(remaining?remaining+'s':'Conferindo cotação…'):outcome[r.status];
+ $('alertReason').textContent=r.reason+' · '+(r.confluences||[]).join(' · ');
+ $('alertEntry').textContent='Referência: '+price(r.entry_price)+' · '+new Date(r.announced_at*1000).toLocaleTimeString('pt-BR')+(fresh()?'':' · Cotações interrompidas');
+ $('alertScore').textContent=$('scoreboard').textContent;
+}

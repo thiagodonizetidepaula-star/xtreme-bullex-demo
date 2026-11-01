@@ -2,6 +2,7 @@
 import json,math,ssl,threading,time
 import statistics
 from collections import deque
+from signals import SignalBook
 import websocket
 from analysis import TIMEFRAMES,valid_bar,structure,analysis_report,confirmed_signal
 
@@ -41,7 +42,7 @@ class Feed:
         self.auth=auth;self.lock=threading.RLock();self.ws=None;self.closed=False;self.connected=False
         self.assets={};self.symbol='';self.period=60;self.bars={};self.current=None;self.last_source=0;self.received=0
         self.message='Conectando à Pocket Option…';self.binary=None;self.requests={};self.history_requested=False
-        self.signals=deque(maxlen=120);self.last_history=0;self.last_ping=0;self.epoch=0
+        self.book=SignalBook();self.expiry=60;self.signals=deque(maxlen=120);self.last_history=0;self.last_ping=0;self.epoch=0
     def start(self):threading.Thread(target=self.run,daemon=True).start()
     def send(self,event,data=None):
         if event not in READ_EVENTS:raise ValueError('Evento não permitido: aplicativo somente de análise.')
@@ -130,6 +131,7 @@ class Feed:
         if t is None:return
         # Strict source time + local arrival freshness: stale packets cannot issue signals.
         if not math.isfinite(p) or p<=0 or t<=self.last_source or abs(self.source_now()-t)>30:return
+        self.book.tick(self.symbol,t,p)
         self.last_source=t;self.received=time.time();bucket=int(t)//self.period*self.period
         if self.current and bucket>self.current['time']:
             c=self.current
@@ -140,7 +142,9 @@ class Feed:
                 if bucket==c['time']+self.period and t-bucket<=min(3,self.period*.25):
                     s=confirmed_signal(sorted(self.bars.values(),key=lambda b:b['time']),self.period)
                     if s:
-                        s['confirmed_at']=time.time();self.signals.append(s)
+                        s['confirmed_at']=time.time()
+                        row=self.book.add(s,self.symbol,self.assets.get(self.symbol,{}).get('name',self.symbol),self.period,self.expiry,t,p,time.time())
+                        self.signals.append(row)
             self.current=None
         if self.current is None:
             self.current={'time':bucket,'open':p,'high':p,'low':p,'close':p,'first':t,'last':t,'max_gap':0}
@@ -194,7 +198,7 @@ class Feed:
             return {'connected':self.connected,'message':self.message,'assets':sorted(self.assets.values(),key=lambda a:a['name']),
                     'symbol':self.symbol,'period':self.period,'bars':bars,'current':current,'structure':ctx,'analysis':analysis_report(bars,self.period,ctx),'fresh':fresh,
                     'age':round(now-self.received,1) if self.received else None,'source_time':self.last_source or None,'received_at':self.received or None,
-                    'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested}
+                    'signal_book':self.book.snapshot(self.source_now()),'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested}
     def close(self):
         self.closed=True;self.connected=False;self.auth={}
         if self.ws:self.ws.close()

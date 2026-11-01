@@ -27,3 +27,9 @@ Testes automatizados cobrem integridade temporal, isolamento de ativos e períod
 ## Validação temporal do relay
 
 Timestamps Unix em segundos, milissegundos, microssegundos e nanossegundos são normalizados. Campos preço/tempo só são invertidos quando apenas um é um timestamp reconhecível. Uma fonte com diferença de relógio precisa de pelo menos quatro amostras distintas, ao longo de três segundos, avançando no mesmo ritmo do recebimento e com diferença estável. Preços congelados e rajadas antigas não validam o relógio. Saltos reiniciam contexto e sinais. A interface usa horário de recebimento para verificar interrupções; a diferença da fonte fica explícita no rodapé. Os horários originais das velas são preservados. A confirmação de sinais tem horário local separado. Essa validação é temporal, não uma garantia de rentabilidade nem prova independente do relógio da corretora.
+
+
+### Alertas e placar teórico
+O ativo selecionado é acompanhado continuamente. Após fechamento de um padrão aprovado pelos filtros, o primeiro tick da próxima vela registra uma referência teórica e emite alerta CALL verde ou PUT vermelho. Escolha a expiração e pressione Analisar para aplicar aos próximos sinais; sinais existentes mantêm seu prazo original. Não há envio de ordens.
+
+O placar permanece somente na sessão do servidor (máximo 200 sinais; lista visual dos últimos 30). Reconexão, logout ou reinício do serviço descartam o placar. A avaliação compara o preço observado na emissão com o primeiro tick do mesmo ativo entre o vencimento e 2 segundos depois, com intervalo máximo de 3 segundos desde o tick anterior. Dados ausentes ou atrasados resultam em sem conclusão. Não há estimativa de payout ou lucro; o resultado é uma observação teórica, não o resultado oficial de uma operação. Padrões são calculados numericamente dos OHLC (pavios, corpos, rejeição, engolfo e reteste), sem alegar interpretação de emoções reais ou reconhecimento de imagens por IA.

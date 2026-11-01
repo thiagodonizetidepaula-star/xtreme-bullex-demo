@@ -9,5 +9,12 @@ vm.createContext(context);vm.runInContext(fs.readFileSync(__dirname+'/static/app
  fixture={...fixture,connected:false};await context.poll();
  assert.equal(element('connectOpen').textContent,'Conectar');assert.equal(element('emptyConnect').hidden,false);assert.equal(element('apply').disabled,true);
  fixture={...fixture,connected:true,fresh:true,source_time:Date.now()/1000-3600,received_at:Date.now()/1000};await context.poll();assert.equal(context.fresh(),true,'verified source offset uses receipt freshness');
+ const row={id:'one',direction:'BUY',asset:'TESTE',expiry:60,period:60,announced_at:Date.now()/1000,entry_price:1.2,reason:'Rejeição em LTA',confluences:['Região','Tendência'],status:'pending'};
+ fixture.signal_book={rows:[row],counts:{pending:1}};await context.poll();
+ assert.equal(element('signalAlert').hidden,false);assert.equal(element('signalAlert').className,'signalAlert callAlert');assert.match(element('alertTimer').textContent,/s$/);
+ row.direction='SELL';row.id='two';await context.poll();assert.equal(element('signalAlert').className,'signalAlert putAlert');
+ element('dismissSignal').onclick();context.renderSignalBook();assert.equal(element('signalAlert').hidden,true);
+ row.id='three';row.status='negative';await context.poll();assert.equal(element('alertTimer').textContent,'Negativa');
+ row.announced_at-=100;context.renderSignalBook();assert.equal(element('signalAlert').hidden,true);
  console.log('Connection UI tests passed: connected state hides connection CTA, exposes disconnect and gates analysis.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
