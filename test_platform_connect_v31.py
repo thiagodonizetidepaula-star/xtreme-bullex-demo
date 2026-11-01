@@ -28,7 +28,7 @@ class PlatformConnectionUI(unittest.TestCase):
         self.assertIn("legacySummary.textContent='Método técnico antigo · SSID (opcional)'",JS)
         self.assertIn('id="ssid"',HTML)
         self.assertIn("$('connect').onclick",APP)
-        self.assertIn("api('connect',{ssid})",APP)
+        self.assertIn("action('connect',{ssid})",APP)
 
     def test_no_browser_login_secret_captured_or_background_orders(self):
         self.assertNotIn("document.cookie",JS)
