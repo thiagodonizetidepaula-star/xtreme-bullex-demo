@@ -26,13 +26,16 @@
 <option value="trend">TENDÊNCIA · continuação</option>
 </select></label></div>
 <div id="triangleSettings" class="triangle-settings" hidden>
- <div class="row"><strong>TRIÂNGULO BREAKOUT — PRICE ACTION</strong><span class="hint">Validação primeiro</span></div>
+ <div class="row"><strong>TRIÂNGULO BREAKOUT — PRICE ACTION</strong><span class="hint">5s rápido · validação primeiro</span></div>
  <label>TIMEFRAME DA ANÁLISE
- <select id="triangleTimeframe"><option value="5">5 segundos</option><option value="60" selected>M1</option><option value="120">M2</option><option value="300">M5</option></select></label>
+ <select id="triangleTimeframe"><option value="5" selected>5 segundos · análise rápida</option><option value="60">M1</option><option value="120">M2</option><option value="300">M5</option></select></label>
  <label>ENTRADA
  <select id="triangleEntry"><option value="both" selected>Rompimento e reteste</option><option value="breakout">Somente rompimento</option><option value="retest">Somente reteste</option></select></label>
  <label>EXECUÇÃO
- <select id="triangleExecution"><option value="observe" selected>OBSERVAÇÃO · sem ordens</option><option value="demo">DEMO automático · somente após backtest e validação</option></select></label>
+ <select id="triangleExecution"><option value="observe" selected>OBSERVAÇÃO · sem ordens</option><option value="trial">TESTE DEMO · apenas 1 ordem de valor 1</option><option value="demo">DEMO automático contínuo · requer validação</option></select></label>
+ <label>FILTRO DE CANDLES
+ <select id="triangleSensitivity"><option value="balanced" selected>EQUILIBRADO 5s · menos rígido, sem dojis/lateralização</option><option value="strict">RIGOROSO · filtro original</option></select></label>
+ <p class="hint">Teste DEMO de 3s/5s: escolha gráfico 5s, valor 1, uma única operação. A entrada espera triângulo e rompimento/reteste confirmados, nunca um sinal de candle antigo. Sem conta real e sem liberação automática contínua.</p>
  <label><input type="checkbox" id="triangleEMA"> Exigir alinhamento EMA 8/21</label>
  <label><input type="checkbox" id="triangleADX"> Exigir ADX mínimo (18)</label>
  <p id="triangleValidation" class="hint" role="status">AGUARDANDO DADOS REAIS. Nenhuma estratégia aprovada. Padrões desenhados não geram ordem até validar a combinação de ativo, timeframe e expiração.</p>
