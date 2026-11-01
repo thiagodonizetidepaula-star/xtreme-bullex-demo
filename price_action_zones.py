@@ -13,6 +13,7 @@ from candle_psychology import candle_psychology
 
 
 class PriceActionZones5s(ZigZagFractalTrend5s):
+    zone_mode=True
     timeframe='5s'
     bar_seconds=5
     warmup_bars=22
