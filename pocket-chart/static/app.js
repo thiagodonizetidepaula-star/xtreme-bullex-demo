@@ -32,6 +32,7 @@ window.pocketNativeSession=async raw=>{
   while(ticket===nativeAttempt&&Date.now()<deadline){
    const s=await api('status');
    if(s.connected&&s.assets?.length){await poll();window.PocketLensNative?.postMessage('connected');toast('Sessão demo confirmada. Aguardando velas do ativo selecionado.');return;}
+   if(/recusada|encerrou a sessão/i.test(s.message||''))throw new Error(s.message);
    await new Promise(resolve=>setTimeout(resolve,700));
   }
   if(ticket!==nativeAttempt)return;
@@ -82,11 +83,13 @@ function updateSignal(){
 async function poll(){
  if(!active||polling)return;polling=true;
  try{const next=await api('status');if(state&&(state.symbol!==next.symbol||state.period!==next.period||state.epoch!==next.epoch)){view.offset=0;hover=null;}
- state=next;renderAssets();$('status').textContent=fresh()?'● Ao vivo':state.connected?'● Aguardando dados':'Desconectado';$('status').className='pill'+(fresh()?' live':'');
+ state=next;renderAssets();const authRejected=!state.connected&&/recusada|encerrou a sessão/i.test(state.message||'');
+ $('status').textContent=fresh()?'● Ao vivo':state.connected?'● Aguardando dados':authRejected?'Sessão recusada':'Desconectado';
+ $('status').title=state.message||'';$('status').className='pill'+(fresh()?' live':'');
  const a=state.assets.find(a=>a.symbol===state.symbol);$('chartTitle').textContent=state.symbol?(a?.name||state.symbol)+' / '+duration(state.period):'Escolha sua perspectiva';
  $('count').textContent=(state.bars?.length||0)+' velas fechadas';
  $('feedMessage').textContent=(fresh()?'● Fonte: Pocket Option · ':state.symbol?'○ Dados sem confirmação ao vivo · ':'')+state.message+(state.age!=null?' · atraso '+state.age+'s':'');
- const last=state.current||state.bars?.at(-1);$('ohlc').textContent=last?'O '+price(last.open)+'   H '+price(last.high)+'   L '+price(last.low)+'   C '+price(last.close):'Aguardando cotações da Pocket Option';
+ const last=state.current||state.bars?.at(-1);$('ohlc').textContent=last?'O '+price(last.open)+'   H '+price(last.high)+'   L '+price(last.low)+'   C '+price(last.close):authRejected?state.message:'Aguardando cotações da Pocket Option';
  $('empty').hidden=!!(last);if(!last&&state.symbol){$('empty').querySelector('h2').textContent='Aguardando as primeiras velas';$('empty').querySelector('p').textContent='O gráfico será exibido quando a corretora enviar cotações válidas.';}else{$('empty').querySelector('h2').textContent='Seu gráfico começa aqui';$('empty').querySelector('p').textContent='Conecte a Pocket Option e escolha um ativo. As linhas serão traçadas com os dados recebidos.';}
  updateSignal();draw();
  }catch(e){if(active){$('status').textContent='Sem conexão';$('status').className='pill';if(state)state.fresh=false;$('feedMessage').textContent=e.message;updateSignal();}}
