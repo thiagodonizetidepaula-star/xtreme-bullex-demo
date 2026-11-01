@@ -91,13 +91,13 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(10, 15, 19))
         }
         val header = TextView(this).apply {
-            text = "XTREME TIGER  •  DEMO  •  ANDROID V17"
+            text = "XTREME TIGER  •  DEMO  •  ANDROID V18"
             textSize = 14f
             setTextColor(Color.rgb(193, 238, 116))
             setPadding(18, 20, 18, 10)
         }
         status = TextView(this).apply {
-            text = "V17 DEMO: varredura OTC, ZigZag 5/12/3 + Fractal 2 confirmado, somente VENDA M1 60s."
+            text = "V18 DEMO: conexão via plataforma e painel simplificado V31. Apenas conta DEMO."
             textSize = 12f
             setTextColor(Color.WHITE)
             setPadding(18, 8, 18, 14)
@@ -139,7 +139,7 @@ class MainActivity : Activity() {
             setOnClickListener { openManualTest() }
         }
         val start = Button(this).apply {
-            text = "ZIGZAG + FRACTAL / V17"
+            text = "SINAIS / GRÁFICO"
             setOnClickListener { showSignalPanel() }
         }
         val stop = Button(this).apply {
@@ -204,6 +204,22 @@ class MainActivity : Activity() {
         broker = configuredWebView(brokerUrl)
         // Independent viewer: no demo auth probe or native bridge installed.
         platform = configuredWebView(brokerUrl)
+        // Web dashboard V31: direct button triggers native consent dialog,
+        // not SSID extraction in the webpage. Only main-frame messages from
+        // the exact trusted Xtreme server may request it.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+                tiger, "XtremeAppBridge", setOf("https://xtreme-pocket-5s.onrender.com")
+            ) { _, message, sourceOrigin, isMainFrame, _ ->
+                val approved = isMainFrame &&
+                    sourceOrigin.scheme == "https" &&
+                    sourceOrigin.host == "xtreme-pocket-5s.onrender.com" &&
+                    message.data == "connect-demo"
+                if (approved && !isFinishing) {
+                    runOnUiThread { confirmBeforeOpeningBroker() }
+                }
+            }
+        }
         frame.addView(tiger, FrameLayout.LayoutParams(-1, -1))
         frame.addView(broker, FrameLayout.LayoutParams(-1, -1))
         frame.addView(platform, FrameLayout.LayoutParams(-1, -1))
