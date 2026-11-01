@@ -70,7 +70,9 @@ def _closed_ticks(rows,period,current_start):
         seconds={int(t) for t,_ in ticks}
         first=min(seconds)-start
         last=max(seconds)-start
-        if period==120:
+        if period==300:
+            enough=(len(seconds)>=50 and first<=30 and last>=270 and last-first>=225)
+        elif period==120:
             enough=(len(seconds)>=28 and first<=10 and last>=110 and last-first>=105)
         elif period==60:
             enough=(len(seconds)>=18 and first<=5 and last>=53)
@@ -84,13 +86,13 @@ def _closed_ticks(rows,period,current_start):
     return output
 
 
-def extract_closed_history(raw,period,anchor,maxbars=90):
+def extract_closed_history(raw,period,anchor,maxbars=500):
     """Return last contiguous closed history from genuine broker packet rows.
 
     anchor is the last independently received verified *live broker* timestamp;
     do not accept future candles or stale history without it.
     """
-    if period not in (5,60,120) or isinstance(raw,(str,bytes,dict)) or not isinstance(raw,(list,tuple)):
+    if period not in (5,60,120,300) or isinstance(raw,(str,bytes,dict)) or not isinstance(raw,(list,tuple)):
         return []
     anchor=timestamp(anchor)
     if anchor is None:
@@ -135,7 +137,7 @@ def merge_historical_bars(engine,history,anchor):
     if end not in candidate:
         return 0
     continuous=[]
-    for t in range(end,end-300*period,-period):
+    for t in range(end,end-500*period,-period):
         if t not in candidate:
             break
         continuous.append(candidate[t])
@@ -150,5 +152,5 @@ def merge_historical_bars(engine,history,anchor):
     engine.strength=None
     engine.reason=('Histórico real da corretora validado: %d candles de %s; '
                    'aguardando NOVO fechamento para emitir sinal'%
-                   (len(continuous),{5:'5s',60:'M1',120:'M2'}[period]))
+                   (len(continuous),{5:'5s',60:'M1',120:'M2',300:'M5'}[period]))
     return len(continuous)
