@@ -376,15 +376,17 @@ function drawZoneChart(canvas,series,radar){
  const live=forming&&Number.isFinite(forming.t)&&(!bars.length||forming.t>bars[bars.length-1].t)?forming:null;
  const display=live?[...bars,live]:bars;
  const lines=Array.isArray(series.trendlines)?series.trendlines:[];
+ const triangles=Array.isArray(series.triangles)?series.triangles:[];
+ const seconds=Number(series.candle_seconds)||5;
  const zones=Array.isArray(series.zones)?series.zones:[];
- $('trendlineSymbol').textContent=(series.symbol||'Nenhuma cotação DEMO')+' · 5s';
+ $('trendlineSymbol').textContent=(series.symbol||'Nenhuma cotação DEMO')+' · '+({5:'5s',60:'M1',120:'M2',300:'M5'}[seconds]||seconds+'s');
  const leg=$('zoneLegend');if(leg)leg.hidden=false;
  const quality=series.candle_quality||null, psych=$('candlePsychology');
  if(psych){psych.hidden=false;psych.textContent=quality?
   'FORÇA '+(quality.ready?'CONFIRMADA':'BLOQUEADA')+' · cores '+quality.same_color_3+'/3 · corpo '+quality.body_pct+'% · '+quality.reason:
   'FORÇA: aguardando candles fechados para contagem e análise';}
  $('trendlineDiagnostic').textContent=(radar.last_reason||'Aguardando suporte e resistência confirmados')+
-  ' · '+lines.length+' linhas · '+zones.length+' zonas · '+(live?'candle atual em formação':'sem candle em formação')+
+  ' · '+(triangles.length?('TRIÂNGULO '+triangles[0].kind+' · '+triangles[0].state+' · '):'')+lines.length+' linhas · '+zones.length+' zonas · '+(live?'candle atual em formação':'sem candle em formação')+
   (series.last_entry?' · ÚLTIMO '+(series.last_entry.direction==='call'?'BUY':'SELL')+' '+series.last_entry.event:'');
  const w=Math.max(230,Math.round(canvas.clientWidth||640)),h=268,dpr=Math.min(window.devicePixelRatio||1,2);
  canvas.style.height=h+'px';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
@@ -394,7 +396,7 @@ function drawZoneChart(canvas,series,radar){
   ctx.fillStyle='#a9b9bf';ctx.font='12px sans-serif';
   ctx.fillText('Aguardando candles DEMO reais e confirmados...',10,h/2);return;
  }
- const first=display[0].t,last=display[display.length-1].t,span=Math.max(5,last-first);
+ const first=display[0].t,last=display[display.length-1].t,span=Math.max(seconds,last-first);
  const x=t=>14+(w-28)*(t-first)/span;
  let priceMin=Math.min(...display.map(c=>c.low)),priceMax=Math.max(...display.map(c=>c.high));
  for(const z of zones){
@@ -403,7 +405,7 @@ function drawZoneChart(canvas,series,radar){
  }
  for(const line of lines){
   if(!Number.isFinite(line.left_time)||!Number.isFinite(line.slope_per_bar))continue;
-  const priceAt=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/5;
+  const priceAt=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/seconds;
   const p=priceAt(last);
   if(Math.abs(p-(priceMin+priceMax)/2)<Math.max(priceMax-priceMin,1e-8)*2)
    {priceMin=Math.min(priceMin,p);priceMax=Math.max(priceMax,p);}
@@ -437,11 +439,20 @@ function drawZoneChart(canvas,series,radar){
   if(!Number.isFinite(line.left_time)||!Number.isFinite(line.left_price)||!Number.isFinite(line.slope_per_bar))continue;
   const start=Math.max(first,line.left_time);
   if(start>last)continue;
-  const at=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/5;
+  const at=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/seconds;
   ctx.strokeStyle=line.kind==='support'?'#adf476':'#71b5ff';
   ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x(start),y(at(start)));
   ctx.lineTo(x(last),y(at(last)));ctx.stroke();
   ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.arc(x(last),y(at(last)),3.3,0,Math.PI*2);ctx.fill();
+ }
+ if(triangles.length){
+  const t=triangles[0];
+  const mid=Math.max(first,t.start_time||first);
+  if(mid<=last){
+   ctx.fillStyle='#efc678';ctx.font='bold 12px sans-serif';
+   ctx.fillText('△ TRIÂNGULO '+t.kind.toUpperCase()+' · '+(t.state||'confirmado'),
+                Math.max(15,Math.min(w-245,x(mid))),25);
+  }
  }
  const entry=series.last_entry;
  if(entry&&entry.t>=first&&entry.t<=last&&Number.isFinite(entry.price)){
@@ -449,10 +460,10 @@ function drawZoneChart(canvas,series,radar){
   ctx.fillStyle=buy?'#a6fa85':'#ff8f95';
   ctx.beginPath();ctx.arc(ex,ey,5,0,Math.PI*2);ctx.fill();
   ctx.font='bold 11px sans-serif';ctx.textAlign=ex>w*.74?'right':'left';
-  ctx.fillText(buy?'BUY ✓':'SELL ✓',ex+(ex>w*.74?-8:8),ey-9);ctx.textAlign='left';
+  ctx.fillText(series.triangle_mode?(buy?'SINAL CALL':'SINAL PUT'):(buy?'BUY ✓':'SELL ✓'),ex+(ex>w*.74?-8:8),ey-9);ctx.textAlign='left';
  }
  ctx.font='10px sans-serif';ctx.fillStyle='#a7bcc5';
- ctx.fillText('5s · verde suporte / azul resistência / faixas automáticas',9,h-5);
+ ctx.fillText(({5:'5s',60:'M1',120:'M2',300:'M5'}[seconds]||seconds+'s')+' · suporte verde / resistência azul'+(triangles.length?' · triângulo '+triangles[0].kind:''),9,h-5);
 }
 
 function drawTrendlineChart(radar){
