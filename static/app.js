@@ -377,6 +377,7 @@ function drawZoneChart(canvas,series,radar){
  const display=live?[...bars,live]:bars;
  const lines=Array.isArray(series.trendlines)?series.trendlines:[];
  const triangles=Array.isArray(series.triangles)?series.triangles:[];
+ const falseBreak=series.false_breakout||null;
  const seconds=Number(series.candle_seconds)||5;
  const zones=Array.isArray(series.zones)?series.zones:[];
  $('trendlineSymbol').textContent=(series.symbol||'Nenhuma cotação DEMO')+' · '+({5:'5s',60:'M1',120:'M2',300:'M5'}[seconds]||seconds+'s');
@@ -453,6 +454,13 @@ function drawZoneChart(canvas,series,radar){
    ctx.fillText('△ TRIÂNGULO '+t.kind.toUpperCase()+' · '+(t.state||'confirmado'),
                 Math.max(15,Math.min(w-245,x(mid))),25);
   }
+ }
+ if(falseBreak&&Number.isFinite(falseBreak.t)&&Number.isFinite(falseBreak.level)&&falseBreak.t>=first&&falseBreak.t<=last){
+  const ex=x(falseBreak.t),ey=y(falseBreak.level);
+  ctx.strokeStyle='#ff868e';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(ex-5,ey-5);ctx.lineTo(ex+5,ey+5);
+  ctx.moveTo(ex+5,ey-5);ctx.lineTo(ex-5,ey+5);ctx.stroke();
+  ctx.fillStyle='#ffabb2';ctx.font='bold 10px sans-serif';ctx.fillText('FALSO ROMPIMENTO',Math.max(10,Math.min(w-120,ex+10)),ey-6);
  }
  const entry=series.last_entry;
  if(entry&&entry.t>=first&&entry.t<=last&&Number.isFinite(entry.price)){
