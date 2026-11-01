@@ -8,6 +8,7 @@ from market_radar import Radar
 from zigzag_trendline import ZigZagFractalTrend
 from zigzag_5s import ZigZagFractalTrend5s
 from zigzag_m2 import ZigZagFractalTrendM2
+from price_action_zones import PriceActionZones5s
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -143,6 +144,7 @@ class Broker:
         self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
         self.fast_strategy='trend'  # backward compatibility for existing runs
         self.auto_strategy='standard'
+        self.zone_mode=False
         self.scan_timeframe=60
         self.radar=Radar(ZigZagFractalTrend)
         self.scan_queue=deque()
@@ -707,6 +709,9 @@ class Broker:
             if strategy not in ('standard','zigzag_fractal'):
                 raise ValueError('Estratégia DEMO desconhecida.')
             analysis_timeframe=c.get('analysis_timeframe',5 if expiry==5 else 60)
+            zone_mode=c.get('zone_mode',False)
+            if type(zone_mode) is not bool or (zone_mode and (strategy!='zigzag_fractal' or analysis_timeframe!=5)):
+                raise ValueError('Gráfico de regiões exige estratégia ZigZag DEMO com candles de 5 segundos.')
             if type(analysis_timeframe) is not int or analysis_timeframe not in (5,60,120):
                 raise ValueError('Timeframe de análise inválido: escolha 5s, M1 ou M2.')
             allowed={5:(3,5,60),60:(60,),120:(60,120,180)}
@@ -742,7 +747,8 @@ class Broker:
             # choice, leaving the bot analyzing the wrong instrument.
             subscribed=False
             if strategy=='zigzag_fractal':
-                radar=Radar({5:ZigZagFractalTrend5s,60:ZigZagFractalTrend,120:ZigZagFractalTrendM2}[analysis_timeframe])
+                factory=PriceActionZones5s if zone_mode else {5:ZigZagFractalTrend5s,60:ZigZagFractalTrend,120:ZigZagFractalTrendM2}[analysis_timeframe]
+                radar=Radar(factory)
                 radar.sync(self.assets,vals[3])
                 if not radar.eligible:
                     raise ValueError('Nenhum ativo DEMO aberto com payout mínimo para varredura.')
@@ -768,6 +774,7 @@ class Broker:
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
             self.fast_strategy=fast_strategy
             self.auto_strategy=strategy
+            self.zone_mode=zone_mode if strategy=='zigzag_fractal' else False
             self.scan_timeframe=analysis_timeframe if strategy=='zigzag_fractal' else 60
             self.market_quality=('Buscando histórico ZigZag/Fractal + linha de tendência em %s'%{5:'5s',60:'M1',120:'M2'}[self.scan_timeframe]) if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
@@ -788,7 +795,7 @@ class Broker:
                 self.history_unmatched=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log('VARREDURA DEMO ZigZag + Fractal + linha: %d ativos, análise %s, expiração %ds; 5s exige fechamento com rompimento Price Action.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2'}[self.scan_timeframe],expiry))
+                self.log(('ZONAS AO VIVO: suporte, resistência, rompimento e reversão; ' if self.zone_mode else 'VARREDURA ZigZag + Fractal + linha; ')+('%d ativos DEMO; candles %s; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2'}[self.scan_timeframe],expiry)))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
@@ -831,7 +838,7 @@ class Broker:
                 self.save(self.pending)
                 self.log(self.auto_stop_reason)
             radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
-            return {'auto_strategy':self.auto_strategy,'scan_timeframe':self.scan_timeframe,'radar':radar_status,'scan_signals':self.scan_signals,
+            return {'auto_strategy':self.auto_strategy,'zone_mode':self.zone_mode,'scan_timeframe':self.scan_timeframe,'radar':radar_status,'scan_signals':self.scan_signals,
                     'history_requested':len(self.history_requested),
                     'history_loaded_count':self.history_loaded_count,
                     'history_unmatched':self.history_unmatched,
