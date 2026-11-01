@@ -184,9 +184,10 @@ class Tests(unittest.TestCase):
         root=Path(__file__).parent
         html=(root/'static'/'index.html').read_text()
         js=(root/'static'/'app.js').read_text()
-        for key in ('option value="triangle"','triangleTimeframe','triangleEntry',
+        for key in ('triangleTimeframe','triangleEntry',
                     'triangleExecution','triangleADX','triangleEMA'):
             self.assertIn(key,html)
+        self.assertNotIn('option value="triangle"',html)
         for key in ('triangle_mode:','triangle_observe:','series.triangles','TRIÂNGULO'):
             self.assertIn(key,js)
         body=js.split('function render(){',1)[1]
