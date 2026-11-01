@@ -42,7 +42,7 @@ class Feed:
         self.auth=auth;self.lock=threading.RLock();self.ws=None;self.closed=False;self.connected=False
         self.assets={};self.symbol='';self.period=60;self.bars={};self.current=None;self.last_source=0;self.received=0
         self.message='Conectando à Pocket Option…';self.binary=None;self.requests={};self.history_requested=False
-        self.book=SignalBook();self.expiry=60;self.signals=deque(maxlen=120);self.last_history=0;self.last_ping=0;self.epoch=0
+        self.book=SignalBook();self.expiry=60;self.signals=deque(maxlen=120);self.last_history=0;self.history_attempts=0;self.last_ping=0;self.epoch=0
     def start(self):threading.Thread(target=self.run,daemon=True).start()
     def send(self,event,data=None):
         if event not in READ_EVENTS:raise ValueError('Evento não permitido: aplicativo somente de análise.')
@@ -117,14 +117,21 @@ class Feed:
             if symbol==self.symbol and period==self.period:return
             if self.symbol and self.symbol!=symbol:self.send('unsubscribeSymbol',self.symbol)
             self.symbol=symbol;self.period=period;self.bars={};self.current=None;self.signals.clear();self.requests.clear()
-            self.last_source=0;self.received=0;self.history_requested=False;self.epoch+=1
+            self.last_source=0;self.received=0;self.history_requested=False;self.last_history=0;self.history_attempts=0;self.epoch+=1
             self.send('subscribeSymbol',symbol);self.send('changeSymbol',{'asset':symbol,'period':period});self.send('subfor',symbol)
             self.message='Aguardando cotações reais de '+symbol
     def request_history(self):
-        if self.history_requested or not self.last_source:return
-        idx=str(time.time_ns()//1000000);self.requests[idx]=(self.symbol,self.period,self.epoch)
+        # Recover existing broker candles first; do not wait for 12/24 new candles.
+        # Retry boundedly if a history response is lost or contains no usable OHLC.
+        if not self.last_source or not self.symbol or self.history_attempts>=5:return
+        now=time.time()
+        if self.history_attempts and now-self.last_history<8:return
+        idx=str(time.time_ns()//1000000)
+        if idx in self.requests:idx=str(int(idx)+1)
+        self.requests[idx]=(self.symbol,self.period,self.epoch)
+        if len(self.requests)>6:self.requests.pop(next(iter(self.requests)))
         self.send('loadHistoryPeriod',{'asset':self.symbol,'index':int(idx),'offset':min(172800,self.period*300),'period':self.period,'time':int(self.last_source)//self.period*self.period})
-        self.history_requested=True;self.last_history=time.time()
+        self.history_requested=True;self.history_attempts+=1;self.last_history=now
     def source_now(self):return time.time()
     def tick(self,t,p):
         t=source_timestamp(t)
@@ -152,7 +159,7 @@ class Feed:
             self.current['max_gap']=max(self.current['max_gap'],t-self.current['last'])
             self.current['high']=max(p,self.current['high']);self.current['low']=min(p,self.current['low']);self.current['close']=p;self.current['last']=t
         self.message='Recebendo cotações reais da Pocket Option.'
-        self.request_history()
+        if len(self.bars)<50:self.request_history()
         if len(self.bars)>500:self.bars={k:self.bars[k] for k in sorted(self.bars)[-500:]}
     def history(self,rows):
         if not isinstance(rows,list) or not self.last_source:return
@@ -193,12 +200,13 @@ class Feed:
                 except Exception:self.connected=False
             fresh=bool(self.connected and self.received and now-self.received<=3 and abs(self.source_now()-self.last_source)<=3)
             bars=sorted(self.bars.values(),key=lambda b:b['time'])[-400:]
+            if fresh and len(bars)<50:self.request_history()
             ctx=structure(bars,self.period)
             current={k:self.current[k] for k in ('time','open','high','low','close')} if self.current else None
             return {'connected':self.connected,'message':self.message,'assets':sorted(self.assets.values(),key=lambda a:a['name']),
                     'symbol':self.symbol,'period':self.period,'bars':bars,'current':current,'structure':ctx,'analysis':analysis_report(bars,self.period,ctx),'fresh':fresh,
                     'age':round(now-self.received,1) if self.received else None,'source_time':self.last_source or None,'received_at':self.received or None,
-                    'signal_book':self.book.snapshot(self.source_now()),'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested}
+                    'signal_book':self.book.snapshot(self.source_now()),'signals':list(self.signals),'epoch':self.epoch,'history_received':bool(self.bars),'history_requested':self.history_requested,'history_attempts':self.history_attempts,'history_status':('Histórico recebido: '+str(len(bars))+' velas fechadas.' if len(bars)>=6 else 'Buscando velas anteriores na corretora ('+str(self.history_attempts)+'/5 tentativas).' if self.history_attempts<5 else 'Histórico insuficiente recebido da corretora; não há velas suficientes para confirmar pivôs.')}
     def close(self):
         self.closed=True;self.connected=False;self.auth={}
         if self.ws:self.ws.close()
@@ -228,7 +236,7 @@ class NativeFeed(Feed):
         if self.clock_verified and abs(lag-self.clock_offset)>3:
             self.clock_verified=False;self.clock_samples.clear();self.current=None
             self.bars.clear();self.signals.clear();self.last_source=0
-            self.history_requested=False;self.requests.clear();self.epoch+=1
+            self.history_requested=False;self.requests.clear();self.last_history=0;self.history_attempts=0;self.epoch+=1
         if abs(lag)<=3:
             self.clock_offset=0.;self.clock_verified=True
         else:
