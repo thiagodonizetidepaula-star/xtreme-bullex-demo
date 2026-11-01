@@ -343,9 +343,99 @@ function render(){
  }
 }
 
+function drawZoneChart(canvas,series,radar){
+ // REAL verified broker data only. The translucent last bar is FORMING
+ // and is NEVER used by the strategy to authorize an order.
+ const full=Array.isArray(series.candles)?series.candles:[];
+ const bars=full.slice(-48), forming=series.forming||null;
+ const live=forming&&Number.isFinite(forming.t)&&(!bars.length||forming.t>bars[bars.length-1].t)?forming:null;
+ const display=live?[...bars,live]:bars;
+ const lines=Array.isArray(series.trendlines)?series.trendlines:[];
+ const zones=Array.isArray(series.zones)?series.zones:[];
+ $('trendlineSymbol').textContent=(series.symbol||'Nenhuma cotação DEMO')+' · 5s';
+ const leg=$('zoneLegend');if(leg)leg.hidden=false;
+ const quality=series.candle_quality||null, psych=$('candlePsychology');
+ if(psych){psych.hidden=false;psych.textContent=quality?
+  'FORÇA '+(quality.ready?'CONFIRMADA':'BLOQUEADA')+' · cores '+quality.same_color_3+'/3 · corpo '+quality.body_pct+'% · '+quality.reason:
+  'FORÇA: aguardando candles fechados para contagem e análise';}
+ $('trendlineDiagnostic').textContent=(radar.last_reason||'Aguardando suporte e resistência confirmados')+
+  ' · '+lines.length+' linhas · '+zones.length+' zonas · '+(live?'candle atual em formação':'sem candle em formação')+
+  (series.last_entry?' · ÚLTIMO '+(series.last_entry.direction==='call'?'BUY':'SELL')+' '+series.last_entry.event:'');
+ const w=Math.max(230,Math.round(canvas.clientWidth||640)),h=268,dpr=Math.min(window.devicePixelRatio||1,2);
+ canvas.style.height=h+'px';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#111c24';ctx.fillRect(0,0,w,h);
+ if(display.length<3){
+  ctx.fillStyle='#a9b9bf';ctx.font='12px sans-serif';
+  ctx.fillText('Aguardando candles DEMO reais e confirmados...',10,h/2);return;
+ }
+ const first=display[0].t,last=display[display.length-1].t,span=Math.max(5,last-first);
+ const x=t=>14+(w-28)*(t-first)/span;
+ let priceMin=Math.min(...display.map(c=>c.low)),priceMax=Math.max(...display.map(c=>c.high));
+ for(const z of zones){
+  if(Number.isFinite(z.lower)&&z.lower>=priceMin-(priceMax-priceMin)*1.5&&z.lower<=priceMax+(priceMax-priceMin)*1.5)
+   {priceMin=Math.min(priceMin,z.lower);priceMax=Math.max(priceMax,z.upper);}
+ }
+ for(const line of lines){
+  if(!Number.isFinite(line.left_time)||!Number.isFinite(line.slope_per_bar))continue;
+  const priceAt=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/5;
+  const p=priceAt(last);
+  if(Math.abs(p-(priceMin+priceMax)/2)<Math.max(priceMax-priceMin,1e-8)*2)
+   {priceMin=Math.min(priceMin,p);priceMax=Math.max(priceMax,p);}
+ }
+ const pad=Math.max((priceMax-priceMin)*.12,Math.abs(priceMax)*1e-6,1e-9);
+ priceMin-=pad;priceMax+=pad;
+ const y=p=>h-23-(h-42)*(p-priceMin)/Math.max(priceMax-priceMin,1e-12);
+ ctx.strokeStyle='#2a3c48';ctx.lineWidth=.75;
+ for(let i=0;i<5;i++){const gy=18+(h-42)*i/4;ctx.beginPath();ctx.moveTo(10,gy);ctx.lineTo(w-10,gy);ctx.stroke();}
+ for(const zone of zones){
+  if(!Number.isFinite(zone.lower)||!Number.isFinite(zone.upper))continue;
+  const top=y(zone.upper),bottom=y(zone.lower);
+  ctx.fillStyle=zone.kind==='support'?'rgba(74,225,139,.10)':'rgba(97,179,255,.12)';
+  ctx.fillRect(12,Math.min(top,bottom),w-24,Math.abs(bottom-top));
+  ctx.strokeStyle=zone.kind==='support'?'#4cbe89':'#64adf1';
+  ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(12,y(zone.level));ctx.lineTo(w-12,y(zone.level));ctx.stroke();ctx.setLineDash([]);
+ }
+ // Draw resistance/support OVER candles for readability.
+ const barWidth=Math.max(2,Math.min(9,(w-25)/display.length*.58));
+ for(const b of display){
+  const bx=x(b.t),formingBar=live&&b===live,rise=b.close>=b.open;
+  ctx.globalAlpha=formingBar?.45:1;
+  ctx.strokeStyle=rise?'#5fe1ab':'#f17b83';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(bx,y(b.high));ctx.lineTo(bx,y(b.low));ctx.stroke();
+  const top=Math.min(y(b.open),y(b.close)),bottom=Math.max(y(b.open),y(b.close));
+  ctx.fillRect(bx-barWidth/2,top,barWidth,Math.max(1,bottom-top));
+  ctx.globalAlpha=1;
+ }
+ for(const line of lines){
+  if(!Number.isFinite(line.left_time)||!Number.isFinite(line.left_price)||!Number.isFinite(line.slope_per_bar))continue;
+  const start=Math.max(first,line.left_time);
+  if(start>last)continue;
+  const at=t=>line.left_price+line.slope_per_bar*(t-line.left_time)/5;
+  ctx.strokeStyle=line.kind==='support'?'#adf476':'#71b5ff';
+  ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(x(start),y(at(start)));
+  ctx.lineTo(x(last),y(at(last)));ctx.stroke();
+  ctx.fillStyle=ctx.strokeStyle;ctx.beginPath();ctx.arc(x(last),y(at(last)),3.3,0,Math.PI*2);ctx.fill();
+ }
+ const entry=series.last_entry;
+ if(entry&&entry.t>=first&&entry.t<=last&&Number.isFinite(entry.price)){
+  const buy=entry.direction==='call',ex=x(entry.t),ey=y(entry.price);
+  ctx.fillStyle=buy?'#a6fa85':'#ff8f95';
+  ctx.beginPath();ctx.arc(ex,ey,5,0,Math.PI*2);ctx.fill();
+  ctx.font='bold 11px sans-serif';ctx.textAlign=ex>w*.74?'right':'left';
+  ctx.fillText(buy?'BUY ✓':'SELL ✓',ex+(ex>w*.74?-8:8),ey-9);ctx.textAlign='left';
+ }
+ ctx.font='10px sans-serif';ctx.fillStyle='#a7bcc5';
+ ctx.fillText('5s · verde suporte / azul resistência / faixas automáticas',9,h-5);
+}
+
 function drawTrendlineChart(radar){
  const canvas=$('trendlineChart');if(!canvas)return;
  const series=radar?.chart||{}, bars=Array.isArray(series.candles)?series.candles:[];
+ if(series.zone_mode){drawZoneChart(canvas,series,radar);return}
+ canvas.style.height='188px';
+ const legend=$('zoneLegend');if(legend)legend.hidden=true;
  const line=series.trendline||null;
  const psychology=series.candle_quality||null;
  const diagnostic=$('candlePsychology');
