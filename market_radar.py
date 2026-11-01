@@ -131,10 +131,19 @@ class Radar:
             default=(None,None))
         if self.last_symbol in self.watches and self.watches[self.last_symbol].fresh(now):
             chart_symbol=self.last_symbol;chart_watch=self.watches[self.last_symbol]
+        forming=None
+        if chart_watch and chart_watch.fresh(now):
+            source=getattr(chart_watch.engine.collector,'current',None)
+            if isinstance(source,dict):
+                forming={k:source[k] for k in ('t','open','high','low','close') if k in source}
         chart={'symbol':chart_symbol or '',
                'candle_seconds':getattr(chart_watch.engine,'bar_seconds',60) if chart_watch else 60,
-               'candles':list(chart_watch.engine.bars)[-45:] if chart_watch else [],
+               'candles':list(chart_watch.engine.bars)[-80:] if chart_watch else [],
+               'forming':forming,
                'trendline':getattr(chart_watch.engine,'trendline',None) if chart_watch else None,
+               'trendlines':getattr(chart_watch.engine,'trendlines',[]) if chart_watch else [],
+               'zones':getattr(chart_watch.engine,'zones',[]) if chart_watch else [],
+               'last_entry':getattr(chart_watch.engine,'last_entry',None) if chart_watch else None,
                'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None}
         return {'candle_seconds':getattr(next(iter(self.watches.values())).engine,'bar_seconds',60) if self.watches else 60,
                 'eligible':len(self.eligible),'subscribed':len(self.subscribed),
