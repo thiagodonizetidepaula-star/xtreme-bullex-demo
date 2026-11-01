@@ -238,6 +238,15 @@ function render(){
  }
 
  status(s.message||'Aguardando conexão DEMO.');
+ const diag=$('connectionDetail');
+ if(diag){
+  diag.hidden=Boolean(s.demo_confirmed);
+  diag.textContent=s.connecting?
+    'CONECTANDO AO SERVIDOR DEMO · tentativa '+(s.connection_attempt||1)+'/4. Aguarde a confirmação do saldo. Não há operações durante a conexão.':
+    (s.connection_failure||'Sem sessão DEMO ativa neste servidor. Se o Render reiniciou, toque CONECTAR POCKET DEMO e faça uma nova autenticação; a sessão anterior não fica salva.');
+ }
+ $('connect').disabled=busy||Boolean(s.connecting)||Boolean(s.pending?.id);
+ $('connect').textContent=s.connecting?'Conectando à DEMO…':'Conectar Pocket Option';
  $('connection').textContent=s.demo_confirmed?'DEMO CONFIRMADA':s.connected?'VALIDANDO DEMO':s.connecting?'CONECTANDO':'DESCONECTADO';
  $('balance').textContent=money(s.balance);
  $('age').textContent=s.age==null?'—':s.age+'s';
