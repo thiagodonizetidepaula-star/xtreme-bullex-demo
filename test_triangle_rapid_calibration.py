@@ -124,6 +124,8 @@ class RapidTriangleTests(unittest.TestCase):
         self.assertIn('triangle_trial_only:',js)
         self.assertIn('triangle_sensitivity:',js)
         self.assertIn("triangleTrialOption.disabled=!triangleTrialAvailable",js)
-        self.assertIn('TESTAR UMA ENTRADA DEMO',js)
+        # Legacy test-only strategy is preserved in the engine but hidden in V32.
+        self.assertIn("INICIAR AUTOMÁTICO DEMO",js)
+        self.assertNotIn('option value="triangle"',html)
 
 if __name__=='__main__':unittest.main()
