@@ -1,3 +1,19 @@
+## V24 — Gráfico ao vivo e zonas Price Action (DEMO)
+
+Selectable **GRÁFICO AO VIVO · SUPORTE, RESISTÊNCIA E PRICE ACTION 5s** mode in the existing Android/web app (no new APK or server). The graph uses actual fresh Pocket Option DEMO quote ticks; it shows **closed 5-second candles** plus a visually translucent forming candle, which is **never traded**. Only chart streams actually received are displayed, not the screenshot price/asset and not fabricated prices.
+
+The engine builds two confirmed pivot-based trendlines:
+- **Ascending SUPPORT (green)** from two rising **Fractal-2 swing lows**.
+- **Descending RESISTANCE (blue)** from two falling **Fractal-2 swing highs**.
+- **Horizontal support/resistance zones** from the latest fully confirmed fractal low/high, with region width relative to median OHLC range.
+- Each fractal requires two CLOSED candles to its right; the current and prior signal candles cannot manufacture pivot confirmation. Pivots must show an observed ZigZag-like swing amplitude above the typical range.
+
+Trade candidates are emitted **ONLY after a new 5-second candle CLOSES** (never just touches the line): BUY on confirmed close above downward resistance or on a positive reversal/rejection of an observed support region; SELL on confirmed close below rising support or bearish reversal/rejection of a resistance region. Close must also break the prior candle high (BUY) or low (SELL), and pass the **full psychology filter**: 2-of-3 candle colors in that direction, full real candle body, no indecision, no congestion, no exhaustion, and only verified current live DEMO feeds. A single asset cannot emit two signals within four closed bars.
+
+The new mode is **opt-in**: starting the existing DEMO automatic scanner remains an explicit user operation; it does not start placing orders merely because the chart opened. Possible expiries: **3s, 5s, 60s, 120s, 180s**, all while ANALYZING closed 5s candles. Existing payout, risk stops, cooldown, single pending order and demo amount-1 first-expiry validation remain. M1, M2 and previous 5s modes remain untouched. Historical broker candles may seed the technical context, but cannot themselves open an order.
+
+**Accuracy/limitations:** The on-screen lines are experimental approximations inferred from observed OHLC pivot history; they are not native broker drawings and can differ from manually drawn trendlines on the screenshots. One confirmed breakout can still be a false breakout. No return/profit or "high precision" is guaranteed. CI tests use synthetic price paths; the live feed, broker 3s/5s/60s/120s/180s duration support and actual fills require verifying in an authenticated DEMO session.
+
 # Xtreme Tiger Pocket 5s
 
 ## V23 — Filtro de psicologia de candles (5s ZigZag + Fractal + Linha + Price Action)
