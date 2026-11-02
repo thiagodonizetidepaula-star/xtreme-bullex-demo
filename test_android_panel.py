@@ -8,7 +8,7 @@ class AndroidPanelRenderTests(unittest.TestCase):
         source=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf-8')
         self.assertIn('function render(){',source)
         body=source.split('function render(){',1)[1].split('async function poll(){',1)[0]
-        declaration="const isZigzag=true; // All selectable profiles reuse the existing DEMO market radar."
+        declaration="const isZigzag=true; // Shared market scanner; technical profiles use independent signal engines."
         self.assertIn(declaration,body)
         flag_decl=body.index(declaration)
         # The first occurrence of the lexical binding must be its declaration;
