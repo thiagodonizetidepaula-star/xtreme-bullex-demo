@@ -5,7 +5,7 @@ function status(t){$('status').textContent=t}
 async function jsonFetch(url,options={}){const c=new AbortController(),timer=setTimeout(()=>c.abort(),20000);try{const r=await fetch(url,{...options,signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error_description||d.msg||d.message||d.error||'Solicitação recusada.');return d}finally{clearTimeout(timer)}}
 async function auth(path,body){return jsonFetch(config.url+'/auth/v1/'+path,{method:'POST',headers:{apikey:config.key,'Content-Type':'application/json'},body:JSON.stringify(body)})}
 async function api(path,body){if(!session)throw Error('Entre no aplicativo.');if(Date.now()>refreshAt){session=await auth('token?grant_type=refresh_token',{refresh_token:session.refresh_token});refreshAt=Date.now()+Math.max(60,session.expires_in-120)*1000}return jsonFetch('/api/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})})}
-async function enter(s){session=s;refreshAt=Date.now()+Math.max(60,s.expires_in-120)*1000;$('password').value='';$('login').hidden=true;$('dashboard').hidden=false;await poll()}
+async function enter(s){session=s;refreshAt=Date.now()+Math.max(60,s.expires_in-120)*1000;window.xtClearStrategyHistory?.();$('password').value='';$('login').hidden=true;$('dashboard').hidden=false;await poll()}
 $('loginForm').onsubmit=async e=>{e.preventDefault();$('loginStatus').textContent='Entrando…';try{await enter(await auth('token?grant_type=password',{email:$('email').value,password:$('password').value}));$('loginStatus').textContent=''}catch(e){$('loginStatus').textContent=e.message}};
 $('signup').onclick=async()=>{if(!$('loginForm').reportValidity())return;try{const d=await auth('signup',{email:$('email').value,password:$('password').value});if(d.access_token)await enter(d);else $('loginStatus').textContent='Cadastro solicitado. Confirme seu e-mail e depois volte para entrar neste app.'}catch(e){$('loginStatus').textContent=e.message}};
 let recoveryToken=null;
@@ -28,7 +28,7 @@ recoveryToken=null;$('newPassword').value='';$('confirmPassword').value='';
 $('resetForm').hidden=true;$('loginForm').hidden=false;
 $('loginStatus').textContent='Senha alterada! Entre usando sua nova senha.'}
 catch(err){$('loginStatus').textContent=err.message}};
-$('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;snapshot={};$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
+$('logout').onclick=async()=>{try{if(snapshot.pending?.id){status('Há uma ordem pendente. Confira o resultado antes de sair.');return}if(snapshot.connected||snapshot.connecting)await api('disconnect',{});session=null;snapshot={};window.xtClearStrategyHistory?.();$('dashboard').hidden=true;$('login').hidden=false;$('ssid').value=''}catch(e){status(e.message)}};
 async function action(name,body={}){
  if(busy)return;
  busy=true;
