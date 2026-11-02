@@ -65,7 +65,7 @@ class Tests(unittest.TestCase):
         self.assertIn("triangleDemoOption.disabled=!triangleDemoAvailable",text)
         self.assertIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",text)
         self.assertIn('CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO',text)
-        self.assertIn('OBSERVAÇÃO · sem ordens',text)
+        self.assertIn('OBSERVAÇÃO ATIVA · varrendo todos os pares elegíveis, SEM ORDENS.',text)
         self.assertIn('INICIAR OBSERVAÇÃO · SEM ORDENS',text)
         render=text.split('function render(){',1)[1]
         self.assertLess(render.index('const isZigzag='),render.index("$('fastStrategyWrap').hidden=isZigzag"))
