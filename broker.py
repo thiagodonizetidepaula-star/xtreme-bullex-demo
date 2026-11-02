@@ -5,7 +5,6 @@ import websocket
 from m1_strategy import MinuteSignals, five_minute_closes
 from tick_exhaustion import TickExhaustion,EXHAUSTION_EXPIRIES
 from market_radar import Radar
-from heikin_ashi import permitted_ha_entry
 from zigzag_trendline import ZigZagFractalTrend
 from zigzag_5s import ZigZagFractalTrend5s
 from zigzag_m2 import ZigZagFractalTrendM2
@@ -559,7 +558,7 @@ class Broker:
             anchor=int(watch.price_time)
             try:
                 self.send('loadHistoryPeriod',{'asset':sym,'index':idx,
-                    'offset':min(172800,period*500) if self.triangle_mode else max(180,period*34)+period,'period':period,
+                    'offset':min(172800,period*500) if self.triangle_mode else 9000,'period':period,
                     'time':anchor if period==5 else anchor//period*period})
             except Exception:
                 self.log('Histórico não disponível; estratégia seguirá somente candles reais novos.')
@@ -591,21 +590,6 @@ class Broker:
                 self.log('3s DEMO: sinal atrasado >1s; entrada descartada, sem ordem')
                 continue
             selected_direction=watch.last_signal
-            if not self.triangle_mode and not self.zone_mode:
-                # Require EXACT live last closed candle, not a stale HA
-                # majority from historical bars or a previous time bucket.
-                period=self.scan_timeframe
-                expected=int(watch.price_time)//period*period-period
-                bars=watch.engine.bars
-                valid_close=bool(bars and bars[-1]['t']==expected)
-                allowed,ha=permitted_ha_entry(bars,period,selected_direction)
-                if not valid_close or not allowed:
-                    reason=(ha['reason'] if valid_close else 'Última vela HA não é o candle recém-fechado')
-                    self.market_quality='HEIKIN ASHI RECENTE: '+reason
-                    self.log('SEM ORDEM '+symbol+' · '+self.market_quality)
-                    watch.last_signal=None;watch.signal_received=0
-                    continue
-                self.market_quality='HEIKIN ASHI '+str(ha['candles'])+' velas recentes · '+str(ha['green'])+' verdes / '+str(ha['red'])+' vermelhas · '+ha['reason']
             if self.triangle_mode:
                 key=(symbol,self.scan_timeframe,self.auto_expiry)
                 report=self.triangle_reports.get(key,{})
