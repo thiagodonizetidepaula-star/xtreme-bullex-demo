@@ -62,15 +62,8 @@ $('startSignalAuto').onclick=async()=>{
  const ids=['amount','min_payout','stop_win','stop_loss','limit'];
  for(const id of ids){if(!$(id).reportValidity())return}
  const symbol=$('asset').value;
- if($('expiryProfile').value==='triangle'&&$('triangleExecution').value==='demo'){
-  const hasHoldout=(snapshot.triangle_reports||[]).some(r=>r.timeframe===Number($('triangleTimeframe').value)&&r.expiry===Number($('expiry').value)&&r.status==='PAPER_APROVADO');
-  const expiryVerified=(snapshot.validated_expiries||[]).includes(Number($('expiry').value));
-  if(!hasHoldout||!expiryVerified){
-   $('triangleExecution').value='observe';
-   $('autoSignalStatus').textContent='DEMO AUTOMÁTICA NÃO LIBERADA. Selecionei OBSERVAÇÃO: primeiro conecte a conta DEMO e valide a combinação de ativo, timeframe e expiração. Nenhuma ordem será enviada.';
-   render();return;
-  }
- }
+ // The user deliberately starts DEMO automation to collect official results.
+ // No silent fallback to observation; backend enforces stake, expiry and stops.
  const profile=$('expiryProfile').value;
  const isTechnical=TECHNICAL_PROFILES.includes(profile);
  const isTriangle=profile==='triangle';
@@ -257,6 +250,7 @@ $('resetHistory').onclick=async()=>{
  $('resetMessage').textContent='Excluindo registros da sua conta…';
  try{
   await api('reset-history',{confirm:true});snapshot=await api('status');render();
+  if(typeof window.xtRefreshStrategyHistory==='function')window.xtRefreshStrategyHistory(true);
   $('resetMessage').textContent='Placar e histórico zerados.';
  }catch(e){$('resetMessage').textContent='Não foi possível zerar: '+e.message}
  finally{busy=false;render()}
@@ -321,7 +315,7 @@ function render(){
  $('technicalValidation').textContent=technicalSelected?
    (($('technicalExecution').value==='observe'?
     'OBSERVAÇÃO: identifica sinais em todos os pares elegíveis, sem enviar ordens.':
-    'TESTE EXPERIMENTAL: ordens exclusivamente DEMO. Expiração não validada exige valor 1.')+
+    'AUTOMÁTICO DEMO: envia ordens confirmadas ao clicar INICIAR. Expiração não validada exige valor 1.')+
     ' RESULTADOS OFICIAIS DESTA SESSÃO: '+technicalResults.length+
     ' operações · '+technicalWins+' WIN · '+technicalRate+' de acerto · saldo líquido '+money(technicalNet)+
     (technicalResults.length<30?' · AMOSTRA INSUFICIENTE':' · ainda requer teste fora da amostra')+
@@ -338,25 +332,20 @@ function render(){
  const observations=s.triangle_observations||[];
  const selectedTriangleTf=Number($('triangleTimeframe').value);
  const selectedTriangleExpiry=Number($('expiry').value);
- const triangleHoldoutReady=recentReports.some(r=>r.timeframe===selectedTriangleTf&&r.expiry===selectedTriangleExpiry&&r.status==='PAPER_APROVADO');
  const triangleExpiryReady=(s.validated_expiries||[]).includes(selectedTriangleExpiry);
- const triangleDemoAvailable=Boolean(s.connected&&s.demo_confirmed&&triangleHoldoutReady&&triangleExpiryReady);
  const triangleTrialOption=$('triangleExecution').querySelector('option[value="trial"]');
  const triangleTrialAvailable=Boolean(s.connected&&s.demo_confirmed&&selectedTriangleTf===5&&[3,5].includes(selectedTriangleExpiry));
  if(triangleTrialOption)triangleTrialOption.disabled=!triangleTrialAvailable;
- if(!triangleTrialAvailable&&$('triangleExecution').value==='trial'&&!s.auto)$('triangleExecution').value='observe';
+ // Never change a chosen automatic mode to observation behind the user's back.
  const triangleDemoOption=$('triangleExecution').querySelector('option[value="demo"]');
- if(triangleDemoOption)triangleDemoOption.disabled=!triangleDemoAvailable;
- if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')$('triangleExecution').value='observe';
+ if(triangleDemoOption)triangleDemoOption.disabled=false;
  $('triangleValidation').textContent=!s.connected||!s.demo_confirmed?
-  'CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO e aguarde saldo e último tick. Em seguida, inicie OBSERVAÇÃO; nenhum sinal envia ordem.' :
-  (recentReports.length?
-  recentReports.map(r=>r.symbol+' · '+({5:'5s',60:'M1',120:'M2',300:'M5'}[r.timeframe]||r.timeframe)+' / '+r.expiry+'s · '+
-    r.status+' · TREINO '+r.train.trades+' ops / WIN '+(r.train.win_rate??'—')+'% / '+r.train.net+
-    ' · TESTE '+r.test.trades+' ops / WIN '+(r.test.win_rate??'—')+'% / '+r.test.net+' · '+r.reason).join(' | ') :
-  'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.') +
-  (!triangleDemoAvailable?' · AUTO DEMO CONTÍNUO BLOQUEADO até validação independente.':' · AUTO DEMO elegível após confirmação do usuário.')+
-  (triangleTrialAvailable?' · TESTE CONTROLADO: gráfico 5s, expiração '+selectedTriangleExpiry+'s, UMA ordem valor 1, se houver sinal.':'');
+  'CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO. O botão INICIAR só libera com conta DEMO confirmada.' :
+  (($('triangleExecution').value==='observe'?
+    'OBSERVAÇÃO: sem ordens. ':'AUTOMÁTICO DEMO: ao tocar INICIAR, ordens de triângulo confirmado podem ser enviadas. ')+
+   (triangleExpiryReady?'Expiração já confirmada pela corretora. ':'Expiração ainda não confirmada: use valor 1 para iniciar. ')+
+   'Filtro RIGOROSO obrigatório no automático contínuo. '+
+   observations.length+' sinais observados. Nenhuma taxa de acerto garantida.');
  $('startSignalAuto').textContent=(technicalSelected&&$('technicalExecution').value==='observe')||
    (triangleSelected&&$('triangleExecution').value==='observe')?
    'INICIAR OBSERVAÇÃO · SEM ORDENS':'INICIAR AUTOMÁTICO DEMO';
@@ -370,7 +359,7 @@ function render(){
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
  $('strategyProfile').textContent=technicalSelected?
    ('PESQUISA DEMO · '+$('expiryProfile').selectedOptions[0].textContent+' · '+chartTfLabel+' · expiração '+expiry+'s'+
-    ($('technicalExecution').value==='observe'?' · OBSERVAÇÃO SEM ORDENS':' · TESTE EXPERIMENTAL')) :
+    ($('technicalExecution').value==='observe'?' · OBSERVAÇÃO SEM ORDENS':' · AUTOMÁTICO DEMO')) :
    $('expiryProfile').value==='triangle'?('TRIÂNGULO BREAKOUT — PRICE ACTION · '+chartTfLabel+' · expiração '+expiry+'s') :$('expiryProfile').value==='zigzag_zones'?('GRÁFICO AO VIVO · ROMPIMENTO / REVERSÃO · 5s · vencimento '+expiry+'s') :isZigzag?
   'VARREDURA · ZigZag + Fractal 2 + Linha + '+(chartTf===5?'PRICE ACTION + PSICOLOGIA · ':'')+'gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
   isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
