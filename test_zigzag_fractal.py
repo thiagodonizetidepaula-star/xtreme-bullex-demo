@@ -5,6 +5,7 @@ from unittest.mock import patch
 from zigzag_fractal import ZigZagFractalSell
 from market_radar import Radar
 from broker import Broker
+from test_heikin_ashi_v33 import trend_bars
 
 BASE=1800000000
 VALUES=[3.0,2.8,2.6,2.4,2.2,1.8,1.0,1.4,2.0,2.5,3.0,3.5,4.0,3.2,2.6,2.4]
@@ -133,6 +134,7 @@ class ZigZagTests(unittest.TestCase):
             b=self.broker();b.start_auto(self.config())
             watch=b.radar.watches['B_otc']
             watch.engine.ingest=lambda ts,p,arrival:'put'
+            watch.engine.bars.extend(trend_bars(60,BASE,direction='put'))
             b.event('updateStream',[['B_otc',BASE,100.1]])
             orders=[json.loads(x[2:])[1] for x in b.ws.sent if x.startswith('42["openOrder"')]
             self.assertEqual(len(orders),1)
