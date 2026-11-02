@@ -11,6 +11,7 @@ from zigzag_m2 import ZigZagFractalTrendM2
 from price_action_zones import PriceActionZones5s
 from triangle_breakout import TriangleBreakout
 from triangle_validation import walkforward
+from technical_strategies import TechnicalStrategy, PROFILES, EXPIRIES
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -150,6 +151,8 @@ class Broker:
         self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
         self.fast_strategy='trend'  # backward compatibility for existing runs
         self.auto_strategy='standard'
+        self.technical_profile=''
+        self.technical_observe=False
         self.zone_mode=False
         self.triangle_mode=False
         self.triangle_observe=True
@@ -528,7 +531,7 @@ class Broker:
         return True
     def save(self,p):
         # Persist only allowlisted non-sensitive fields.
-        row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status')};row['result']=p.get('result',{})
+        row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status','strategy','expiry','gale_level')};row['result']=p.get('result',{})
         self.persist(row)
     def fresh_quote(self):
         """Fail closed if the feed is stale, even if broker and server clocks differ.
@@ -602,7 +605,7 @@ class Broker:
             anchor=int(watch.price_time)
             try:
                 self.send('loadHistoryPeriod',{'asset':sym,'index':idx,
-                    'offset':min(172800,period*500) if self.triangle_mode else 9000,'period':period,
+                    'offset':min(172800,period*500) if (self.triangle_mode or self.technical_profile) else 9000,'period':period,
                     'time':anchor if period==5 else anchor//period*period})
             except Exception:
                 self.log('Histórico não disponível; estratégia seguirá somente candles reais novos.')
@@ -728,6 +731,12 @@ class Broker:
                     self.log('TRIÂNGULO OBSERVADO '+symbol+' · '+watch.engine.pattern+
                              ' · SEM ORDEM (validação cronológica pendente).')
                     continue
+            if self.technical_profile and self.technical_observe:
+                self.scan_signals+=1
+                self.log('OBSERVADO SEM ORDEM: '+PROFILES[self.technical_profile]+' · '+symbol+
+                         ' · '+selected_direction.upper()+' · '+watch.engine.reason)
+                watch.last_signal=None;watch.signal_received=0
+                continue
             try:self.order(selected_direction,1.0 if self.auto_trial else self.amount,self.auto_expiry,symbol=symbol)
             except ValueError as e:
                 self.auto=False;self.auto_trial=False
@@ -782,10 +791,10 @@ class Broker:
             elif not self.fresh_quote():raise ValueError('Preço ausente ou atrasado. Ordem bloqueada.')
             asset=self.assets.get(target,{})
             if not asset.get('available') or (symbol is None and not target.endswith('_otc')):raise ValueError('Ativo DEMO fechado ou indisponível para o modo escolhido.')
-            if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
+            if asset.get('payout',0)<=80 or asset.get('payout',0)<self.min_payout:raise ValueError('Payout precisa ser superior a 80% e atingir o mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
-            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':target,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False,'gale_level':1 if gale else 0}
+            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':target,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False,'gale_level':1 if gale else 0,'strategy':self.technical_profile or ('triangle' if self.triangle_mode else 'zigzag_fractal' if self.auto_strategy=='zigzag_fractal' else 'standard')}
             self.last_order=time.time();self.count+=1
             if gale:
                 self.gale_pending=None
@@ -925,6 +934,13 @@ class Broker:
             triangle_entry=c.get('triangle_entry','both')
             triangle_adx=c.get('triangle_adx',False)
             triangle_ema=c.get('triangle_ema',False)
+            technical_profile=c.get('technical_profile','')
+            technical_observe=c.get('technical_observe',True)
+            if (type(technical_profile) is not str or
+                (technical_profile and technical_profile not in PROFILES) or
+                type(technical_observe) is not bool or
+                (technical_profile and (strategy!='zigzag_fractal' or triangle_mode or zone_mode))):
+                raise ValueError('Estratégia técnica inválida; use uma opção do seletor DEMO.')
             if (type(triangle_mode) is not bool or type(triangle_observe) is not bool or
                 (triangle_mode and (strategy!='zigzag_fractal' or zone_mode)) or
                 triangle_entry not in ('breakout','retest','both') or
@@ -938,16 +954,18 @@ class Broker:
             if type(zone_mode) is not bool or (zone_mode and (strategy!='zigzag_fractal' or analysis_timeframe!=5)):
                 raise ValueError('Gráfico de regiões exige estratégia ZigZag DEMO com candles de 5 segundos.')
             if type(analysis_timeframe) is not int or analysis_timeframe not in (5,60,120,300):
-                raise ValueError('Timeframe de análise inválido: escolha 5s, M1 ou M2.')
+                raise ValueError('Timeframe de análise inválido: escolha 5s, M1, M2 ou M5.')
             allowed={5:(3,5,60),60:(60,),120:(60,120,180)}
             if zone_mode:
                 allowed[5]=(3,5,60,120,180)
             if triangle_mode:
                 allowed={5:(3,5,60,120,180,300),60:(60,120,180,300),
                          120:(120,180,300),300:(300,)}
+            if technical_profile:
+                allowed=EXPIRIES
             if strategy=='zigzag_fractal' and (c.get('scan_all') is not True or
                 expiry not in allowed[analysis_timeframe]):
-                raise ValueError('ZigZag/Fractal: candles 5s aceitam expiração 3s, 5s ou 60s; M1 aceita 60s; M2 aceita 60s, 120s ou 180s.')
+                raise ValueError('Expiração incompatível com o timeframe/estratégia selecionados. Confira as combinações disponíveis.')
             fast_strategy=c.get('fast_strategy','trend')
             if fast_strategy not in ('trend','exhaustion') or (fast_strategy=='exhaustion' and expiry not in EXHAUSTION_EXPIRIES):
                 raise ValueError('Motor de segundos inválido para a expiração selecionada.')
@@ -988,7 +1006,7 @@ class Broker:
             # use the full configured stake until official settlement validates
             # the exact requested expiry.
             trial=expiry not in self.validated_expiries
-            if trial and vals[0]!=1 and not (triangle_mode and triangle_observe):
+            if trial and vals[0]!=1 and not (triangle_mode and triangle_observe) and not (technical_profile and technical_observe):
                 raise ValueError('Para o primeiro teste automático de %ds use valor 1 na conta DEMO.'%expiry)
             desired=c.get('symbol')
             # The selected UI asset is authoritative. Previously an already
@@ -996,7 +1014,7 @@ class Broker:
             # choice, leaving the bot analyzing the wrong instrument.
             subscribed=False
             if strategy=='zigzag_fractal':
-                factory=(lambda:TriangleBreakout(analysis_timeframe,triangle_entry,triangle_adx,triangle_ema,sensitivity=triangle_sensitivity)) if triangle_mode else (PriceActionZones5s if zone_mode else {5:ZigZagFractalTrend5s,60:ZigZagFractalTrend,120:ZigZagFractalTrendM2}[analysis_timeframe])
+                factory=(lambda:TriangleBreakout(analysis_timeframe,triangle_entry,triangle_adx,triangle_ema,sensitivity=triangle_sensitivity)) if triangle_mode else ((lambda:TechnicalStrategy(technical_profile,analysis_timeframe)) if technical_profile else (PriceActionZones5s if zone_mode else {5:ZigZagFractalTrend5s,60:ZigZagFractalTrend,120:ZigZagFractalTrendM2}[analysis_timeframe]))
                 radar=Radar(factory)
                 radar.sync(self.assets,vals[3])
                 if not radar.eligible:
@@ -1023,6 +1041,8 @@ class Broker:
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
             self.fast_strategy=fast_strategy
             self.auto_strategy=strategy
+            self.technical_profile=technical_profile
+            self.technical_observe=technical_observe if technical_profile else False
             self.gale_enabled=gale_enabled
             self.gale_pending=None
             self.gale_status=('Martingale 1×2 ativado: aguardando LOSS oficial' if gale_enabled
@@ -1039,7 +1059,7 @@ class Broker:
             self.market_quality=('Buscando histórico ZigZag/Fractal + linha de tendência em %s'%{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe]) if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
-            self.auto_trial=(trial and not (triangle_mode and triangle_observe)) or triangle_trial_only;self.auto_started_at=time.time();self.auto=True
+            self.auto_trial=(trial and not (triangle_mode and triangle_observe) and not (technical_profile and technical_observe)) or triangle_trial_only;self.auto_started_at=time.time();self.auto=True
             self.auto_stop_reason='';self.feed_lag_warning=False
             if strategy=='zigzag_fractal':
                 self.radar=radar
@@ -1055,7 +1075,7 @@ class Broker:
                 self.history_unmatched=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log(('TRIÂNGULO: TESTE ÚNICO DEMO valor 1; sem aprovação contínua; ' if self.triangle_trial_only else 'TRIÂNGULO BREAKOUT: OBSERVAÇÃO sem ordens; ' if self.triangle_mode and self.triangle_observe else 'TRIÂNGULO BREAKOUT: DEMO validada; ' if self.triangle_mode else 'ZONAS AO VIVO: suporte, resistência; ' if self.zone_mode else 'VARREDURA ZigZag + Fractal + linha; ')+('%d ativos DEMO; candles %s; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe],expiry)))
+                self.log((('ESTRATÉGIA '+PROFILES[technical_profile]+': '+('OBSERVAÇÃO SEM ORDENS' if technical_observe else 'TESTE DEMO EXPERIMENTAL')+'; ') if technical_profile else 'TRIÂNGULO: TESTE ÚNICO DEMO valor 1; sem aprovação contínua; ' if self.triangle_trial_only else 'TRIÂNGULO BREAKOUT: OBSERVAÇÃO sem ordens; ' if self.triangle_mode and self.triangle_observe else 'TRIÂNGULO BREAKOUT: DEMO validada; ' if self.triangle_mode else 'ZONAS AO VIVO: suporte, resistência; ' if self.zone_mode else 'VARREDURA ZigZag + Fractal + linha; ')+('%d ativos DEMO; candles %s; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe],expiry)))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
@@ -1115,7 +1135,7 @@ class Broker:
                         self.triangle_entry,self.triangle_adx,self.triangle_ema)
                 self.triangle_last_report=now
             radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
-            return {'auto_strategy':self.auto_strategy,'gale_enabled':self.gale_enabled,'gale_armed':bool(self.gale_pending),'gale_status':self.gale_status,'zone_mode':self.zone_mode,'triangle_mode':self.triangle_mode,'triangle_observe':self.triangle_observe,
+            return {'auto_strategy':self.auto_strategy,'technical_profile':self.technical_profile,'technical_observe':self.technical_observe,'gale_enabled':self.gale_enabled,'gale_armed':bool(self.gale_pending),'gale_status':self.gale_status,'zone_mode':self.zone_mode,'triangle_mode':self.triangle_mode,'triangle_observe':self.triangle_observe,
                     'triangle_trial_only':self.triangle_trial_only,'triangle_sensitivity':self.triangle_sensitivity,
                     'triangle_reports':list(self.triangle_reports.values())[-10:],
                     'triangle_observations':list(self.triangle_observations)[-12:],
