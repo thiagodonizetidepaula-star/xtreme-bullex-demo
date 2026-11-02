@@ -964,6 +964,7 @@ class Broker:
             if technical_profile:
                 allowed=EXPIRIES
             if strategy=='zigzag_fractal' and (c.get('scan_all') is not True or
+                analysis_timeframe not in allowed or
                 expiry not in allowed[analysis_timeframe]):
                 raise ValueError('Expiração incompatível com o timeframe/estratégia selecionados. Confira as combinações disponíveis.')
             fast_strategy=c.get('fast_strategy','trend')
@@ -1056,7 +1057,7 @@ class Broker:
             self.triangle_adx=triangle_adx
             self.triangle_ema=triangle_ema
             self.scan_timeframe=analysis_timeframe if strategy=='zigzag_fractal' else 60
-            self.market_quality=('Buscando histórico ZigZag/Fractal + linha de tendência em %s'%{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe]) if strategy=='zigzag_fractal' else 'Aguardando tendência'
+            self.market_quality=(('OBSERVAÇÃO: ' if technical_observe else 'TESTE DEMO: ')+PROFILES[technical_profile] if technical_profile else 'Buscando histórico ZigZag/Fractal + linha de tendência em %s'%{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe]) if strategy=='zigzag_fractal' else 'Aguardando tendência'
             self.limit=limit;self.count=0
             self.baseline=sum(x.get('net',0) for x in self.history)
             self.auto_trial=(trial and not (triangle_mode and triangle_observe) and not (technical_profile and technical_observe)) or triangle_trial_only;self.auto_started_at=time.time();self.auto=True
