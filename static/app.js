@@ -234,7 +234,8 @@ $('triangleTimeframe').onchange=()=>{if(!snapshot.auto){
  if(Number($('triangleTimeframe').value)!==5){$('triangleSensitivity').value='strict';if($('triangleExecution').value==='trial')$('triangleExecution').value='observe';}
  populateExpiry();render()}};
 for(const id of ['triangleEntry','triangleEMA','triangleADX','triangleSensitivity'])$(id).onchange=()=>render();
-$('triangleExecution').onchange=()=>render(); // Legacy hidden controls never change stake or max operations.
+$('triangleExecution').onchange=()=>render();
+$('technicalExecution').onchange=()=>render();
 $('fastStrategy').onchange=()=>render();
 function selectedQuickStrategy(){
  const n=Number($('expiry').value);
@@ -242,7 +243,9 @@ function selectedQuickStrategy(){
 }
 $('expiry').onchange=()=>{
  rememberedExpiry[$('expiryProfile').value]=Number($('expiry').value);
- rememberedZigzagByTimeframe[Number($('zigzagTimeframe').value)]=Number($('expiry').value);
+ if(TECHNICAL_PROFILES.includes($('expiryProfile').value))
+  rememberedTechnicalByTimeframe[Number($('zigzagTimeframe').value)]=Number($('expiry').value);
+ else rememberedZigzagByTimeframe[Number($('zigzagTimeframe').value)]=Number($('expiry').value);
  render();
 };
 $('pause_after').onchange=()=>render();
@@ -260,14 +263,24 @@ $('resetHistory').onclick=async()=>{
 };
 function render(){
  const s=snapshot||{};
- // Keep only the selected ZigZag + Fractal profile when the WebView refreshes.
- // If a legacy triangle/standard session exists, user must stop it manually.
- if(s.auto&&s.auto_strategy==='zigzag_fractal'&&!s.triangle_mode&&!s.zone_mode&&
-    (Number(s.auto_expiry)!==Number($('expiry').value)||
-     Number(s.scan_timeframe)!==Number($('zigzagTimeframe').value))){
-  $('expiryProfile').value='zigzag_fast';
-  $('zigzagTimeframe').value=String(s.scan_timeframe);
-  populateExpiry(Number(s.auto_expiry));
+ // Restore the ACTIVE strategy, timeframe and expiry on Android/Web refresh.
+ // Never replace a running technical profile with the old ZigZag selection.
+ if(s.auto&&s.auto_strategy==='zigzag_fractal'){
+  const activeProfile=s.technical_profile||(
+   s.triangle_mode?'triangle':s.zone_mode?'zigzag_zones':'zigzag_fast');
+  const activeTimeframe=Number(s.scan_timeframe)||5;
+  const shownTimeframe=Number(activeProfile==='triangle'?
+    $('triangleTimeframe').value:$('zigzagTimeframe').value);
+  if($('expiryProfile').value!==activeProfile||
+     shownTimeframe!==activeTimeframe||
+     Number(s.auto_expiry)!==Number($('expiry').value)){
+   $('expiryProfile').value=activeProfile;
+   if(activeProfile==='triangle')$('triangleTimeframe').value=String(activeTimeframe);
+   else $('zigzagTimeframe').value=String(activeTimeframe);
+   populateExpiry(Number(s.auto_expiry));
+  }
+  if(s.technical_profile)$('technicalExecution').value=s.technical_observe?'observe':'demo';
+  if(s.triangle_mode)$('triangleExecution').value=s.triangle_observe?'observe':s.triangle_trial_only?'trial':'demo';
  }
  if(s.auto&&s.fast_strategy&&$('fastStrategy').value!==s.fast_strategy){
   $('fastStrategy').value=s.fast_strategy;
@@ -291,10 +304,19 @@ function render(){
  $('net').textContent=money(hist.reduce((v,x)=>v+(x.net||0),0));
  $('storage').textContent=s.storage||'Histórico DEMO privado';
  const expiry=Number($('expiry').value),isM1=expiry>=60;
- const isZigzag=true; // Only ZIGZAG + FRACTAL selectable in V32.
+ const isZigzag=true; // All selectable profiles reuse the existing DEMO market radar.
+ const activeProfile=$('expiryProfile').value;
+ const technicalSelected=TECHNICAL_PROFILES.includes(activeProfile);
  $('fastStrategyWrap').hidden=isZigzag||![3,5].includes(Number($('expiry').value));
- const triangleSelected=false;
+ const triangleSelected=activeProfile==='triangle';
  $('triangleSettings').hidden=!triangleSelected;
+ $('technicalSettings').hidden=!technicalSelected;
+ $('technicalExecution').disabled=!!s.auto;
+ $('technicalValidation').textContent=technicalSelected?
+   ($('technicalExecution').value==='observe'?
+    'OBSERVAÇÃO: identifica sinais em todos os pares elegíveis, sem enviar ordens.':
+    'TESTE EXPERIMENTAL: ordens exclusivamente DEMO. A primeira expiração sem validação exige valor 1. Não há backtest independente aprovado nem promessa de 70%.'):'';
+ $('zigzagTimeframe').closest('label').hidden=triangleSelected;
  $('triangleTimeframe').disabled=!!s.auto;
  $('triangleEntry').disabled=!!s.auto;
  $('triangleExecution').disabled=!!s.auto;
@@ -325,7 +347,9 @@ function render(){
   'OBSERVAÇÃO · '+observations.length+' sinais registrados nesta sessão. Aguardando dados para backtest cronológico com amostra independente. Nenhuma aprovação presumida.') +
   (!triangleDemoAvailable?' · AUTO DEMO CONTÍNUO BLOQUEADO até validação independente.':' · AUTO DEMO elegível após confirmação do usuário.')+
   (triangleTrialAvailable?' · TESTE CONTROLADO: gráfico 5s, expiração '+selectedTriangleExpiry+'s, UMA ordem valor 1, se houver sinal.':'');
- $('startSignalAuto').textContent='INICIAR AUTOMÁTICO DEMO';
+ $('startSignalAuto').textContent=(technicalSelected&&$('technicalExecution').value==='observe')||
+   (triangleSelected&&$('triangleExecution').value==='observe')?
+   'INICIAR OBSERVAÇÃO · SEM ORDENS':'INICIAR AUTOMÁTICO DEMO';
  const radar=s.radar||{};
  const chartTf=radar.candle_seconds||Number($('zigzagTimeframe').value);
  const chartTfLabel={5:'5s',60:'M1',120:'M2',300:'M5'}[chartTf]||'M1';
@@ -333,7 +357,10 @@ function render(){
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
  const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
- $('strategyProfile').textContent=$('expiryProfile').value==='triangle'?('TRIÂNGULO BREAKOUT — PRICE ACTION · '+chartTfLabel+' · expiração '+expiry+'s') :$('expiryProfile').value==='zigzag_zones'?('GRÁFICO AO VIVO · ROMPIMENTO / REVERSÃO · 5s · vencimento '+expiry+'s') :isZigzag?
+ $('strategyProfile').textContent=technicalSelected?
+   ('PESQUISA DEMO · '+$('expiryProfile').selectedOptions[0].textContent+' · '+chartTfLabel+' · expiração '+expiry+'s'+
+    ($('technicalExecution').value==='observe'?' · OBSERVAÇÃO SEM ORDENS':' · TESTE EXPERIMENTAL')) :
+   $('expiryProfile').value==='triangle'?('TRIÂNGULO BREAKOUT — PRICE ACTION · '+chartTfLabel+' · expiração '+expiry+'s') :$('expiryProfile').value==='zigzag_zones'?('GRÁFICO AO VIVO · ROMPIMENTO / REVERSÃO · 5s · vencimento '+expiry+'s') :isZigzag?
   'VARREDURA · ZigZag + Fractal 2 + Linha + '+(chartTf===5?'PRICE ACTION + PSICOLOGIA · ':'')+'gráfico '+chartTfLabel+' · expiração '+(expiry>=60?(expiry/60)+'min':expiry+'s'):
   isM1?'PERFIL M5→M1 · EMA3/5 RSI5 · espera vela M1 fechada':
   exhaustionActive?'ÚLTIMO SUSPIRO · esticada + perda de força + ticks contrários':
