@@ -35,7 +35,7 @@
  const controlsCard=document.createElement('div');controlsCard.className='card xt-settings-card';
  const heading=document.createElement('h2');heading.textContent='Estratégia e entrada';
  controlsCard.append(heading);
- for(const selector of ['.signal-fields','#triangleSettings','#subscribe','.trade-mode']){
+ for(const selector of ['.signal-fields','#triangleSettings','#technicalSettings','#subscribe','.trade-mode']){
   const node=consoleNode.querySelector(selector);
   if(node)controlsCard.append(node);
  }
@@ -49,7 +49,7 @@
  controlsCard.append(toggles,note);
  const galeStatus=document.createElement('p');galeStatus.id='xt-gale-status';galeStatus.className='hint';galeStatus.setAttribute('role','status');controlsCard.append(galeStatus);
  const tick=document.createElement('p');tick.className='hint';
- tick.textContent='Ticagem: nas estratégias rápidas, escolha o gatilho de ticks no campo ENTRADA EM 3s/5s. EMA e ADX continuam opcionais no perfil Triângulo.';
+ tick.textContent='Selecione a estratégia, timeframe e expiração compatíveis. Todas usam candles reais fechados e varredura dos pares OTC abertos com payout >80%. Notícias ficam indisponíveis até existir calendário verificado.';
  controlsCard.append(tick);
 
  const connectionCards=[...originalAside.children].filter(x=>x.classList.contains('card'));
@@ -211,7 +211,8 @@
    const direction=op.direction==='call'?'CALL':op.direction==='put'?'PUT':'—';
    const title=document.createElement('strong');title.textContent=clean(op.asset)+' · '+direction;
    const details=document.createElement('small');
-   details.textContent=hour(op.sent_at)+' · '+clean(op.expiry)+'s · entrada '+clean(op.amount);
+   details.textContent=hour(op.sent_at)+' · '+clean(op.expiry)+'s · entrada '+clean(op.amount)+
+    (op.strategy?' · '+clean(op.strategy):'')+(op.gale_level?' · GALE ×2':'');
    label.append(title,details);
    const result=document.createElement('div');result.className='xt-history-result';
    result.textContent=clean(op.status)+' · '+(Number.isFinite(Number(op.net))?Number(op.net).toFixed(2):'—');
@@ -232,8 +233,12 @@
    s.demo_confirmed?'⚙ Ajustar':isNative()?'Conectar DEMO':'⚙ Conexão';
   pause.disabled=!Boolean(s.auto)||Boolean(s.pending?.id);
   if(paused&&!s.auto)by('xt-flame-caption').textContent='Pausado: novas entradas paradas. Para retomar, toque Iniciar.';
-  check.disabled=Boolean(s.auto);
+  const profileName=profile?.value||'zigzag_fast';
+  const galeAvailable=profileName!=='triangle'&&profileName!=='zigzag_zones'&&
+   !(by('technicalSettings')?.hidden===false&&by('technicalExecution')?.value==='observe');
+  check.disabled=Boolean(s.auto)||!galeAvailable;
   if(s.auto)check.checked=Boolean(s.gale_enabled);
+  else if(!galeAvailable)check.checked=false;
   galeStatus.textContent=s.gale_status||'Martingale desligado';
   const all=Array.isArray(s.history)?s.history:[];
   const wins=all.filter(o=>o.status==='WIN').length,losses=all.filter(o=>o.status==='LOSS').length;
