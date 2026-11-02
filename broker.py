@@ -12,6 +12,7 @@ from price_action_zones import PriceActionZones5s
 from triangle_breakout import TriangleBreakout
 from triangle_validation import walkforward
 from technical_strategies import TechnicalStrategy, PROFILES, EXPIRIES
+from demo_schedule import SLOTS, ZONE, local_day, slot_times, warmup_seconds, next_unspent_slot
 
 DEMO_URLS = ('wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket', 'wss://try-demo-eu.po.market/socket.io/?EIO=4&transport=websocket')
 
@@ -174,6 +175,16 @@ class Broker:
         self.history_loaded_count=0
         self.history_unmatched=0
         self.recent_closed_deals=deque(maxlen=30)
+        # V41: explicitly armed DEMO schedule; never persisted with broker credentials.
+        self.schedule_enabled=False
+        self.schedule_settings=None
+        self.schedule_done=set()
+        self.schedule_scan_active=False
+        self.schedule_slot=None
+        self.schedule_day=None
+        self.schedule_start=0
+        self.schedule_deadline=0
+        self.schedule_last_status='Agenda DEMO desligada. Nenhuma ordem programada.'
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -237,6 +248,7 @@ class Broker:
                 self.connection_failure='A conexão DEMO terminou sem confirmação da corretora.'
             if attempt<4:time.sleep(1.0)
         self.connecting=False;self.connected=False;self.demo_confirmed=False;self.auto=False
+        self.schedule_enabled=False;self.schedule_scan_active=False
         if not self.closed:
             self.connection_state='desconectado'
             self.log((self.connection_failure or 'Conexão DEMO encerrada.')+
@@ -259,6 +271,9 @@ class Broker:
         with self.lock:
             if self.auto:self.auto_stop_reason='Conexão DEMO encerrada. Reconecte para reativar o automático.'
             self.connected=False; self.auto=False; self.demo_confirmed=False; self.validated=False; self.validated_expiries.clear()
+            if self.schedule_enabled:
+                self.schedule_enabled=False;self.schedule_scan_active=False
+                self.schedule_last_status='Agenda DEMO desligada: conexão com a corretora encerrada. Rearme manualmente.'
             if not self.closed and not self.connection_failure:
                 self.connection_failure='Conexão Pocket Option DEMO encerrada antes da confirmação.'
             self.last_signal=None;self.last_signal_at=0
@@ -701,6 +716,8 @@ class Broker:
     def try_scan_order(self,candidates):
         """Only fresh, newly confirmed DEMO BUY/SELL signals with selected expiry."""
         now=time.time()
+        if self.schedule_enabled and (not self.schedule_scan_active or
+            now<self.schedule_start or now>=self.schedule_deadline):return
         if (not candidates or self.pending or not self.demo_confirmed or
             now-self.last_order<10 or
             now<self.last_closed_at+self.pause_after):return
@@ -773,6 +790,12 @@ class Broker:
             if not isinstance(amount,(int,float)) or not math.isfinite(amount) or not 1<=amount<=100:raise ValueError('Valor demo permitido: 1 a 100.')
             if not self.connected or not self.demo_confirmed:raise ValueError('Saldo de conta demo ainda não confirmado.')
             if self.pending:raise ValueError('Há uma ordem pendente. Não será enviada outra.')
+            if self.schedule_enabled:
+                now=time.time()
+                if (not self.schedule_scan_active or not self.auto or
+                    not self.schedule_slot or now<self.schedule_start or
+                    now>=self.schedule_deadline or self.count>=1):
+                    raise ValueError('Agenda DEMO: fora da janela autorizada ou limite de uma ordem por horário.')
             if not gale and time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
             if gale:
                 g=self.gale_pending
@@ -804,6 +827,14 @@ class Broker:
                 self.gale_pending=None
                 self.gale_status='Gale DEMO enviado: '+target+' · '+direction.upper()+' ×2'
             self.save(self.pending)
+            if self.schedule_enabled and self.schedule_scan_active:
+                # Spend this slot BEFORE transmitting: ambiguous network failures
+                # must never trigger a replay or a second order in this window.
+                self.schedule_done.add((self.schedule_day,self.schedule_slot))
+                self.schedule_last_status=('Ordem DEMO enviada no horário '+self.schedule_slot+
+                    '. Aguardando confirmação oficial; próxima janela continua programada.')
+                self.schedule_scan_active=False
+                self.auto=False;self.auto_trial=False
             try:self.send('openOrder',{'asset':target,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
             except Exception:self.auto=False;self.log('Envio sem confirmação. Não repita a ordem; confira na corretora.');raise ValueError('Envio sem confirmação. Automático pausado.') from None
             self.log('Ordem demo enviada; aguardando confirmação.')
@@ -925,6 +956,8 @@ class Broker:
 
     def start_auto(self,c):
         with self.lock:
+            if self.schedule_enabled and not self.schedule_scan_active:
+                raise ValueError('Agenda DEMO ativa. Desative-a antes de iniciar automático livre.')
             expiry=parse_expiry(c.get('expiry',5))
             strategy=c.get('strategy','standard')
             if strategy not in ('standard','zigzag_fractal'):
@@ -1087,6 +1120,7 @@ class Broker:
                      ' Expiração: %ds.'%expiry)
     def snapshot(self):
         with self.lock:
+            self.demo_schedule_tick()
             # Short interruptions must not permanently disable auto; NEVER
             # enter while the quote freshness guard is false. Prolonged loss
             # of data does stop the bot and needs explicit user restart.
@@ -1174,11 +1208,14 @@ class Broker:
                     'supported_expiries':list(ALL_EXPIRIES),
                     'expiry_profile':'M5_M1' if self.auto_expiry in LONG_EXPIRIES else 'QUICK_TICKS',
                     'expiry_support_note':'Prazos configurados para testes DEMO, disponibilidade real depende da corretora e ativo.',
+                    'demo_schedule':self.demo_schedule_status(now),
                     'auto_interval':AUTO_INTERVAL_SECONDS,'auto_count':self.count,'auto_limit':self.limit,
                     'auto_session_remaining':round(max(0,AUTO_MAX_SESSION_SECONDS-(time.time()-self.auto_started_at)),1) if self.auto else 0,
                     'auto_feed_stop_after':M1_FEED_STOP_SECONDS if self.auto_expiry in LONG_EXPIRIES else 20,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
                                                   (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending_reconciliation':('Aguardando confirmação do fechamento oficial '+str(self.pending.get('broker_order_id') or 'da ordem') if self.pending else 'Sem pendência; resultado liberado automaticamente'),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
+        self.schedule_enabled=False;self.schedule_scan_active=False
+        self.schedule_last_status='Agenda DEMO desligada: sessão encerrada.'
         self.auto_stop_reason='Sessão DEMO encerrada.';self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
