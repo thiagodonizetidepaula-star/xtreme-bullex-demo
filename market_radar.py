@@ -8,7 +8,6 @@ import time
 from collections import deque
 from m1_strategy import MinuteSignals
 from historical_bars import extract_closed_history,merge_historical_bars
-from heikin_ashi import analyze_ha_30m
 
 RADAR_PAYOUT_FLOOR=88
 
@@ -24,8 +23,6 @@ class Watch:
         self.historical_loaded=0
         self.historical_source=''
         self.history_rejected=0
-        self.ha_cache_key=None
-        self.ha_cache=None
 
     def ingest(self,stamp,price,now):
         if isinstance(stamp,bool) or isinstance(price,bool):
@@ -68,15 +65,6 @@ class Watch:
         else:
             self.history_rejected+=1
         return added
-
-    def heikin_ashi_30m(self):
-        bars=self.engine.bars
-        period=getattr(self.engine,'bar_seconds',60)
-        key=(len(bars),bars[0]['t'] if bars else None,bars[-1]['t'] if bars else None)
-        if self.ha_cache_key!=key:
-            self.ha_cache=analyze_ha_30m(bars,period)
-            self.ha_cache_key=key
-        return self.ha_cache
 
     def fresh(self,now):
         if not self.received or not 0<=now-self.received<=2:
@@ -160,8 +148,7 @@ class Radar:
                'false_breakout':getattr(chart_watch.engine,'false_breakout',None) if chart_watch else None,
                'zones':getattr(chart_watch.engine,'zones',[]) if chart_watch else [],
                'last_entry':getattr(chart_watch.engine,'last_entry',None) if chart_watch else None,
-               'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None,
-               'heikin_ashi':chart_watch.heikin_ashi_30m() if chart_watch and chart_watch.fresh(now) else None}
+               'candle_quality':getattr(chart_watch.engine,'candle_quality',None) if chart_watch else None}
         return {'candle_seconds':getattr(next(iter(self.watches.values())).engine,'bar_seconds',60) if self.watches else 60,
                 'eligible':len(self.eligible),'subscribed':len(self.subscribed),
                 'history_loaded_assets':historical_ready,
