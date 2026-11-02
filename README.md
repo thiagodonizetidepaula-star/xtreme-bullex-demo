@@ -1,3 +1,38 @@
+## V41 — Agenda automática DEMO 10h, 14h e 20h (horário de Brasília)
+
+- **Exclusivamente DEMO. Conta REAL continua bloqueada.** O usuário
+  precisa conectar e confirmar a Pocket Option DEMO, selecionar
+  estratégia, timeframe, expiração, valor, payout mínimo e stops e tocar
+  **ATIVAR AGENDA DEMO**. Nunca agenda sem autorização no aplicativo.
+- O servidor usa o fuso **America/Sao_Paulo** e as janelas diárias
+  **10:00–10:10, 14:00–14:10 e 20:00–20:10**. Inicia o radar antes de
+  cada horário para aquecer candles reais, mas **nenhuma ordem pode ser
+  enviada antes do início da janela ou depois de seu encerramento**.
+  Sem sinal confirmado dentro da janela, pula o horário; não recupera
+  operações atrasadas. O limite é **uma tentativa de envio por horário**
+  e no máximo três por dia, não três operações garantidas.
+- O mesmo radar de todas as estratégias ZigZag/Fractal, técnicas e
+  Triângulo RIGOROSO procura sinais reais com payout >80%, saldo e
+  cotação atual; uma ordem pendente bloqueia as demais. Não permite
+  Martingale, observação sem ordens ou teste único na agenda.
+  Expiração ainda não confirmada exige entrada de valor 1 DEMO.
+  Stop Win/Loss diário bloqueia os horários seguintes.
+- Um horário é **consumido antes do envio ao broker**: falha de rede,
+  ordem rejeitada ou resposta ambígua nunca reenvia a ordem no mesmo
+  horário. Só resultado oficial vinculado ao ID da ordem libera a
+  pendência. Os botões de PARAR e DESATIVAR AGENDA impedem novas ordens
+  (não cancelam ordens já abertas na corretora).
+- O agendador roda no servidor, não depende de o Android ficar aberto,
+  **desde que o processo Render e a sessão WebSocket DEMO continuem
+  ativos**. Render gratuito pode dormir ou reiniciar; a sessão DEMO,
+  autenticação da corretora e a agenda **não são persistidas nem
+  retomadas automaticamente**. Ao reiniciar ou desconectar, o usuário
+  precisa reconectar e reativar. **Não há garantia de operação em
+  horários exatos nem de serviço 24h**.
+- O status de cada janela (aquecimento, próxima, consumida ou perdida)
+  aparece no painel. Testes automatizados não substituem validação
+  operacional em uma sessão DEMO autenticada.
+
 ## V40 — Operar automaticamente em DEMO e comparar qual estratégia performa melhor
 
 - As oito estratégias técnicas **agora vêm selecionadas em OPERAR
