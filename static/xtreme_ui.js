@@ -41,12 +41,13 @@
  }
  const toggles=document.createElement('div');toggles.className='xt-toggle-row';
  const mart=document.createElement('label');mart.className='xt-check';
- const check=document.createElement('input');check.type='checkbox';check.disabled=true;check.checked=false;
- const txt=document.createElement('span');txt.textContent='Martingale · indisponível nesta versão';
+ const check=document.createElement('input');check.type='checkbox';check.id='xt-gale-enabled';check.checked=false;
+ const txt=document.createElement('span');txt.textContent='Martingale · 1 Gale ×2 na próxima vela (DEMO)';
  mart.append(check,txt);toggles.append(mart);
  const note=document.createElement('p');note.className='hint';
- note.textContent='Martingale permanece desativado. A execução automática não aumenta a entrada após uma perda sem implementar e testar essa função.';
+ note.textContent='Opcional e desligado por padrão. Após LOSS oficial: 1 única entrada com 2× o valor anterior, no mesmo ativo e direção, somente no início da próxima vela. Não faz Gale do Gale; respeita Stop Loss, payout, saldo e limite. Aumenta o risco de perda.';
  controlsCard.append(toggles,note);
+ const galeStatus=document.createElement('p');galeStatus.id='xt-gale-status';galeStatus.className='hint';galeStatus.setAttribute('role','status');controlsCard.append(galeStatus);
  const tick=document.createElement('p');tick.className='hint';
  tick.textContent='Ticagem: nas estratégias rápidas, escolha o gatilho de ticks no campo ENTRADA EM 3s/5s. EMA e ADX continuam opcionais no perfil Triângulo.';
  controlsCard.append(tick);
@@ -231,6 +232,9 @@
    s.demo_confirmed?'⚙ Ajustar':isNative()?'Conectar DEMO':'⚙ Conexão';
   pause.disabled=!Boolean(s.auto)||Boolean(s.pending?.id);
   if(paused&&!s.auto)by('xt-flame-caption').textContent='Pausado: novas entradas paradas. Para retomar, toque Iniciar.';
+  check.disabled=Boolean(s.auto);
+  if(s.auto)check.checked=Boolean(s.gale_enabled);
+  galeStatus.textContent=s.gale_status||'Martingale desligado';
   const all=Array.isArray(s.history)?s.history:[];
   const wins=all.filter(o=>o.status==='WIN').length,losses=all.filter(o=>o.status==='LOSS').length;
   by('xt-wins').textContent=String(wins);
