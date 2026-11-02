@@ -258,6 +258,78 @@
    row.append(label,result);historyList.append(row);
   }
  }
+ let savedStrategyHistory=[];
+ let strategyHistoryFetchAt=0;
+ let strategyHistoryLoading=false;
+ let strategyHistoryError='';
+ let lastComparisonKey='';
+ const comparePercent=value=>value==null?'—':value.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%';
+ const compareMoney=value=>Number(value).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+ function updateStrategyComparison(s){
+  if(typeof xtSummarizeStrategies!=='function')return;
+  const filter=compareExpiry.value?Number(compareExpiry.value):null;
+  const rows=xtSummarizeStrategies(s.history||[],savedStrategyHistory,filter);
+  const message=strategyHistoryLoading?'Atualizando histórico oficial salvo…':
+   strategyHistoryError?'Histórico salvo indisponível ('+strategyHistoryError+'). Exibindo operações desta sessão.':
+   savedStrategyHistory.length?'Comparando resultados oficiais desta sessão e do histórico salvo na sua conta.':
+   'Exibindo resultados desta sessão. Nenhuma operação anterior encontrada no histórico salvo.';
+  const key=JSON.stringify(rows)+message;
+  if(key===lastComparisonKey)return;
+  lastComparisonKey=key;
+  compareSource.textContent=message;
+  compareBody.replaceChildren();
+  if(!rows.length){
+   const tr=document.createElement('tr');
+   const td=document.createElement('td');td.colSpan=7;
+   td.textContent='Ainda não há WIN/LOSS oficial nesta expiração. Selecione uma estratégia, inicie o automático DEMO e aguarde o resultado confirmado.';
+   tr.append(td);compareBody.append(tr);
+   return;
+  }
+  for(const item of rows){
+   const tr=document.createElement('tr');
+   const values=[
+    item.name,item.trades,item.wins+' / '+item.losses,
+    comparePercent(item.winRate),compareMoney(item.net),
+    comparePercent(item.roi),
+    item.initialSample?'Amostra inicial':'Amostra maior · sem validação externa'
+   ];
+   for(let i=0;i<values.length;i++){
+    const td=document.createElement('td');
+    td.textContent=String(values[i]);
+    if(i===4)td.dataset.sign=item.net>0?'positive':item.net<0?'negative':'zero';
+    if(i===6&&item.initialSample)td.className='xt-sample-warning';
+    tr.append(td);
+   }
+   compareBody.append(tr);
+  }
+ }
+ async function loadStrategyHistory(force=false){
+  if(!session||strategyHistoryLoading)return;
+  if(!force&&Date.now()-strategyHistoryFetchAt<20000)return;
+  strategyHistoryFetchAt=Date.now();
+  strategyHistoryLoading=true;
+  updateStrategyComparison(snapshot||{});
+  try{
+   const rows=await api('history');
+   if(!Array.isArray(rows))throw Error('Resposta de histórico inválida');
+   savedStrategyHistory=rows;
+   strategyHistoryError='';
+  }catch(err){
+   strategyHistoryError=String(err.message||'erro de conexão');
+  }finally{
+   strategyHistoryLoading=false;
+   updateStrategyComparison(snapshot||{});
+  }
+ }
+ compareExpiry.addEventListener('change',()=>updateStrategyComparison(snapshot||{}));
+ window.xtClearStrategyHistory=()=>{
+  savedStrategyHistory=[];strategyHistoryFetchAt=0;strategyHistoryError='';
+  lastComparisonKey='';updateStrategyComparison(snapshot||{});
+ };
+ window.xtRefreshStrategyHistory=(clear=false)=>{
+  if(clear)window.xtClearStrategyHistory();
+  return loadStrategyHistory(true);
+ };
  let lastPollTime=Date.now();
  function refresh(){
   if(!dash||dash.hidden)return;
@@ -285,6 +357,8 @@
   by('xt-winrate').textContent=wins+losses?Math.round(100*wins/(wins+losses))+'%':'—';
   renderConnectionChoice();
   updateHistory(s);
+  updateStrategyComparison(s);
+  if(!panes.history.hidden)loadStrategyHistory();
   tickClock();
  }
  function tickClock(){
