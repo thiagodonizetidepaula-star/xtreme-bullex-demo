@@ -27,7 +27,6 @@ def timestamp(value):
 
 def _closed_ohlc(rows,period,current_start):
     output=[]
-    history_limit=max(90,450 if period==5 else 90)
     for item in rows:
         if not isinstance(item,dict):
             continue
@@ -35,7 +34,7 @@ def _closed_ohlc(rows,period,current_start):
         if t is None or int(t)%period:
             continue
         t=int(t)
-        if t>=current_start or t<current_start-history_limit*period:
+        if t>=current_start or t<current_start-90*period:
             continue
         values={name:number(item.get(name)) for name in ('open','high','low','close')}
         if any(v is None or v<=0 for v in values.values()):
@@ -50,7 +49,6 @@ def _closed_ohlc(rows,period,current_start):
 
 def _closed_ticks(rows,period,current_start):
     grouped=defaultdict(list)
-    history_limit=max(90,450 if period==5 else 90)
     for item in rows:
         if isinstance(item,dict):
             t=timestamp(item.get('time',item.get('t')))
@@ -64,7 +62,7 @@ def _closed_ticks(rows,period,current_start):
             continue
         s=int(t)
         start=s//period*period
-        if current_start-history_limit*period<=start<current_start:
+        if current_start-90*period<=start<current_start:
             grouped[start].append((t,p))
     output=[]
     for start,ticks in sorted(grouped.items()):
