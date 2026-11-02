@@ -60,12 +60,13 @@ class Tests(unittest.TestCase):
 
     def test_android_web_ui_forces_observation_and_explains_connection(self):
         text=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf8')
-        self.assertIn("triangle_mode:false,triangle_observe:false,triangle_trial_only:false",text)
+        self.assertIn("triangle_mode:isTriangle",text)
+        self.assertIn("triangle_observe:isTriangle&&",text)
         self.assertIn("triangleDemoOption.disabled=!triangleDemoAvailable",text)
         self.assertIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",text)
-        self.assertIn('DEMO DESCONECTADA: conecte pelo botão',text)
-        self.assertIn('OBSERVAÇÃO TRIÂNGULO ATIVA',text)
-        self.assertIn('NENHUMA ORDEM AUTOMÁTICA',text)
+        self.assertIn('CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO',text)
+        self.assertIn('OBSERVAÇÃO · sem ordens',text)
+        self.assertIn('INICIAR OBSERVAÇÃO · SEM ORDENS',text)
         render=text.split('function render(){',1)[1]
         self.assertLess(render.index('const isZigzag='),render.index("$('fastStrategyWrap').hidden=isZigzag"))
 
