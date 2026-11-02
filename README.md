@@ -1,3 +1,29 @@
+## V34 — Correção: Heikin Ashi retroativo (NÃO esperar 30 minutos)
+
+The **30 minutes are a maximum backward-looking window**, not a 30-minute
+warmup or a requirement to watch 360 new candles. Immediately after
+Pocket Option DEMO live-quote verification, the app requests broker
+historical OHLC for the selected chart: ~30m past for 5s/M1, and enough
+extra M2 bars to keep the existing ZigZag pivot detector functional.
+These are **already closed historical broker candles**, never invented.
+It never trades from a historical/unfinished candle; a fresh, closed
+ZigZag/Fractal signal and current quote are still required.
+
+The Heikin Ashi filter reads ONLY the last <=30m of history; if fewer
+actual candles are available, it can operate on a real **contiguous
+shorter suffix** (5s: at least 34 closed bars, M1: at least 10, M2:
+at least 5), subject to all previously required wick, doji, trend and
+sideways checks. It counts only the included historical candles, and the
+dashboard shows **actual minutes analyzed**, instead of demanding a 30m
+wait. This is independent of ZigZag's own required confirmed-fractal
+history; no data, gaps or stale price feeds are never guessed into a
+signal. When the broker provides 30m of history, the bot can evaluate
+that immediately, not after 30m of running.
+
+The app retains DEMO only, user-controlled start, a single unresolved
+order, cooldown, payout and stop controls. The color majority is not a
+guarantee of profitability or a reliable forecast of 3s/5s outcomes.
+
 ## V33 — Filtro Heikin Ashi por maioria das velas dos últimos 30 minutos
 
 The **only user-facing strategy remains ZigZag + Fractal**. On the DEMO
