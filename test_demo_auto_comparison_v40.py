@@ -66,7 +66,6 @@ class V40DemoComparison(unittest.TestCase):
         self.assertIn("result.strategy",compare)
         self.assertIn("status==='WIN'",compare)
         self.assertIn("trades.set(trade.id,trade)",compare)
-        self.assertIn('if(!s.connected||!s.demo_confirmed)',app) if False else None
         self.assertNotIn('hasHoldout||!expiryVerified',app)
         self.assertNotIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",app)
         self.assertIn('window.xtClearStrategyHistory?.()',app)
