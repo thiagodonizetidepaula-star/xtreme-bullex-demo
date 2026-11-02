@@ -124,7 +124,7 @@
  const haBoard=document.createElement('div');haBoard.id='xt-ha-board';
  haBoard.className='xt-ha-board';
  haBoard.setAttribute('role','status');
- haBoard.innerHTML='<div><strong>HEIKIN ASHI · ÚLTIMOS 30 MIN</strong><span id="xt-ha-direction">Analisando velas históricas recentes</span></div><div id="xt-ha-counts">🟢 — verdes · 🔴 — vermelhas</div><small id="xt-ha-reason">O bot usa velas já fechadas; 30 min é limite retroativo, não espera.</small>';
+ haBoard.innerHTML='<div><strong>HEIKIN ASHI · VELAS RECENTES</strong><span id="xt-ha-direction">Comparando cores dos últimos candles fechados</span></div><div id="xt-ha-counts">🟢 — verdes · 🔴 — vermelhas</div><small id="xt-ha-reason">Histórico rápido: verde ou vermelho predominante, com filtro de indecisão.</small>';
  panes.operation.append(haBoard);
  liveHead.querySelector('button').addEventListener('click',()=>{
   if(!snapshot?.demo_confirmed&&isNative())platformButton.click();
@@ -240,8 +240,8 @@
   const direction=by('xt-ha-direction'),counts=by('xt-ha-counts'),reason=by('xt-ha-reason');
   haBoard.dataset.trend=ha?.ready?(ha.direction==='call'?'call':'put'):'blocked';
   direction.textContent=ha?.ready?(ha.direction==='call'?'🟢 TENDÊNCIA DE ALTA · somente CALL':'🔴 TENDÊNCIA DE BAIXA · somente PUT'):'AGUARDANDO / NÃO OPERAR';
-  counts.textContent=ha?'🟢 '+ha.green+' verdes · 🔴 '+ha.red+' vermelhas · '+ha.observed_minutes+' min analisados (máx. 30m)':'🟢 — verdes · 🔴 — vermelhas';
-  reason.textContent=ha?.reason||'Conecte a DEMO para carregar velas históricas da corretora; sem espera fixa de 30 minutos.';
+  counts.textContent=ha?'🟢 '+ha.green+' verdes · 🔴 '+ha.red+' vermelhas · '+ha.candles+' velas fechadas':'🟢 — verdes · 🔴 — vermelhas';
+  reason.textContent=ha?.reason||'Conecte a DEMO para consultar o histórico recente da corretora.';
   const all=Array.isArray(s.history)?s.history:[];
   const wins=all.filter(o=>o.status==='WIN').length,losses=all.filter(o=>o.status==='LOSS').length;
   by('xt-wins').textContent=String(wins);
