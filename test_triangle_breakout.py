@@ -156,16 +156,29 @@ class Tests(unittest.TestCase):
             self.assertIsNone(b.pending)
             self.assertEqual(b.triangle_observations[-1]['direction'],'call')
 
-    def test_automatic_rejected_without_holdout_approval(self):
+    def test_strict_triangle_auto_demo_can_collect_official_results_without_holdout(self):
         with patch('broker.time.time',return_value=BASE):
             b=broker()
-            with self.assertRaisesRegex(ValueError,'expiração ainda não validada'):
-                b.start_auto(params(observe=False))
-            self.assertFalse(b.auto)
-            b.validated_expiries.add(60)
-            with self.assertRaisesRegex(ValueError,'backtest cronológico aprovado'):
-                b.start_auto(params(observe=False))
-            self.assertFalse(b.auto)
+            b.start_auto(params(observe=False))
+            self.assertTrue(b.auto)
+            self.assertTrue(b.triangle_mode)
+            self.assertFalse(b.triangle_observe)
+            self.assertTrue(b.auto_trial)
+            self.assertEqual(b.amount,1)
+            self.assertEqual(b.auto_expiry,60)
+            w=b.radar.watches['A_otc']
+            w.engine.ingest=lambda *args:'call'
+            w.engine.pattern='triângulo ascendente / rompimento'
+            b.event('updateStream',[['A_otc',BASE,100.6]])
+            orders=[v for v in b.ws.sent if v.startswith('42["openOrder"')]
+            self.assertEqual(len(orders),1)
+            self.assertIn('"isDemo":1',orders[0])
+            self.assertEqual(b.pending['strategy'],'triangle')
+            self.assertTrue(b.auto)
+            b2=broker();b2.validated_expiries.add(60)
+            b2.start_auto(params(observe=False))
+            self.assertTrue(b2.auto)
+            self.assertFalse(b2.auto_trial)
 
     def test_timeframes_and_expiry_configurations_and_old_profile_unaffected(self):
         for period,expiry in ((5,3),(5,5),(5,60),(60,60),(120,120),(300,300)):
