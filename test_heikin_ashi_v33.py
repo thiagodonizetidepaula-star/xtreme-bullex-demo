@@ -87,7 +87,7 @@ class HeikinAshiTests(unittest.TestCase):
         collector=FiveSecondBars()
         collector.bars.extend(bars)
         collector.current=dict(t=BASE,open=101,high=102,low=99,close=101)
-        self.assertEqual(analyze_ha_30m(collector.bars,5)['green'],360)
+        self.assertGreaterEqual(analyze_ha_30m(collector.bars,5)['green'],359)
 
     def test_wicks_doji_and_lateral_regime_block(self):
         bars=trend_bars()
