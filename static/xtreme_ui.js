@@ -121,11 +121,6 @@
  liveHead.className='xt-live-head';
  liveHead.innerHTML='<div><div class="xt-overline">MERCADO DEMO · AO VIVO</div><strong id="xt-active-asset">Aguardando conexão</strong><span id="xt-active-mode">Sem estratégia ativa</span></div><button id="xt-settings-shortcut" type="button" aria-label="Abrir configurações e conexão">⚙ Ajustar</button>';
  panes.operation.append(liveHead);
- const haBoard=document.createElement('div');haBoard.id='xt-ha-board';
- haBoard.className='xt-ha-board';
- haBoard.setAttribute('role','status');
- haBoard.innerHTML='<div><strong>HEIKIN ASHI · VELAS RECENTES</strong><span id="xt-ha-direction">Comparando cores dos últimos candles fechados</span></div><div id="xt-ha-counts">🟢 — verdes · 🔴 — vermelhas</div><small id="xt-ha-reason">Histórico rápido: verde ou vermelho predominante, com filtro de indecisão.</small>';
- panes.operation.append(haBoard);
  liveHead.querySelector('button').addEventListener('click',()=>{
   if(!snapshot?.demo_confirmed&&isNative())platformButton.click();
   else selectTab('settings');
@@ -236,12 +231,6 @@
    s.demo_confirmed?'⚙ Ajustar':isNative()?'Conectar DEMO':'⚙ Conexão';
   pause.disabled=!Boolean(s.auto)||Boolean(s.pending?.id);
   if(paused&&!s.auto)by('xt-flame-caption').textContent='Pausado: novas entradas paradas. Para retomar, toque Iniciar.';
-  const ha=s.radar?.chart?.heikin_ashi||null;
-  const direction=by('xt-ha-direction'),counts=by('xt-ha-counts'),reason=by('xt-ha-reason');
-  haBoard.dataset.trend=ha?.ready?(ha.direction==='call'?'call':'put'):'blocked';
-  direction.textContent=ha?.ready?(ha.direction==='call'?'🟢 TENDÊNCIA DE ALTA · somente CALL':'🔴 TENDÊNCIA DE BAIXA · somente PUT'):'AGUARDANDO / NÃO OPERAR';
-  counts.textContent=ha?'🟢 '+ha.green+' verdes · 🔴 '+ha.red+' vermelhas · '+ha.candles+' velas fechadas':'🟢 — verdes · 🔴 — vermelhas';
-  reason.textContent=ha?.reason||'Conecte a DEMO para consultar o histórico recente da corretora.';
   const all=Array.isArray(s.history)?s.history:[];
   const wins=all.filter(o=>o.status==='WIN').length,losses=all.filter(o=>o.status==='LOSS').length;
   by('xt-wins').textContent=String(wins);
