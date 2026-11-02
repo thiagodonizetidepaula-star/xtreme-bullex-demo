@@ -85,7 +85,8 @@ $('startSignalAuto').onclick=async()=>{
   limit:Number($('limit').value),
   min_payout:Number($('min_payout').value),
   pause_after:Number($('pause_after').value),
-  filter_lateral:true
+  filter_lateral:true,
+  gale_enabled:Boolean(document.getElementById('xt-gale-enabled')?.checked)
  };
  busy=true;$('startSignalAuto').disabled=true;
  $('autoSignalStatus').textContent='Solicitando ativação do automático DEMO…';
