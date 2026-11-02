@@ -194,6 +194,7 @@ $('executeSignal').onclick=async()=>{
 // Native Android selects scroll to the selected option. Keep the quick and
 // M5/M1 menus physically separate so 3s, 5s, 6s, 7s and 10s are visible.
 const TECHNICAL_PROFILES=[
+ 'fable_8',
  'trend_ema','swing_pullback','sr_breakout','sr_reversal',
  'bollinger_breakout','rsi_bollinger','candle_patterns','macd_adx'
 ];
