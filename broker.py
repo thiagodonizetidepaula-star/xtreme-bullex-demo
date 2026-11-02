@@ -141,6 +141,9 @@ class Broker:
         self.feed_lag_warning=False
         self.pause_after=20
         self.last_closed_at=0
+        self.gale_enabled=False
+        self.gale_pending=None
+        self.gale_status='Martingale desligado'
         self.lateral_filter=True
         self.market_quality='Aguardando leitura'
         self.minute_engine=MinuteSignals()
@@ -386,7 +389,11 @@ class Broker:
                                            'Stop Win atingido.' if pnl>=self.stop_win else 'Stop Loss atingido.')
                     self.log('Automático encerrado: '+self.auto_stop_reason)
                 elif self.auto_strategy=='zigzag_fractal':
-                    if not self.pending:self.try_scan_order(scan_candidates)
+                    # A confirmed LOSS can schedule exactly one same-direction
+                    # DEMO attempt at the NEXT candle's opening tick. While
+                    # armed, no other original ZigZag signal may get ahead.
+                    gale_wait=self._try_gale_next_candle()
+                    if not gale_wait and not self.pending:self.try_scan_order(scan_candidates)
                 elif direction and not self.pending:
                     # Same server-validated signal offered to the manual button;
                     # never act on a stale quote, sideways market or expired
@@ -516,6 +523,7 @@ class Broker:
             self.validation_message=('Duração %.2fs diferente dos %ds pedidos. '
                                      'Automático bloqueado para esta duração.'%(duration,requested))
         self.history.append(p);self.history=self.history[-300:];self.pending=None;self.last_closed_at=time.time();self.save(p);self.log('Resultado confirmado: '+p['status'])
+        self._arm_gale_after_loss(p)
         self.recent_closed_deals.clear()
         return True
     def save(self,p):
@@ -604,6 +612,81 @@ class Broker:
             self.history_last_request=now
             return
 
+    def _arm_gale_after_loss(self,p):
+        """Schedule ONE optional x2 DEMO follow-up, only after official LOSS.
+
+        No addition to ZigZag rules; Gale is a separate operator-selected
+        follow-up with an explicit next-candle deadline.
+        """
+        self.gale_pending=None
+        if not self.gale_enabled or not self.auto or self.auto_strategy!='zigzag_fractal':
+            return
+        if p.get('gale_level'):
+            self.gale_status='Gale concluído; sem segundo Martingale'
+            return
+        if p.get('status')!='LOSS':
+            self.gale_status='Sem Gale: resultado não foi LOSS'
+            return
+        symbol=p.get('asset')
+        watch=self.radar.watches.get(symbol)
+        stake=round(float(p['amount'])*2,2)
+        pnl=sum(x.get('net',0) for x in self.history)-self.baseline
+        asset=self.assets.get(symbol,{})
+        timeframe=self.scan_timeframe
+        if (p.get('expiry') not in self.validated_expiries or
+            not watch or not watch.price_time or
+            stake>100 or self.balance is None or stake>self.balance or
+            not asset.get('available') or asset.get('payout',0)<self.min_payout or
+            self.count>=self.limit or pnl<=-self.stop_loss or
+            pnl>=self.stop_win or -pnl+stake>self.stop_loss):
+            self.gale_status='Gale não agendado: expiração, saldo, ativo ou stop não permite'
+            return
+        tick=watch.price_time
+        next_bucket=(int(tick)//timeframe+1)*timeframe
+        self.gale_pending={'asset':symbol,'direction':p['direction'],
+                           'amount':stake,'expiry':p['expiry'],
+                           'timeframe':timeframe,'next_bucket':next_bucket,
+                           'armed_at':time.time()}
+        self.gale_status='Gale aguardando próxima vela de '+str(timeframe)+'s · '+symbol
+        self.log(self.gale_status)
+
+    def _gale_tick_ready(self,g):
+        now=time.time()
+        watch=self.radar.watches.get(g['asset'])
+        if not (watch and watch.fresh(now)):return False
+        tf=g['timeframe']
+        tick=watch.price_time
+        start=int(tick)//tf*tf
+        # Enforce strict next candle and no late entry. For 3s expiry
+        # require the first 1s of the newly opened 5s candle.
+        allowance=1.0 if tf==5 else 2.0
+        return (start==g['next_bucket'] and
+                0<=tick-start<=allowance and
+                now>=g['armed_at'] and now-g['armed_at']<=tf+3)
+
+    def _try_gale_next_candle(self):
+        """True while Gale has priority (including when its deadline expires)."""
+        g=self.gale_pending
+        if not g:return False
+        now=time.time()
+        watch=self.radar.watches.get(g['asset'])
+        if (not self.auto or not self.demo_confirmed or not watch or
+            now-g['armed_at']>g['timeframe']+3 or
+            (watch.price_time and int(watch.price_time)//g['timeframe']*g['timeframe']>
+             g['next_bucket'])):
+            self.gale_pending=None
+            self.gale_status='Gale cancelado: próxima vela perdida ou DEMO indisponível'
+            self.log(self.gale_status)
+            return False
+        if not self._gale_tick_ready(g):return True
+        try:
+            self.order(g['direction'],g['amount'],g['expiry'],symbol=g['asset'],gale=True)
+        except ValueError as error:
+            self.gale_pending=None
+            self.gale_status='Gale descartado: '+str(error)
+            self.log(self.gale_status)
+        return True
+
     def try_scan_order(self,candidates):
         """Only fresh, newly confirmed DEMO BUY/SELL signals with selected expiry."""
         now=time.time()
@@ -668,14 +751,25 @@ class Broker:
             self.auto=False;self.auto_trial=False;self.symbol=symbol;self.ticks.clear();self.received=0;self.price_time=0;self.quote_samples.clear()
             self.last_signal=None;self.last_signal_at=0;self.last_signal_bucket=None;self.minute_engine=MinuteSignals();self.exhaustion={3:TickExhaustion(3),5:TickExhaustion(5)}
             self.send('changeSymbol',{'asset':symbol,'period':5});self.send('subfor',symbol);self.log('Aguardando preços de '+symbol)
-    def order(self,direction,amount,expiry=5,symbol=None):
+    def order(self,direction,amount,expiry=5,symbol=None,gale=False):
         with self.lock:
             if direction not in ('call','put'):raise ValueError('Direção inválida.')
             expiry=parse_expiry(expiry)
             if not isinstance(amount,(int,float)) or not math.isfinite(amount) or not 1<=amount<=100:raise ValueError('Valor demo permitido: 1 a 100.')
             if not self.connected or not self.demo_confirmed:raise ValueError('Saldo de conta demo ainda não confirmado.')
             if self.pending:raise ValueError('Há uma ordem pendente. Não será enviada outra.')
-            if time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
+            if not gale and time.time()-self.last_order<10:raise ValueError('Aguarde o intervalo mínimo de 10 segundos.')
+            if gale:
+                g=self.gale_pending
+                if (not self.auto or not self.gale_enabled or not g or
+                    g['asset']!=(self.symbol if symbol is None else symbol) or
+                    g['direction']!=direction or g['expiry']!=expiry or
+                    abs(g['amount']-amount)>0.0001 or not self._gale_tick_ready(g)):
+                    raise ValueError('Gale bloqueado: próxima vela não confirmada ou configuração mudou.')
+                pnl=sum(x.get('net',0) for x in self.history)-self.baseline
+                if (self.count>=self.limit or pnl>=self.stop_win or
+                    pnl<=-self.stop_loss or -pnl+amount>self.stop_loss):
+                    raise ValueError('Gale excede o limite de risco configurado.')
             target=self.symbol if symbol is None else symbol
             if symbol is not None:
                 if not self.auto or self.auto_strategy!='zigzag_fractal':
@@ -689,8 +783,12 @@ class Broker:
             if asset.get('payout',0)<self.min_payout:raise ValueError('Payout abaixo do mínimo configurado.')
             if self.balance is None or amount>self.balance:raise ValueError('Saldo demo insuficiente ou desconhecido.')
             rid='demo-'+uuid.uuid4().hex
-            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':target,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False}
-            self.last_order=time.time();self.count+=1;self.save(self.pending)
+            self.pending={'id':str(uuid.uuid4()),'requestId':rid,'asset':target,'direction':direction,'amount':amount,'payout':asset['payout'],'expiry':expiry,'status':'ENVIANDO','sent_at':time.time(),'broker_order_id':None,'timed_out':False,'gale_level':1 if gale else 0}
+            self.last_order=time.time();self.count+=1
+            if gale:
+                self.gale_pending=None
+                self.gale_status='Gale DEMO enviado: '+target+' · '+direction.upper()+' ×2'
+            self.save(self.pending)
             try:self.send('openOrder',{'asset':target,'amount':amount,'action':direction,'isDemo':1,'requestId':rid,'optionType':100,'time':expiry})
             except Exception:self.auto=False;self.log('Envio sem confirmação. Não repita a ordem; confira na corretora.');raise ValueError('Envio sem confirmação. Automático pausado.') from None
             self.log('Ordem demo enviada; aguardando confirmação.')
@@ -854,6 +952,10 @@ class Broker:
             pause=c.get('pause_after',20)
             if type(pause) is not int or pause not in PAUSE_CHOICES:
                 raise ValueError('Escolha pausa de 5, 10, 15, 20 ou 30 segundos.')
+            gale_enabled=c.get('gale_enabled',False)
+            if type(gale_enabled) is not bool or (gale_enabled and
+                (strategy!='zigzag_fractal' or triangle_mode or zone_mode)):
+                raise ValueError('Martingale disponível somente em ZigZag + Fractal na conta DEMO.')
             filter_lateral=c.get('filter_lateral',True)
             if type(filter_lateral) is not bool:
                 raise ValueError('Filtro de lateralização inválido.')
@@ -919,6 +1021,10 @@ class Broker:
             self.auto_expiry=expiry;self.pause_after=pause;self.lateral_filter=filter_lateral
             self.fast_strategy=fast_strategy
             self.auto_strategy=strategy
+            self.gale_enabled=gale_enabled
+            self.gale_pending=None
+            self.gale_status=('Martingale 1×2 ativado: aguardando LOSS oficial' if gale_enabled
+                              else 'Martingale desligado')
             self.zone_mode=(zone_mode or triangle_mode) if strategy=='zigzag_fractal' else False
             self.triangle_mode=triangle_mode if strategy=='zigzag_fractal' else False
             self.triangle_observe=triangle_observe if self.triangle_mode else False
@@ -1007,7 +1113,7 @@ class Broker:
                         self.triangle_entry,self.triangle_adx,self.triangle_ema)
                 self.triangle_last_report=now
             radar_status=self.radar.status(now) if self.auto_strategy=='zigzag_fractal' else None
-            return {'auto_strategy':self.auto_strategy,'zone_mode':self.zone_mode,'triangle_mode':self.triangle_mode,'triangle_observe':self.triangle_observe,
+            return {'auto_strategy':self.auto_strategy,'gale_enabled':self.gale_enabled,'gale_armed':bool(self.gale_pending),'gale_status':self.gale_status,'zone_mode':self.zone_mode,'triangle_mode':self.triangle_mode,'triangle_observe':self.triangle_observe,
                     'triangle_trial_only':self.triangle_trial_only,'triangle_sensitivity':self.triangle_sensitivity,
                     'triangle_reports':list(self.triangle_reports.values())[-10:],
                     'triangle_observations':list(self.triangle_observations)[-12:],
