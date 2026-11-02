@@ -44,7 +44,7 @@ class TechnicalTests(unittest.TestCase):
                 e=TechnicalStrategy(name,5)
                 self.assertEqual(e.profile,name)
                 self.assertEqual(e.bar_seconds,5)
-                self.assertEqual(e.warmup_bars,205 if name=='fable_8' else 42)
+                self.assertEqual(e.warmup_bars,42)
                 self.assertEqual(len(e.bars),0)
                 self.assertIsNone(e.evaluate(BASE))
                 self.assertIn('Aguardando',e.reason)
