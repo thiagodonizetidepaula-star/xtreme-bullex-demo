@@ -6,6 +6,7 @@ from zigzag_trendline import ZigZagFractalTrend
 from zigzag_fractal import ZigZagFractalSell
 from market_radar import Radar
 from broker import Broker
+from test_heikin_ashi_v33 import trend_bars
 
 BASE=1800000000
 VALUES=[12,11.8,11.5,11.6,12.3,13.2,14.0,13.5,12.8,12.1,
@@ -94,6 +95,7 @@ class TrendlineTests(unittest.TestCase):
                           'stop_win':20,'stop_loss':20,'limit':3,'min_payout':88,'pause_after':20})
             self.assertIsInstance(b.radar.watches['A_otc'].engine,ZigZagFractalTrend)
             b.radar.watches['A_otc'].engine.ingest=lambda ts,p,arrival:'call'
+            b.radar.watches['A_otc'].engine.bars.extend(trend_bars(60,BASE))
             b.event('updateStream',[['A_otc',BASE,100.1]])
             orders=[json.loads(msg[2:])[1] for msg in b.ws.sent
                     if msg.startswith('42["openOrder"')]
@@ -117,6 +119,7 @@ class TrendlineTests(unittest.TestCase):
             # A real, fresh stream is still mandatory before any non-OTC DEMO order.
             watch=b.radar.watches['AAPL']
             watch.engine.ingest=lambda ts,p,arrival:'call'
+            watch.engine.bars.extend(trend_bars(60,BASE))
             b.event('updateStream',[['AAPL',BASE-300,100.1]])
             self.assertIsNone(b.pending)
             b.event('updateStream',[['AAPL',BASE,100.2]])
