@@ -723,9 +723,7 @@ class Broker:
             if self.triangle_mode:
                 key=(symbol,self.scan_timeframe,self.auto_expiry)
                 report=self.triangle_reports.get(key,{})
-                if (self.triangle_observe or (not self.triangle_trial_only and
-                    (report.get('status')!='PAPER_APROVADO' or
-                     self.auto_expiry not in self.validated_expiries))):
+                if self.triangle_observe:
                     price=(watch.engine.bars[-1]['close'] if watch.engine.bars else None)
                     self.triangle_observations.append({
                         'time':now,'asset':symbol,'timeframe':self.scan_timeframe,
@@ -735,7 +733,7 @@ class Broker:
                     watch.last_signal=None;watch.signal_received=0
                     self.scan_signals+=1
                     self.log('TRIÂNGULO OBSERVADO '+symbol+' · '+watch.engine.pattern+
-                             ' · SEM ORDEM (validação cronológica pendente).')
+                             ' · SEM ORDEM (modo observação escolhido).')
                     continue
             if self.technical_profile and self.technical_observe:
                 self.scan_signals+=1
@@ -941,7 +939,9 @@ class Broker:
             triangle_adx=c.get('triangle_adx',False)
             triangle_ema=c.get('triangle_ema',False)
             technical_profile=c.get('technical_profile','')
-            technical_observe=c.get('technical_observe',True)
+            # A manually started technical run trades DEMO by default.
+            # Observation remains an explicit optional mode, never forced.
+            technical_observe=c.get('technical_observe',False)
             if (type(technical_profile) is not str or
                 (technical_profile and technical_profile not in PROFILES) or
                 type(technical_observe) is not bool or
@@ -1000,14 +1000,12 @@ class Broker:
                 # never auto-promote this profile to unrestricted trading.
                 limit=1
             if triangle_mode and not triangle_observe and not triangle_trial_only:
+                # User explicitly starts a DEMO-only experimental run. Paper
+                # holdout is not a broker execution prerequisite: the operator
+                # is collecting official results to compare strategies.
+                # Keep strict candle filters and expiry/stake/risk controls.
                 if triangle_sensitivity!='strict':
-                    raise ValueError('Automático contínuo exige estratégia rigorosa validada.')
-                if expiry not in self.validated_expiries:
-                    raise ValueError('Triângulo: expiração ainda não validada por execução DEMO oficial. Use OBSERVAÇÃO.')
-                suitable=[r for (sym,tf,exp),r in self.triangle_reports.items()
-                          if tf==analysis_timeframe and exp==expiry and r.get('status')=='PAPER_APROVADO']
-                if not suitable:
-                    raise ValueError('Triângulo: sem backtest cronológico aprovado para este timeframe/expiração. Use OBSERVAÇÃO.')
+                    raise ValueError('Triângulo automático contínuo exige filtro RIGOROSO.')
             # A missing duration validation no longer requires a manual order.
             # Automatically test just ONE demo order of amount 1; never silently
             # use the full configured stake until official settlement validates
@@ -1082,7 +1080,7 @@ class Broker:
                 self.history_unmatched=0
                 self.subscribe_scan_batch(force=True)
                 if not self.auto:raise ValueError(self.auto_stop_reason)
-                self.log((('ESTRATÉGIA '+PROFILES[technical_profile]+': '+('OBSERVAÇÃO SEM ORDENS' if technical_observe else 'TESTE DEMO EXPERIMENTAL')+'; ') if technical_profile else 'TRIÂNGULO: TESTE ÚNICO DEMO valor 1; sem aprovação contínua; ' if self.triangle_trial_only else 'TRIÂNGULO BREAKOUT: OBSERVAÇÃO sem ordens; ' if self.triangle_mode and self.triangle_observe else 'TRIÂNGULO BREAKOUT: DEMO validada; ' if self.triangle_mode else 'ZONAS AO VIVO: suporte, resistência; ' if self.zone_mode else 'VARREDURA ZigZag + Fractal + linha; ')+('%d ativos DEMO; candles %s; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe],expiry)))
+                self.log((('ESTRATÉGIA '+PROFILES[technical_profile]+': '+('OBSERVAÇÃO SEM ORDENS' if technical_observe else 'AUTOMÁTICO DEMO EXPERIMENTAL')+'; ') if technical_profile else 'TRIÂNGULO: TESTE ÚNICO DEMO valor 1; sem aprovação contínua; ' if self.triangle_trial_only else 'TRIÂNGULO BREAKOUT: OBSERVAÇÃO sem ordens; ' if self.triangle_mode and self.triangle_observe else 'TRIÂNGULO BREAKOUT: AUTOMÁTICO DEMO EXPERIMENTAL; ' if self.triangle_mode else 'ZONAS AO VIVO: suporte, resistência; ' if self.zone_mode else 'VARREDURA ZigZag + Fractal + linha; ')+('%d ativos DEMO; candles %s; expiração %ds.'%(len(radar.eligible),{5:'5s',60:'M1',120:'M2',300:'M5'}[self.scan_timeframe],expiry)))
                 return
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
