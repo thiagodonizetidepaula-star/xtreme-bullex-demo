@@ -49,8 +49,13 @@ def cleanup_once(now=None):
     with LOCK:
         for uid,c in list(CLIENTS.items()):
             broker=c['broker']
-            if broker.auto:
+            if broker.auto or broker.schedule_enabled:
                 broker.snapshot()
+            if broker.schedule_enabled:
+                # Keep the explicitly armed DEMO session and server-side clock
+                # alive while waiting for the next window, even if Android is shut.
+                c['was_auto']=True
+                continue
             if broker.auto:
                 c['was_auto']=True
                 continue
@@ -73,7 +78,7 @@ def cleanup_once(now=None):
 
 def cleanup():
     while True:
-        time.sleep(10)
+        time.sleep(5)
         cleanup_once()
 
 class Handler(BaseHTTPRequestHandler):
@@ -128,15 +133,18 @@ class Handler(BaseHTTPRequestHandler):
                 b=c['broker']
                 if path=='/api/subscribe' and post:b.subscribe(body.get('symbol',''))
                 elif path=='/api/order-signal' and post:
+                    if b.schedule_enabled:raise ValueError('Agenda DEMO ativa. Desative para operar manualmente.')
                     b.order_signal(float(body.get('amount',0)),body.get('expiry',5),body.get('symbol',''),
                                    body.get('pause_after',20),body.get('min_payout',80),body.get('fast_strategy','trend'))
-                elif path=='/api/order' and post:b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
+                elif path=='/api/order' and post:
+                    if b.schedule_enabled:raise ValueError('Agenda DEMO ativa. Desative para operar manualmente.')
+                    b.order(body.get('direction'),float(body.get('amount',0)),body.get('expiry',5))
                 elif path=='/api/reset-history' and post:
                     if body.get('confirm') is not True:
                         raise ValueError('Confirme a exclusão do histórico DEMO.')
                     with b.lock:
-                        if b.auto or b.pending:
-                            raise ValueError('Pare o bot e resolva qualquer ordem pendente antes de zerar.')
+                        if b.auto or b.schedule_enabled or b.pending:
+                            raise ValueError('Pare o bot e a agenda, e resolva qualquer pendência antes de zerar.')
                         if JOBS.unfinished_tasks:
                             raise ValueError('Aguarde o salvamento das últimas operações e tente novamente.')
                         # Scoped to authenticated user's UUID, with JWT + RLS.
@@ -153,10 +161,19 @@ class Handler(BaseHTTPRequestHandler):
                         c['storage']='Histórico zerado'
                 elif path=='/api/resolve-pending' and post:
                     b.resolve_unconfirmed_order(body.get('pending_id'),body.get('confirm_no_open_orders'))
+                elif path=='/api/schedule' and post:
+                    b.arm_demo_schedule(body)
+                    c['was_auto']=True
+                elif path=='/api/schedule/stop' and post:
+                    b.disarm_demo_schedule()
+                    c['was_auto']=False
+                    c['retain_until']=time.time()+600
                 elif path=='/api/auto' and post:
+                    if b.schedule_enabled:raise ValueError('Agenda DEMO ativa. Desative antes do automático livre.')
                     b.start_auto(body)
                     c['was_auto']=True
                 elif path=='/api/stop' and post:
+                    if b.schedule_enabled:b.disarm_demo_schedule('Agenda DEMO parada pelo usuário.')
                     b.auto=False;b.auto_trial=False
                     b.auto_stop_reason='Parado pelo usuário.'
                     c['was_auto']=False
