@@ -29,18 +29,19 @@ def settings(tf=5,expiry=5,limit=20):
     }
 
 class TestSingleZigzag(unittest.TestCase):
-    def test_only_one_strategy_exposed_not_triangle_or_one_trade(self):
+    def test_original_zigzag_still_default_with_many_optional_strategies(self):
         block=HTML.split('<select id="expiryProfile"',1)[1].split('</select>',1)[0]
-        self.assertEqual(block.count('<option'),1)
+        self.assertGreaterEqual(block.count('<option'),11)
         self.assertIn('<option value="zigzag_fast" selected>ZIGZAG + FRACTAL',block)
-        self.assertNotIn('TRIÂNGULO',block)
-        self.assertNotIn('option value="triangle"',HTML)
+        self.assertIn('option value="triangle"',HTML)
+        self.assertIn('option value="trend_ema"',HTML)
+        self.assertIn('option value="rsi_bollinger"',HTML)
         self.assertIn('id="zigzagTimeframe"',HTML)
-        for tf in ('5','60','120'):
+        for tf in ('5','60','120','300'):
             self.assertIn('<option value="'+tf+'"',HTML)
         self.assertNotIn("limit').value='1'",JS)
-        self.assertIn("triangle_mode:false,triangle_observe:false,triangle_trial_only:false",JS)
-        self.assertIn("zone_mode:false",JS)
+        self.assertIn("triangle_mode:isTriangle",JS)
+        self.assertIn("zone_mode:profile==='zigzag_zones'",JS)
 
     def test_zigzag_configurable_timeframe_expiry_and_multiple_operations(self):
         for tf,expiry in ((5,3),(5,5),(5,60),(60,60),(120,60),(120,120),(120,180)):
@@ -85,7 +86,7 @@ class TestSingleZigzag(unittest.TestCase):
 
     def test_single_strategy_chart_countdown_and_risk_setting_survive(self):
         self.assertIn("Number(by('zigzagTimeframe')?.value||5)",UI)
-        self.assertIn("const timeframe=Number($('zigzagTimeframe').value)",JS)
+        self.assertIn("const timeframe=Number(profile==='triangle'?$('triangleTimeframe').value:$('zigzagTimeframe').value)",JS)
         self.assertIn("rememberedZigzagByTimeframe",JS)
         self.assertIn("INICIAR AUTOMÁTICO DEMO",JS)
         self.assertIn('max="1000"',HTML)
