@@ -93,13 +93,13 @@ class TechnicalTests(unittest.TestCase):
         r=Radar(lambda:TechnicalStrategy('trend_ema',5))
         b=broker()
         eligible=r.sync(b.assets,80)
-        self.assertEqual(eligible,['B_otc','C_otc','D_otc'])
-        self.assertEqual(len(r.eligible),3)
-        self.assertEqual(len(r.watches),3)
+        self.assertEqual(eligible,['B_otc','C_otc','D_otc','X_regular'])
+        self.assertEqual(len(r.eligible),4)
+        self.assertEqual(len(r.watches),4)
         self.assertNotIn('A_otc',r.eligible)
-        self.assertNotIn('X_regular',r.eligible)
+        self.assertIn('X_regular',r.eligible)
         r.sync(b.assets,92)
-        self.assertEqual(set(r.eligible),{'D_otc'})
+        self.assertEqual(set(r.eligible),{'D_otc','X_regular'})
 
     def test_all_profiles_timeframe_expiry_and_scanner(self):
         with patch('broker.time.time',return_value=BASE):
@@ -111,7 +111,7 @@ class TechnicalTests(unittest.TestCase):
                             self.assertEqual(b.technical_profile,profile)
                             self.assertEqual(b.scan_timeframe,tf)
                             self.assertTrue(b.technical_observe)
-                            self.assertEqual(len(b.radar.eligible),3)
+                            self.assertEqual(len(b.radar.eligible),4)
                             self.assertEqual(b.radar.watches['B_otc'].engine.profile,profile)
                             self.assertEqual(b.radar.watches['B_otc'].engine.bar_seconds,tf)
                             self.assertEqual(b.auto_expiry,expiry)
