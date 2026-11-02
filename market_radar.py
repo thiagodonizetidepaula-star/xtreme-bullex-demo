@@ -90,7 +90,7 @@ class Radar:
     def sync(self,assets,min_payout=RADAR_PAYOUT_FLOOR):
         floor=max(RADAR_PAYOUT_FLOOR,min_payout)
         eligible={name:asset for name,asset in assets.items()
-                  if name.endswith('_otc') and asset.get('available') and
+                  if asset.get('available') and
                   isinstance(asset.get('payout'),(int,float)) and not isinstance(asset.get('payout'),bool) and
                   math.isfinite(asset['payout']) and asset['payout']>80 and asset['payout']>=floor}
         newly=set(eligible)-set(self.eligible)
