@@ -42,6 +42,8 @@ def analyze_ha_30m(bars,period):
     state={'ready':False,'direction':None,'dominant':None,
            'green':0,'red':0,'neutral':0,'required':full,'minimum':minimum,
            'candles':0,'observed_minutes':0,'wick_indecision':0,
+           'last_minority_time':None,'bars_after_minority':None,
+           'last_color':None,'entry_after_minority':False,
            'sideways':True,'reason':'Lendo as últimas velas reais fechadas'}
     if not full:
         return dict(state,reason='Timeframe Heikin Ashi inválido')
@@ -110,8 +112,39 @@ def analyze_ha_30m(bars,period):
     direction='call' if green>red else 'put' if red>green else None
     state.update(green=green,red=red,neutral=neutral,dominant=direction,
                  wick_indecision=sum(indecision))
+    # Color is based on the *same* 12%-body doji rule used by the vote.
+    # Never infer an entry before the newest closed candle has switched
+    # BACK to the predominant color following the latest minority candle.
+    colors=[]
+    for b in ha:
+        span=max(1e-12,b['high']-b['low'])
+        body=abs(b['close']-b['open'])
+        colors.append('neutral' if body<=span*.12 else
+                      'call' if b['close']>b['open'] else 'put')
+    state['last_color']=colors[-1]
+    if direction:
+        opposite='put' if direction=='call' else 'call'
+        last_opposite=next((i for i in range(n-1,-1,-1)
+                            if colors[i]==opposite),None)
+        if last_opposite is not None:
+            state['last_minority_time']=ha[last_opposite]['t']
+            state['bars_after_minority']=n-1-last_opposite
+        else:
+            # An uninterrupted majority trend need not wait for a new
+            # minority candle that was outside the compact history window.
+            state['bars_after_minority']=n
+        state['entry_after_minority']=bool(colors[-1]==direction and
+            (last_opposite is None or last_opposite<n-1))
     if not direction:
         return dict(state,reason='Heikin Ashi empatado: mercado sem direção')
+    # A winning color count permits direction ONLY AFTER the most recent
+    # minority-colored candle has closed and a subsequent majority-colored
+    # candle has closed. No future candle is consulted and no new ZigZag
+    # signal is created by this filter.
+    if not state['entry_after_minority']:
+        return dict(state,reason=('Aguardando fechamento da próxima vela da cor '
+                                  'predominante APÓS a última vela minoritária '
+                                  '(ou doji); sem entrada antecipada'))
     # User-selected rule: whichever HA color occurs MORE often wins.
     # No arbitrary 58% or 16-percentage-point threshold. A tie blocks.
     recent_n=min(n,max(3,math.ceil(120/period)))
@@ -147,7 +180,8 @@ def analyze_ha_30m(bars,period):
     state.update(ready=True,direction=direction,sideways=False,
                  reason=('MAIS VERDES: somente CALL' if direction=='call'
                          else 'MAIS VERMELHAS: somente PUT')+
-                 ' · Heikin Ashi nas '+str(n)+' velas recentes')
+                 ' · entrada somente APÓS última vela da cor minoritária · '+
+                 str(n)+' velas recentes')
     return state
 
 
