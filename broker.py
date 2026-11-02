@@ -531,7 +531,13 @@ class Broker:
         return True
     def save(self,p):
         # Persist only allowlisted non-sensitive fields.
-        row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status','strategy','expiry','gale_level')};row['result']=p.get('result',{})
+        # Preserve existing Supabase table schema. New audit fields live in
+        # the existing JSON result column, never as undeclared SQL columns.
+        row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status')}
+        detail=dict(p.get('result') or {})
+        detail.update({'strategy':p.get('strategy'),'expiry':p.get('expiry'),
+                       'gale_level':p.get('gale_level',0)})
+        row['result']=detail
         self.persist(row)
     def fresh_quote(self):
         """Fail closed if the feed is stale, even if broker and server clocks differ.
