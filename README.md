@@ -1,3 +1,27 @@
+## V36 — Heikin Ashi: operar somente após a última vela de cor minoritária
+
+Original **ZigZag + Fractal engine is unchanged**; the Heikin Ashi module
+still considers the most recent short slice of real, fully closed broker
+candles and votes green versus red. The HA filter adds a causal entry gate:
+- If **green > red**, a fresh ZigZag CALL signal is eligible only when
+  the latest **closed Heikin Ashi candle is green** and has closed **after
+  the most recent red (minority) candle** in the available short history.
+- If **red > green**, a fresh ZigZag PUT signal is eligible only after
+  the most recent minority **green** is followed by a confirmed **red**.
+- An active/recent minority-colored last candle, a doji/neutral candle,
+  a color tie, strong wicks, sideways market or a ZigZag signal pointing
+  against the predominant color vetoes the trade. No entry on the
+  minority candle, and no repaint or anticipation of a future candle.
+- If all recent candles are the predominant color, no new counter-color
+  bar is forced: the uninterrupted dominant sequence can still pass
+  the HA filter, but a **new current** ZigZag/Fractal signal is required.
+
+The HA filter exposes `last_minority_time`, `last_color`,
+`bars_after_minority` and `entry_after_minority` for diagnosis. Historical
+signal directions and the underlying ZigZag, expiration, stop, payout,
+cooldown, confirmed-DEMO and broker order paths are preserved. No live
+win-rate or profitability is inferred from synthetic regression tests.
+
 ## V35 — Heikin Ashi: votação rápida das cores recentes
 
 **Requested change: Heikin Ashi only.** Original ZigZag + Fractal engine,
