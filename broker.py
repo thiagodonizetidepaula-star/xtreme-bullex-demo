@@ -1173,7 +1173,10 @@ class Broker:
             self.schedule_settings={k:settings[k] for k in safe_keys if k in settings}
             self.schedule_settings.update({'strategy':'zigzag_fractal','scan_all':True,
                 'triangle_observe':False,'triangle_trial_only':False,
-                'technical_observe':False,'gale_enabled':False,'limit':1})
+                'technical_observe':False,'gale_enabled':False,'limit':1,
+                'amount':amount,'stop_loss':stop_loss,'stop_win':stop_win,
+                'min_payout':min_payout,'expiry':expiry,
+                'analysis_timeframe':timeframe})
             self.schedule_enabled=True
             self.schedule_last_status=('Agenda DEMO ativada: 10:00, 14:00 e 20:00 '
                 '(Brasília). Máximo uma tentativa por janela de 10 minutos. '
