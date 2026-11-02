@@ -1118,6 +1118,171 @@ class Broker:
             self.log(('AUTOMÁTICO POR SINAL ativo em DEMO: primeira entrada de valor 1 valida a expiração; depois continua apenas com sinais atuais.' if trial else
                      'AUTOMÁTICO POR SINAL ativo em DEMO: BUY/SELL obedecem ao cartão, pausa e limites.') +
                      ' Expiração: %ds.'%expiry)
+    def arm_demo_schedule(self,settings):
+        """User-initiated fixed daily DEMO schedule; never enable REAL accounts.
+
+        The settings and broker session are deliberately in memory only.
+        Render restarts, broker disconnects and process sleeps disarm the
+        schedule rather than silently recovering credentials or replaying orders.
+        """
+        with self.lock:
+            if self.schedule_enabled:
+                raise ValueError('Agenda DEMO já está ativa. Desative antes de reconfigurar.')
+            if self.auto or self.pending:
+                raise ValueError('Pare o automático e aguarde o resultado oficial antes de agendar.')
+            if not self.connected or not self.demo_confirmed or self.closed:
+                raise ValueError('Conecte e confirme uma conta Pocket Option DEMO antes de agendar.')
+            if not isinstance(settings,dict):
+                raise ValueError('Configuração de agenda inválida.')
+            if (settings.get('strategy')!='zigzag_fractal' or
+                settings.get('scan_all') is not True or
+                settings.get('technical_observe',False) is not False or
+                settings.get('triangle_observe',False) is not False or
+                settings.get('triangle_trial_only',False) is not False or
+                settings.get('gale_enabled',False) is not False):
+                raise ValueError('Agenda exige varredura DEMO com ordens ativas, sem Martingale ou modo observação.')
+            if (settings.get('zone_mode') and settings.get('triangle_mode')) or (
+                settings.get('triangle_mode') and settings.get('triangle_sensitivity','strict')!='strict'):
+                raise ValueError('Agenda de triângulo exige filtro rigoroso.')
+            if settings.get('filter_lateral',True) is not True:
+                raise ValueError('Filtro de lateralização obrigatório na agenda DEMO.')
+            expiry=parse_expiry(settings.get('expiry',5))
+            try:
+                amount=float(settings['amount'])
+                stop_loss=float(settings['stop_loss'])
+                stop_win=float(settings['stop_win'])
+                min_payout=float(settings['min_payout'])
+                timeframe=settings['analysis_timeframe']
+            except (ValueError,TypeError,KeyError):
+                raise ValueError('Preencha valor, stops, payout e timeframe da agenda.') from None
+            if (not all(math.isfinite(x) for x in (amount,stop_loss,stop_win,min_payout)) or
+                not 1<=amount<=100 or not 1<=stop_loss<=10000 or
+                not 1<=stop_win<=10000 or stop_loss<amount or
+                not 80<=min_payout<=100 or
+                type(timeframe) is not int or timeframe not in (5,60,120,300)):
+                raise ValueError('Agenda exige valor 1–100, Stop Loss suficiente, payout mínimo 80% e timeframe válido.')
+            if expiry not in self.validated_expiries and amount!=1:
+                raise ValueError('Expiração não validada: use valor 1 DEMO para agendar a primeira operação.')
+            # Preserve a copy of the explicitly selected strategy, not a mutable
+            # reference to the UI request. The backend revalidates on each slot.
+            safe_keys=('strategy','scan_all','analysis_timeframe','triangle_mode',
+                'triangle_observe','triangle_trial_only','triangle_sensitivity',
+                'triangle_entry','triangle_adx','triangle_ema','technical_profile',
+                'technical_observe','zone_mode','expiry','fast_strategy','amount',
+                'stop_win','stop_loss','min_payout','pause_after','filter_lateral')
+            self.schedule_settings={k:settings[k] for k in safe_keys if k in settings}
+            self.schedule_settings.update({'strategy':'zigzag_fractal','scan_all':True,
+                'triangle_observe':False,'triangle_trial_only':False,
+                'technical_observe':False,'gale_enabled':False,'limit':1})
+            self.schedule_enabled=True
+            self.schedule_last_status=('Agenda DEMO ativada: 10:00, 14:00 e 20:00 '
+                '(Brasília). Máximo uma tentativa por janela de 10 minutos. '
+                'Servidor e sessão da corretora precisam permanecer ativos.')
+            self.log(self.schedule_last_status)
+            self.demo_schedule_tick()
+
+    def disarm_demo_schedule(self,reason='Agenda DEMO desligada pelo usuário.'):
+        with self.lock:
+            self.schedule_enabled=False
+            if self.schedule_scan_active:
+                self.auto=False;self.auto_trial=False
+                self.auto_stop_reason=reason
+            self.schedule_scan_active=False
+            self.schedule_slot=None
+            self.schedule_last_status=reason
+            self.log(reason)
+
+    def _schedule_skip(self,reason):
+        key=(self.schedule_day,self.schedule_slot)
+        if all(key):
+            self.schedule_done.add(key)
+        self.auto=False;self.auto_trial=False
+        self.gale_pending=None
+        self.schedule_scan_active=False
+        self.auto_stop_reason=reason
+        self.schedule_last_status=reason
+        self.log(reason)
+
+    def demo_schedule_tick(self):
+        """Run from server housekeeping and status; never place without signal."""
+        with self.lock:
+            if not self.schedule_enabled:return
+            now=time.time()
+            if not self.connected or not self.demo_confirmed or self.closed:
+                self.disarm_demo_schedule('Agenda DEMO desligada: corretora desconectada. Rearme manualmente.')
+                return
+            day=local_day(now)
+            if self.schedule_scan_active:
+                if self.pending:
+                    # An order already sent is spent, even if broker ACK is late.
+                    self.schedule_scan_active=False
+                    self.auto=False;self.auto_trial=False
+                    return
+                if not self.auto:
+                    self._schedule_skip('Horário '+self.schedule_slot+
+                        ' não executado: varredura interrompida; não repetir automaticamente.')
+                    return
+                if now>=self.schedule_deadline:
+                    self._schedule_skip('Horário '+self.schedule_slot+
+                        ' encerrado sem sinal confirmado; nenhuma ordem enviada.')
+                return
+            if self.auto:
+                # A free-running bot must never coexist with the schedule.
+                self.disarm_demo_schedule('Agenda desligada: outro automático já está ativo.')
+                return
+            for slot in SLOTS:
+                key=(day,slot)
+                if key in self.schedule_done:continue
+                warm,start,deadline=slot_times(now,slot,
+                    warmup_seconds(self.schedule_settings['analysis_timeframe']))
+                if now>=deadline:
+                    self.schedule_done.add(key)
+                    self.schedule_last_status=('Janela '+slot+
+                        ' perdida ou anterior à ativação; não operar fora do horário.')
+                    continue
+                if now<warm:
+                    return
+                if self.pending:
+                    # Wait for the official close, never override the global
+                    # one-unresolved-order safety rule.
+                    return
+                pnl=sum(float(h.get('net') or 0) for h in self.history
+                    if h.get('status') in ('WIN','LOSS','EMPATE') and
+                    local_day(h.get('sent_at',0))==day)
+                if pnl>=self.schedule_settings['stop_win'] or pnl<=-self.schedule_settings['stop_loss']:
+                    self.disarm_demo_schedule('Agenda DEMO desligada: Stop Win/Loss diário atingido.')
+                    return
+                self.schedule_slot=slot
+                self.schedule_day=day
+                self.schedule_start=start
+                self.schedule_deadline=deadline
+                self.schedule_scan_active=True
+                try:
+                    self.start_auto(dict(self.schedule_settings))
+                except (ValueError,TypeError) as e:
+                    self._schedule_skip('Horário '+slot+' pulado: '+str(e))
+                    return
+                self.schedule_last_status=('Aquecendo radar para '+slot+
+                    ' (Brasília). Uma única ordem DEMO somente entre '+slot+
+                    ' e +10 minutos, se houver sinal confirmado.')
+                self.log(self.schedule_last_status)
+                return
+
+    def demo_schedule_status(self,now=None):
+        now=time.time() if now is None else now
+        day=local_day(now)
+        nxt=next_unspent_slot(now,self.schedule_done) if self.schedule_enabled else None
+        return {'enabled':self.schedule_enabled,'timezone':'America/Sao_Paulo',
+                'slots':list(SLOTS),'window_minutes':10,
+                'today':day,
+                'completed_today':[s for s in SLOTS if (day,s) in self.schedule_done],
+                'active_slot':self.schedule_slot if self.schedule_scan_active else None,
+                'warming_up':bool(self.schedule_scan_active and now<self.schedule_start),
+                'next_slot':nxt['slot'] if nxt else None,
+                'next_day':nxt['day'] if nxt else None,
+                'last_status':self.schedule_last_status,
+                'session_only':True,'account':'DEMO'}
+
     def snapshot(self):
         with self.lock:
             self.demo_schedule_tick()
@@ -1135,6 +1300,10 @@ class Broker:
             # because a mobile browser is suspended. Quote freshness remains
             # mandatory for EVERY order and missing candles are never filled.
             feed_limit=M1_FEED_STOP_SECONDS if self.auto_expiry in LONG_EXPIRIES else 20
+            if self.schedule_scan_active:
+                # Scanner can warm up before a slot; stale quotes still NEVER
+                # qualify for entry, even if prewarm has a longer feed grace.
+                feed_limit=max(feed_limit,warmup_seconds(self.scan_timeframe)+600)
             if self.auto and now-self.auto_started_at>=AUTO_MAX_SESSION_SECONDS:
                 self.auto=False;self.auto_trial=False
                 self.auto_stop_reason='Sessão automática DEMO atingiu 60 minutos; reinício manual obrigatório.'
