@@ -71,13 +71,24 @@ $('startSignalAuto').onclick=async()=>{
    render();return;
   }
  }
- const scanAll=true; // V32: one user-facing strategy, scanning available DEMO OTC assets.
+ const profile=$('expiryProfile').value;
+ const isTechnical=TECHNICAL_PROFILES.includes(profile);
+ const isTriangle=profile==='triangle';
+ const scanAll=true; // Every eligible open OTC DEMO instrument, not just selected asset.
  if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
  const params={
   symbol:'',strategy:'zigzag_fractal',scan_all:true,
-   analysis_timeframe:Number($('zigzagTimeframe').value),
-   triangle_mode:false,triangle_observe:false,triangle_trial_only:false,
-   zone_mode:false,
+   analysis_timeframe:Number(isTriangle?$('triangleTimeframe').value:$('zigzagTimeframe').value),
+   triangle_mode:isTriangle,
+   triangle_observe:isTriangle&&$('triangleExecution').value==='observe',
+   triangle_trial_only:isTriangle&&$('triangleExecution').value==='trial',
+   triangle_sensitivity:$('triangleSensitivity').value,
+   triangle_entry:$('triangleEntry').value,
+   triangle_adx:Boolean($('triangleADX').checked),
+   triangle_ema:Boolean($('triangleEMA').checked),
+   technical_profile:isTechnical?profile:'',
+   technical_observe:isTechnical&&$('technicalExecution').value==='observe',
+   zone_mode:profile==='zigzag_zones',
   expiry:Number($('expiry').value),fast_strategy:selectedQuickStrategy(),
   amount:Number($('amount').value),
   stop_win:Number($('stop_win').value),
@@ -86,7 +97,7 @@ $('startSignalAuto').onclick=async()=>{
   min_payout:Number($('min_payout').value),
   pause_after:Number($('pause_after').value),
   filter_lateral:true,
-  gale_enabled:Boolean(document.getElementById('xt-gale-enabled')?.checked)
+  gale_enabled:!isTriangle&&profile!=='zigzag_zones'&&Boolean(document.getElementById('xt-gale-enabled')?.checked)
  };
  busy=true;$('startSignalAuto').disabled=true;
  $('autoSignalStatus').textContent='Solicitando ativação do automático DEMO…';
@@ -95,7 +106,9 @@ $('startSignalAuto').onclick=async()=>{
   snapshot=await api('status');
   render();
   $('autoSignalStatus').textContent=snapshot.auto?
-   'ZIGZAG + FRACTAL DEMO ATIVO: buscando BUY/SELL confirmados até o limite configurado.':
+   ((isTechnical&&$('technicalExecution').value==='observe')||(isTriangle&&$('triangleExecution').value==='observe')?
+     'OBSERVAÇÃO ATIVA · varrendo todos os pares elegíveis, SEM ORDENS.':
+     'DEMO ATIVO · '+$('expiryProfile').selectedOptions[0].textContent+' · procurando sinais fechados em todos os pares elegíveis.'):
    'O início não permaneceu ativo: '+(snapshot.auto_stop_reason||snapshot.message||'Verifique os avisos.');
  }catch(e){
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
