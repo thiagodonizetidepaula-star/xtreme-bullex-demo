@@ -139,12 +139,19 @@ def analyze_ha_30m(bars,period):
     distance=abs(coarse[-1]-coarse[0])
     travel=sum(abs(y-x) for x,y in zip(coarse,coarse[1:]))
     efficiency=distance/travel if travel else 0
+    # A repeating sideways pattern can alias at exactly 1-minute samples.
+    # Recheck direction efficiency across ALL closed HA candles.
+    raw_path=sum(abs(b['close']-a['close']) for a,b in zip(ha,ha[1:]))
+    raw_efficiency=abs(ha[-1]['close']-ha[0]['close'])/raw_path if raw_path else 0
     typical=median(b['high']-b['low'] for b in window)
-    threshold=1.4*typical*math.sqrt(min(60,period)/period)
+    # 5s has 12x more bars per minute than M1; scale displacement
+    # relative to typical bar size so periodic sideways wiggles fail.
+    threshold=1.4*typical*math.sqrt(max(1,60/period))
     net=window[-1]['close']-window[0]['open']
     move_ok=net>threshold if direction=='call' else net<-threshold
     state['efficiency']=round(efficiency,3)
-    if not move_ok or efficiency<.17:
+    state['raw_efficiency']=round(raw_efficiency,3)
+    if not move_ok or efficiency<.17 or raw_efficiency<.12:
         return dict(state,reason='Mercado lateralizado ou movimento sem continuidade')
     state.update(ready=True,direction=direction,sideways=False,
                  reason=('TENDÊNCIA DE ALTA' if direction=='call' else 'TENDÊNCIA DE BAIXA')+
