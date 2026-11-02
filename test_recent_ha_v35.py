@@ -34,6 +34,70 @@ class TestRecentColors(unittest.TestCase):
         self.assertTrue(result['ready'],result)
         self.assertEqual(result['direction'],'call')
 
+    def test_waits_until_after_last_minority_red_before_call(self):
+        from unittest.mock import patch
+        bars=trend_bars(5)[-36:]
+        def fake_h(newest_green):
+            candles=[]
+            for i,b in enumerate(bars):
+                o=100+i*.3
+                # 18 green / 18 red with alternation, promote one red
+                # to green to obtain 19:17 regardless of final color.
+                green=(i%2==0 or (i==35 if newest_green else i==33))
+                c=o+(.15 if green else -.15)
+                candles.append({'t':b['t'],'open':o,'close':c,
+                                'high':max(o,c)+.01,'low':min(o,c)-.01})
+            return candles
+        with patch('heikin_ashi.heikin_ashi',return_value=fake_h(False)):
+            blocked=analyze_ha_30m(bars,5)
+        self.assertEqual((blocked['green'],blocked['red']),(19,17))
+        self.assertFalse(blocked['ready'])
+        self.assertEqual(blocked['last_color'],'put')
+        self.assertEqual(blocked['bars_after_minority'],0)
+        self.assertFalse(blocked['entry_after_minority'])
+        self.assertIn('APÓS',blocked['reason'])
+        with patch('heikin_ashi.heikin_ashi',return_value=fake_h(True)):
+            ready=analyze_ha_30m(bars,5)
+        self.assertEqual((ready['green'],ready['red']),(19,17))
+        self.assertTrue(ready['ready'],ready)
+        self.assertEqual(ready['last_color'],'call')
+        self.assertEqual(ready['bars_after_minority'],2)
+        self.assertTrue(ready['entry_after_minority'])
+        self.assertLess(ready['last_minority_time'],bars[-1]['t'])
+
+    def test_waits_for_red_after_last_minor_green_before_put(self):
+        from unittest.mock import patch
+        bars=trend_bars(5,direction='put')[-36:]
+        def fake_h(last_red):
+            out=[]
+            for i,b in enumerate(bars):
+                o=200-i*.3
+                red=(i%2==0 or (i==35 if last_red else i==33))
+                c=o+(-.15 if red else .15)
+                out.append({'t':b['t'],'open':o,'close':c,
+                            'high':max(o,c)+.01,'low':min(o,c)-.01})
+            return out
+        with patch('heikin_ashi.heikin_ashi',return_value=fake_h(False)):
+            blocked=analyze_ha_30m(bars,5)
+        self.assertEqual((blocked['red'],blocked['green']),(19,17))
+        self.assertFalse(blocked['ready'])
+        self.assertEqual(blocked['last_color'],'call')
+        with patch('heikin_ashi.heikin_ashi',return_value=fake_h(True)):
+            allowed=analyze_ha_30m(bars,5)
+        self.assertTrue(allowed['ready'],allowed)
+        self.assertEqual(allowed['direction'],'put')
+        self.assertEqual(allowed['last_color'],'put')
+        self.assertEqual(allowed['bars_after_minority'],2)
+
+    def test_unbroken_majority_does_not_wait_for_new_minority(self):
+        from heikin_ashi import permitted_ha_entry
+        sample=trend_bars(5)[-36:]
+        s=analyze_ha_30m(sample,5)
+        self.assertTrue(s['ready'],s)
+        self.assertIsNone(s['last_minority_time'])
+        self.assertEqual(s['last_color'],'call')
+        self.assertTrue(permitted_ha_entry(sample,5,'call')[0])
+
     def test_short_sample_and_sideways(self):
         s=analyze_ha_30m(trend_bars(5)[-12:],5)
         self.assertTrue(s['ready'],s)
