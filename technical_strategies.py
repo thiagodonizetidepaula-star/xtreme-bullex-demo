@@ -96,7 +96,7 @@ class TechnicalStrategy:
         if profile not in PROFILES:raise ValueError('Perfil técnico desconhecido')
         if period not in EXPIRIES:raise ValueError('Timeframe técnico desconhecido')
         self.profile=profile
-        if profile=='fable_8':self.warmup_bars=205
+        # FABLE uses the same 42 verified closed candles as the other technical profiles.
         self.bar_seconds=period
         self.timeframe={5:'5s',60:'M1',120:'M2',300:'M5'}[period]
         self.collector=VerifiedBars(period)
@@ -156,25 +156,26 @@ class TechnicalStrategy:
         direction=None
         reason=''
         if profile=='fable_8':
-            # Transparent eight-check approximation, not the third-party algorithm.
-            if self.bar_seconds!=60 or n<205:
-                self.reason='FABLE 8/8: aguardando 205 candles M1 reais fechados'
+            # Fast DEMO approximation using the same 42 verified candles as
+            # existing strategies. EMA8/21 and a 35-bar trend are explicitly
+            # proxies, NOT genuine EMA50/200 or an observed 1h trend.
+            if self.bar_seconds!=60:
+                self.reason='FABLE exige gráfico M1'
                 return None
-            ema50=ema(closes,50);ema200=ema(closes,200)
             r=rsi(closes)
-            one_hour=closes[-1]-closes[-61]
+            proxy_hour=closes[-1]-closes[-36]
             momentum=closes[-1]-closes[-6]
             move=closes[-1]-closes[-2]
             checks={}
             for candidate in ('call','put'):
                 sign=1 if candidate=='call' else -1
                 checks[candidate]=[
-                    one_hour*sign>0,
+                    proxy_hour*sign>0,
                     (last['low']<=support+.4*a if sign==1 else last['high']>=resistance-.4*a),
                     move*sign>.12*a,
                     momentum*sign>.35*a,
                     0<=now-last['t']<=180,
-                    (ema50-ema200)*sign>0,
+                    (e8-e21)*sign>0,
                     (abs(last['close']-support)<=1.2*a if sign==1 else abs(last['close']-resistance)<=1.2*a),
                     (42<=r<=68 if sign==1 else 32<=r<=58),
                 ]
@@ -182,7 +183,7 @@ class TechnicalStrategy:
             qualified=[d for d in ('call','put') if all(checks[d])]
             if len(qualified)==1 and strength>=16 and strong_candle(last,qualified[0]):
                 direction=qualified[0]
-            reason='8 filtros M1: CALL '+str(sum(checks['call']))+'/8; PUT '+str(sum(checks['put']))+'/8; RSI '+str(round(r,1))
+            reason='FABLE rápida (proxies tendência 35 velas e EMA 8/21): CALL '+str(sum(checks['call']))+'/8; PUT '+str(sum(checks['put']))+'/8; RSI '+str(round(r,1))
         elif profile=='trend_ema':
             if trend and strength>=18 and strong_candle(last,trend) and (
                 (trend=='call' and prev['close']<=prev['open'] and last['close']>e8 and
