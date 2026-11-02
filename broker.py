@@ -1002,6 +1002,8 @@ class Broker:
                          120:(120,180,300),300:(300,)}
             if technical_profile:
                 allowed=EXPIRIES
+                if technical_profile=='fable_8' and (analysis_timeframe!=60 or expiry!=60):
+                    raise ValueError('FABLE 8/8 exige análise M1 e expiração de 60 segundos.')
             if strategy=='zigzag_fractal' and (c.get('scan_all') is not True or
                 analysis_timeframe not in allowed or
                 expiry not in allowed[analysis_timeframe]):
