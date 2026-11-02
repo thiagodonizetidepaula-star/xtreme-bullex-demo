@@ -85,6 +85,17 @@
 <button id="stopSignalAuto" class="secondary stop-signal" type="button" disabled>PARAR AUTOMÁTICO</button>
 <p id="autoSignalStatus" class="hint" role="status" aria-live="polite">Automático desativado. Configure os limites e toque em iniciar.</p>
 </div>
+<section class="demo-schedule" aria-labelledby="scheduleTitle">
+ <h3 id="scheduleTitle">AGENDA AUTOMÁTICA · SOMENTE DEMO</h3>
+ <p class="schedule-hours"><strong>10:00</strong><strong>14:00</strong><strong>20:00</strong></p>
+ <p class="hint">Horário de Brasília (America/Sao_Paulo). Máximo <strong>1 operação por horário</strong>, somente com sinal confirmado, dentro dos 10 minutos após cada horário. Sem sinal, o horário é pulado. Sem Martingale.</p>
+ <div class="schedule-actions">
+  <button id="armDemoSchedule" type="button" class="execute-signal">ATIVAR AGENDA DEMO</button>
+  <button id="stopDemoSchedule" type="button" class="secondary" disabled>DESATIVAR AGENDA</button>
+ </div>
+ <p id="demoScheduleStatus" class="hint" role="status" aria-live="polite">Agenda desligada. Conecte a DEMO, configure estratégia e limites, e toque em ATIVAR.</p>
+ <p class="hint">A agenda roda no servidor enquanto ele e a sessão da corretora estiverem ativos. O Render gratuito pode suspender ou reiniciar: <strong>não há garantia de execução 24 horas</strong>. Após reinício ou desconexão, é necessário reconectar e reativar. Conta REAL não habilitada.</p>
+</section>
 <p id="offerStatus" class="hint signal-status" role="status" aria-live="polite">Conecte uma conta DEMO e acompanhe um ativo OTC.</p>
 </div><div id="pending" class="hint">Nenhuma ordem pendente.</div><progress id="progress" max="5" value="0"></progress><div id="pendingRecovery" class="pending-recovery" hidden>
 <p id="pendingRecoveryInfo" class="hint">A ordem está sem resultado oficial. Verifique no histórico e nas operações abertas da corretora antes de liberar esta pendência.</p>
