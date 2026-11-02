@@ -1,3 +1,28 @@
+## V35 — Heikin Ashi: votação rápida das cores recentes
+
+**Requested change: Heikin Ashi only.** Original ZigZag + Fractal engine,
+confirmed-pivot entries and all DEMO order/risk limits are unchanged.
+
+No 30-minute lookback or 30-minute warmup. The filter uses only the latest
+consecutive genuine CLOSED broker candles available before a newly confirmed
+ZigZag entry: up to **36 candles of 5s (3 minutes)**, **10 candles of M1**
+or **5 candles of M2**. Broker history for 5s now requests about 3 minutes
+instead of half an hour (higher timeframes request enough data for ZigZag).
+Minimum actual contiguous candles for this filter: 12, 6 and 4 respectively;
+ZigZag retains its own longer pivot warmup if necessary.
+
+The HA color with the **larger count** chooses CALL or PUT; a strict
+58% majority and 16-point edge are no longer required. An exact tie blocks.
+Existing checks still block sideways movement, dojis, excessive wicks,
+contradictory ZigZag/Fractal signals, delayed data and any stale/unverified
+broker quote. The presence of a green/red majority **does not itself
+trigger an entry**; the original ZigZag+Fractal must signal, and the broker
+must be in confirmed DEMO mode. The UI reports colored candle counts
+rather than an irrelevant "minutes analyzed" wait.
+
+No profit-rate promise is made. A small majority may be noisy; evaluate
+Win/Loss and actual broker DEMO settlements separately.
+
 ## V34 — Correção: Heikin Ashi retroativo (NÃO esperar 30 minutos)
 
 The **30 minutes are a maximum backward-looking window**, not a 30-minute
