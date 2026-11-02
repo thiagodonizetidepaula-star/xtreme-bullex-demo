@@ -5,7 +5,6 @@ from unittest.mock import patch
 from broker import Broker
 from zigzag_5s import ZigZagFractalTrend5s
 from zigzag_trendline import ZigZagFractalTrend
-from test_heikin_ashi_v33 import trend_bars
 
 NOW=1800000000
 
@@ -52,7 +51,6 @@ class Tests(unittest.TestCase):
                 b=setup_broker();b.start_auto(cfg(expiry))
                 watch=b.radar.watches['A_otc']
                 watch.engine.ingest=lambda ts,p,arrival:'call'
-                watch.engine.bars.extend(trend_bars(5,NOW))
                 b.event('updateStream',[['A_otc',NOW,101.0]])
                 orders=[json.loads(s[2:])[1] for s in b.ws.sent if s.startswith('42["openOrder"')]
                 self.assertEqual(len(orders),1)
