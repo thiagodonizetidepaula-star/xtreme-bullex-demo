@@ -12,7 +12,7 @@ from candle_psychology import candle_psychology
 
 class FiveSecondBars:
     def __init__(self):
-        self.bars=deque(maxlen=300)
+        self.bars=deque(maxlen=500)
         self.current=None
         self.completed_bars=0
         self.rejected_bars=0
