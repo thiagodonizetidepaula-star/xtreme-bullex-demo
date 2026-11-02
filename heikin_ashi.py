@@ -1,19 +1,19 @@
-"""Heikin Ashi: retrospective *maximum* 30-minute real closed-candle window.
+"""Fast causal Heikin Ashi color-vote filter on broker's RECENT closed bars.
 
-30 minutes is how far BACK we look, not a compulsory 30-minute warmup.
-Use already available broker history immediately on connect. When less
-than 30m of history is available, assess the newest contiguous segment
-with a minimum sample; never fabricate, forward-fill or enter on old bars.
+ZigZag + Fractal remains the only strategy; this filter selects its
+direction from the majority of available recent HA colors. There is no
+30-minute window, 30-minute waiting period or need to download long history.
+Reject invalid/stale/sparse OHLC, strong indecision and sideways conditions.
 """
 import math
 from statistics import median
 
-WINDOW_SECONDS=1800
-# ZigZag needs its OWN pivot warmup, independent of the HA filter.
-# A small but nontrivial HA sample removes the mistaken hard 30m wait.
-MIN_BARS={5:34,60:10,120:5}
-MIN_MAJORITY=.58
-MIN_MARGIN=.16
+# Check only recent historical candles, NOT the entire stream since connection.
+# 5s: up to 3 minutes; M1: up to 10 minutes; M2: up to 10 minutes.
+LOOKBACK_BARS={5:36,60:10,120:5}
+# Histories from the broker may be shorter; filter is separate from ZigZag's
+# own confirmed-pivot warmup and must never synthesize missing candles.
+MIN_BARS={5:12,60:6,120:4}
 
 
 def heikin_ashi(bars):
@@ -31,20 +31,18 @@ def heikin_ashi(bars):
 
 
 def analyze_ha_30m(bars,period):
-    """Analyze available closed candles strictly within the LAST 30m.
+    """Analyze only a compact recent CLOSED-candle suffix already on hand.
 
-    Does NOT require 30m to have elapsed since bot start. Prefer up to
-    30m of broker-supplied historical bars; safely use shorter actual
-    history if it has enough contiguous bars for a meaningful trend test.
-    The caller separately confirms latest candle close and fresh ticks.
+    Equal color counts mean no trend. Any greater count chooses direction,
+    subject to wick/doji and sideways checks. Fresh price and ZigZag/Fractal
+    conditions are enforced by the caller and never bypassed here.
     """
-    full=WINDOW_SECONDS//period if type(period) is int and period in MIN_BARS else 0
+    full=LOOKBACK_BARS.get(period,0) if type(period) is int else 0
     minimum=MIN_BARS.get(period,0) if type(period) is int else 0
     state={'ready':False,'direction':None,'dominant':None,
            'green':0,'red':0,'neutral':0,'required':full,'minimum':minimum,
-           'candles':0,'window_minutes':30,'observed_minutes':0,
-           'wick_indecision':0,'sideways':True,
-           'reason':'Buscando histórico retroativo real dos últimos 30 minutos'}
+           'candles':0,'observed_minutes':0,'wick_indecision':0,
+           'sideways':True,'reason':'Lendo as últimas velas reais fechadas'}
     if not full:
         return dict(state,reason='Timeframe Heikin Ashi inválido')
     if bars is None or isinstance(bars,(str,bytes,dict)):
@@ -58,20 +56,18 @@ def analyze_ha_30m(bars,period):
     latest=all_bars[-1]
     if not isinstance(latest,dict) or type(latest.get('t')) not in (int,float) or not math.isfinite(latest['t']):
         return dict(state,reason='Último candle sem horário válido')
-    # The latest CLOSED bar is the reference; do not scan past this 30m.
+    # Last closed candle is the reference. Older bars are deliberately ignored.
     end=latest['t']+period
-    cutoff=end-WINDOW_SECONDS
     selected=[]
     previous=None
-    # Walk backwards; keep only the LAST *contiguous* section within window.
-    # Gaps do not join older/irrelevant candles to the current trend.
+    # Walk backwards through up to LOOKBACK_BARS. Never merge across gaps.
     for b in reversed(all_bars):
         if not isinstance(b,dict):
             break
         t=b.get('t')
         if type(t) not in (int,float) or not math.isfinite(t):
             break
-        if t<cutoff or len(selected)>=full:
+        if len(selected)>=full:
             break
         if t>=end or (previous is not None and previous-t!=period):
             break
@@ -91,11 +87,11 @@ def analyze_ha_30m(bars,period):
     state['candles']=n
     state['observed_minutes']=round(n*period/60,2)
     if n<minimum:
-        return dict(state,reason=('Histórico retroativo insuficiente: %d/%d velas fechadas; '
-                                  'buscando dados da corretora (NÃO é espera obrigatória de 30 minutos)'%
+        return dict(state,reason=('Histórico recente insuficiente: %d/%d candles reais fechados; '
+                                  'buscar velas anteriores da corretora'%
                                   (n,minimum)))
-    # HA initial open is seeded only from the first candle IN the window;
-    # older candles, even if present in engine.bars, are not read.
+    # HA recursive seed begins with the first selected recent candle.
+    # Anything older in engine.bars has ZERO influence on the color vote.
     ha=heikin_ashi(window)
     green=red=neutral=0
     indecision=[]
@@ -116,21 +112,16 @@ def analyze_ha_30m(bars,period):
                  wick_indecision=sum(indecision))
     if not direction:
         return dict(state,reason='Heikin Ashi empatado: mercado sem direção')
-    if max(green,red)/n<MIN_MAJORITY or abs(green-red)/n<MIN_MARGIN:
-        return dict(state,reason='Sem predominância Heikin Ashi no histórico recente')
+    # User-selected rule: whichever HA color occurs MORE often wins.
+    # No arbitrary 58% or 16-percentage-point threshold. A tie blocks.
     recent_n=min(n,max(3,math.ceil(120/period)))
     recent=ha[-recent_n:]
     recent_bad=sum(indecision[-recent_n:])
     if (sum(indecision)/n>.38 or recent_bad/recent_n>.30 or
         any(indecision[-2:])):
         return dict(state,reason='Pavios longos, dojis ou indecisão Heikin Ashi: NÃO OPERAR')
-    recent_aligned=sum((b['close']>b['open']) if direction=='call'
-                       else (b['close']<b['open']) for b in recent)
-    if recent_aligned/recent_n<.55:
-        return dict(state,reason='Direção recente contradiz maioria Heikin Ashi')
-    last=ha[-1]
-    if direction=='call' and last['close']<=last['open'] or direction=='put' and last['close']>=last['open']:
-        return dict(state,reason='Última vela Heikin Ashi contradiz a tendência')
+    # The already-confirmed ZigZag/Fractal signal remains the actual entry
+    # trigger; HA is not a separate one-candle color-trigger strategy.
     # Coarsen rapid 5s candles to ~M1 for independent sideways filter.
     stride=max(1,60//period)
     coarse=[ha[i]['close'] for i in range(0,n,stride)]
@@ -154,9 +145,9 @@ def analyze_ha_30m(bars,period):
     if not move_ok or efficiency<.17 or raw_efficiency<.12:
         return dict(state,reason='Mercado lateralizado ou movimento sem continuidade')
     state.update(ready=True,direction=direction,sideways=False,
-                 reason=('TENDÊNCIA DE ALTA' if direction=='call' else 'TENDÊNCIA DE BAIXA')+
-                 ' · Heikin Ashi retroativo ('+str(state['observed_minutes'])+
-                 ' min dentro da janela de 30 min)')
+                 reason=('MAIS VERDES: somente CALL' if direction=='call'
+                         else 'MAIS VERMELHAS: somente PUT')+
+                 ' · Heikin Ashi nas '+str(n)+' velas recentes')
     return state
 
 
@@ -165,5 +156,5 @@ def permitted_ha_entry(bars,period,signal):
     if signal not in ('call','put') or not state['ready']:
         return False,state
     if state['direction']!=signal:
-        return False,dict(state,reason='Sinal ZigZag/Fractal CONTRÁRIO à tendência Heikin Ashi retroativa')
+        return False,dict(state,reason='Sinal ZigZag/Fractal contrário à cor predominante Heikin Ashi recente')
     return True,state
