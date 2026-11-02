@@ -81,7 +81,7 @@ class RapidTriangleTests(unittest.TestCase):
     def test_unvalidated_continuous_auto_still_blocked(self):
         b=broker();c=cfg()
         c['triangle_trial_only']=False
-        with self.assertRaisesRegex(ValueError,'Automático contínuo exige'):
+        with self.assertRaisesRegex(ValueError,'filtro RIGOROSO'):
             b.start_auto(c)
         self.assertFalse(b.auto)
 
