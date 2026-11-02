@@ -165,3 +165,15 @@ main{max-width:900px;padding:22px 18px;margin:0 auto}
 .xt-manual-legacy>summary{color:#94a9bb;font-size:12px}
 .xt-manual-legacy label{margin-top:12px}
 .xt-manual-legacy #connect{width:100%}
+
+/* V33 Heikin Ashi 30-minute confirmed-candle trend / no-sideways status. */
+.xt-ha-board{margin:11px 0;border:1px solid #344355;border-radius:14px;padding:12px 14px;background:#121d2b}
+.xt-ha-board>div:first-child{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.xt-ha-board strong{font-size:11px;letter-spacing:.7px;color:#c8dbea}
+.xt-ha-board span{font-size:12px;font-weight:750;color:#e5c6a2}
+.xt-ha-board #xt-ha-counts{font-size:14px;font-weight:750;color:#e0eaf4;margin:8px 0 5px}
+.xt-ha-board small{font-size:11px;color:#a8b9c8;line-height:1.5}
+.xt-ha-board[data-trend="call"]{border-color:#276c50;background:#132a23}
+.xt-ha-board[data-trend="call"] span{color:#90e9b6}
+.xt-ha-board[data-trend="put"]{border-color:#835356;background:#2b1b25}
+.xt-ha-board[data-trend="put"] span{color:#f6a9af}
