@@ -9,7 +9,7 @@ from collections import deque
 from m1_strategy import MinuteSignals
 from historical_bars import extract_closed_history,merge_historical_bars
 
-RADAR_PAYOUT_FLOOR=88
+RADAR_PAYOUT_FLOOR=80
 
 class Watch:
     def __init__(self,engine_factory=MinuteSignals):
@@ -90,9 +90,9 @@ class Radar:
     def sync(self,assets,min_payout=RADAR_PAYOUT_FLOOR):
         floor=max(RADAR_PAYOUT_FLOOR,min_payout)
         eligible={name:asset for name,asset in assets.items()
-                  if asset.get('available') and
+                  if name.endswith('_otc') and asset.get('available') and
                   isinstance(asset.get('payout'),(int,float)) and not isinstance(asset.get('payout'),bool) and
-                  math.isfinite(asset['payout']) and asset['payout']>=floor}
+                  math.isfinite(asset['payout']) and asset['payout']>80 and asset['payout']>=floor}
         newly=set(eligible)-set(self.eligible)
         self.eligible=eligible
         for sym in list(self.watches):
@@ -165,4 +165,4 @@ class Radar:
                            'reason':self.watches[a['symbol']].engine.reason,
                             'line_state':(getattr(self.watches[a['symbol']].engine,'trendline',None) or {}).get('state','sem linha'),
                             'candle_quality':getattr(self.watches[a['symbol']].engine,'candle_quality',None)}
-                          for a in samples[:20]]}
+                          for a in samples]}
