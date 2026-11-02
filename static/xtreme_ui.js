@@ -172,8 +172,45 @@
 
  const historyHeading=document.createElement('div');historyHeading.className='xt-section-heading';
  historyHeading.innerHTML='<h2>Histórico de operações</h2><p>Resultados oficiais registrados na sessão DEMO.</p>';
+ // Live official DEMO outcomes + user-scoped Supabase history (RLS).
+ const comparison=document.createElement('section');
+ comparison.id='xt-comparison';comparison.className='xt-comparison';
+ const compareTitle=document.createElement('h3');
+ compareTitle.textContent='Comparar estratégias · resultados DEMO';
+ const compareHelp=document.createElement('p');
+ compareHelp.className='xt-compare-note';
+ compareHelp.textContent='WIN/LOSS oficiais, resultado líquido e ROI sobre o total apostado. Selecione a mesma expiração para comparar de forma mais justa. Menos de 30 resultados: amostra inicial, não é prova de superioridade.';
+ const compareControl=document.createElement('label');
+ compareControl.className='xt-compare-filter';
+ compareControl.textContent='Filtrar expiração ';
+ const compareExpiry=document.createElement('select');
+ compareExpiry.id='xt-compare-expiry';
+ for(const [value,label] of [['','Todas'],['3','3s'],['5','5s'],['60','1 minuto'],
+                              ['120','2 minutos'],['180','3 minutos'],['300','5 minutos']]){
+  const option=document.createElement('option');option.value=value;option.textContent=label;
+  compareExpiry.append(option);
+ }
+ compareControl.append(compareExpiry);
+ const compareSource=document.createElement('p');
+ compareSource.className='xt-compare-source';
+ compareSource.textContent='Carregue a aba Histórico para recuperar operações anteriores.';
+ const compareTableScroll=document.createElement('div');
+ compareTableScroll.className='xt-compare-scroll';
+ const compareTable=document.createElement('table');
+ compareTable.className='xt-compare-table';
+ const compareHead=document.createElement('thead');
+ const headRow=document.createElement('tr');
+ for(const name of ['Estratégia','Operações','WIN / LOSS','Acerto','Líquido','ROI','Amostra']){
+  const cell=document.createElement('th');cell.textContent=name;headRow.append(cell);
+ }
+ compareHead.append(headRow);
+ const compareBody=document.createElement('tbody');
+ compareBody.id='xt-compare-body';
+ compareTable.append(compareHead,compareBody);
+ compareTableScroll.append(compareTable);
+ comparison.append(compareTitle,compareHelp,compareControl,compareSource,compareTableScroll);
  const historyList=document.createElement('div');historyList.id='xt-history';historyList.className='xt-history';
- panes.history.append(historyHeading,historyList);
+ panes.history.append(historyHeading,comparison,historyList);
  if(resetRow)panes.history.append(resetRow);
  const pendingRecovery=by('pendingRecovery');
  if(pendingRecovery)pendingRecovery.classList.add('xt-important-recovery');
@@ -188,6 +225,7 @@
   }
   window.scrollTo?.({top:0,behavior:'auto'});
   // Redraw chart when an invisible canvas becomes visible again.
+  if(name==='history')loadStrategyHistory();
   if(name==='operation'&&typeof drawTrendlineChart==='function'&&snapshot?.radar){
    try{drawTrendlineChart(snapshot.radar)}catch(_e){}
   }
