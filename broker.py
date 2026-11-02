@@ -673,7 +673,9 @@ class Broker:
         if (not self.auto or not self.demo_confirmed or not watch or
             now-g['armed_at']>g['timeframe']+3 or
             (watch.price_time and int(watch.price_time)//g['timeframe']*g['timeframe']>
-             g['next_bucket'])):
+             g['next_bucket']) or
+            (watch.price_time and watch.price_time>g['next_bucket']+
+             (1.0 if g['timeframe']==5 else 2.0))):
             self.gale_pending=None
             self.gale_status='Gale cancelado: próxima vela perdida ou DEMO indisponível'
             self.log(self.gale_status)
