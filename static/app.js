@@ -51,25 +51,20 @@ $('subscribe').onclick=()=>{
 };
 $('stop').onclick=()=>action('stop');
 $('tradeMode').onchange=async()=>{
+ if($('tradeMode').value==='manual'&&snapshot.demo_schedule?.enabled){
+  $('tradeMode').value='automatic';status('Desative a agenda DEMO antes de operar manualmente.');return;
+ }
  if($('tradeMode').value==='manual'&&snapshot.auto){
   $('autoSignalStatus').textContent='Parando novas entradas antes de ativar o modo manual…';
   await action('stop');
  }
  render();
 };
-$('startSignalAuto').onclick=async()=>{
- if(busy||snapshot.auto||snapshot.pending?.id)return;
- const ids=['amount','min_payout','stop_win','stop_loss','limit'];
- for(const id of ids){if(!$(id).reportValidity())return}
- const symbol=$('asset').value;
- // The user deliberately starts DEMO automation to collect official results.
- // No silent fallback to observation; backend enforces stake, expiry and stops.
+function demoAutoSettings(){
  const profile=$('expiryProfile').value;
  const isTechnical=TECHNICAL_PROFILES.includes(profile);
  const isTriangle=profile==='triangle';
- const scanAll=true; // Every eligible open OTC DEMO instrument, not just selected asset.
- if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
- const params={
+ return {
   symbol:'',strategy:'zigzag_fractal',scan_all:true,
    analysis_timeframe:Number(isTriangle?$('triangleTimeframe').value:$('zigzagTimeframe').value),
    triangle_mode:isTriangle,
@@ -92,6 +87,20 @@ $('startSignalAuto').onclick=async()=>{
   filter_lateral:true,
   gale_enabled:!isTriangle&&profile!=='zigzag_zones'&&Boolean(document.getElementById('xt-gale-enabled')?.checked)
  };
+}
+$('startSignalAuto').onclick=async()=>{
+ if(busy||snapshot.auto||snapshot.pending?.id)return;
+ const ids=['amount','min_payout','stop_win','stop_loss','limit'];
+ for(const id of ids){if(!$(id).reportValidity())return}
+ const symbol=$('asset').value;
+ // The user deliberately starts DEMO automation to collect official results.
+ // No silent fallback to observation; backend enforces stake, expiry and stops.
+ const profile=$('expiryProfile').value;
+ const isTechnical=TECHNICAL_PROFILES.includes(profile);
+ const isTriangle=profile==='triangle';
+ const scanAll=true; // Every eligible open OTC DEMO instrument, not just selected asset.
+ if(!scanAll&&!symbol){$('autoSignalStatus').textContent='Selecione e acompanhe um ativo OTC antes de iniciar.';return}
+ const params=demoAutoSettings();
  busy=true;$('startSignalAuto').disabled=true;
  $('autoSignalStatus').textContent='Solicitando ativação do automático DEMO…';
  try{
@@ -107,6 +116,36 @@ $('startSignalAuto').onclick=async()=>{
   $('autoSignalStatus').textContent='NÃO INICIADO: '+e.message;
   status(e.message);
  }finally{busy=false;render()}
+};
+$('armDemoSchedule').onclick=async()=>{
+ if(busy||snapshot.auto||snapshot.demo_schedule?.enabled||snapshot.pending?.id)return;
+ for(const id of ['amount','min_payout','stop_win','stop_loss','limit']){
+  if(!$(id).reportValidity())return;
+ }
+ const p=demoAutoSettings();
+ if(p.technical_observe||p.triangle_observe||p.triangle_trial_only){
+  $('demoScheduleStatus').textContent='Selecione OPERAR AUTOMÁTICO DEMO, não observação ou teste único.';
+  return;
+ }
+ if(p.gale_enabled){
+  $('demoScheduleStatus').textContent='Desative Martingale antes de ativar a agenda de três horários.';
+  return;
+ }
+ busy=true;
+ $('demoScheduleStatus').textContent='Ativando agenda DEMO 10h / 14h / 20h…';
+ try{
+  await api('schedule',p);
+  snapshot=await api('status');
+  render();
+ }catch(e){
+  $('demoScheduleStatus').textContent='AGENDA NÃO ATIVADA: '+e.message;
+  status(e.message);
+ }finally{busy=false;render()}
+};
+$('stopDemoSchedule').onclick=async()=>{
+ if(busy)return;
+ $('demoScheduleStatus').textContent='Desativando agenda…';
+ await action('schedule/stop');
 };
 $('stopSignalAuto').onclick=async()=>{
  if(busy)return;
@@ -244,7 +283,7 @@ $('expiry').onchange=()=>{
 $('pause_after').onchange=()=>render();
 $('min_payout').onchange=()=>render();
 $('resetHistory').onclick=async()=>{
- if(busy||snapshot.auto||snapshot.pending?.id)return;
+ if(busy||snapshot.auto||snapshot.demo_schedule?.enabled||snapshot.pending?.id)return;
  if(!confirm('Excluir permanentemente o placar e o histórico DEMO desta conta? Esta ação não cancela operações na corretora.'))return;
  busy=true;$('resetHistory').disabled=true;
  $('resetMessage').textContent='Excluindo registros da sua conta…';
@@ -408,14 +447,29 @@ function render(){
  // A preexisting active automation (or a launch from another screen) must
  // never appear hidden behind manual mode.
  if(s.auto&&$('tradeMode').value!=='automatic')$('tradeMode').value='automatic';
+ const sched=s.demo_schedule||{};
+ $('armDemoSchedule').disabled=busy||!!s.auto||!!sched.enabled||!s.demo_confirmed||!!s.pending?.id;
+ $('stopDemoSchedule').disabled=busy||!sched.enabled;
+ $('demoScheduleStatus').textContent=sched.enabled?
+  ('AGENDA DEMO ATIVA · '+(sched.completed_today||[]).length+'/3 horários já consumidos hoje'+
+   (sched.active_slot?' · '+(sched.warming_up?'aquecendo radar para ':'procurando sinal às ')+sched.active_slot:'')+
+   (sched.next_slot?' · próximo: '+sched.next_slot+' ('+sched.next_day+')':'')+
+   '. '+(sched.last_status||'')):
+  (sched.last_status||'Agenda desligada. Ative depois de conectar a conta DEMO.');
+ for(const id of ['expiryProfile','zigzagTimeframe','triangleTimeframe','expiry','amount',
+                  'min_payout','stop_win','stop_loss','limit','pause_after',
+                  'technicalExecution','triangleExecution','triangleSensitivity']){
+  const el=$(id);
+  if(el)el.disabled=!!s.auto||!!sched.enabled;
+ }
  const selectedAuto=$('tradeMode').value==='automatic';
  $('manualActions').hidden=selectedAuto;
  $('autoActions').hidden=!selectedAuto;
  const ready=Boolean(offer.ready)&&!busy&&!s.auto&&!s.pending?.id&&$('asset').value===offer.asset&&!selectedAuto;
  $('executeSignal').disabled=!ready;
  $('executeSignal').textContent=ready?'OPERAR '+direction+' • '+expiry+'s':'AGUARDANDO SINAL';
- $('startSignalAuto').disabled=busy||s.auto||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
- $('stopSignalAuto').disabled=busy||!s.auto;
+ $('startSignalAuto').disabled=busy||s.auto||!!s.demo_schedule?.enabled||!s.demo_confirmed||!!s.pending?.id||!selectedAuto;
+ $('stopSignalAuto').disabled=busy||!s.auto||!!s.demo_schedule?.enabled;
  if(s.auto&&s.triangle_mode&&s.triangle_trial_only){
   $('autoSignalStatus').textContent='TESTE ÚNICO DEMO ATIVO: '+(radar.receiving||0)+' ativos com cotações; esperando triângulo confirmado em 5s para uma única ordem de valor 1 (expiração '+s.auto_expiry+'s).';
  }else if(s.auto&&s.triangle_mode&&s.triangle_observe){
