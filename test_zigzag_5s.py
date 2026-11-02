@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from zigzag_5s import FiveSecondBars, ZigZagFractalTrend5s
 from broker import Broker
+from test_heikin_ashi_v33 import trend_bars
 from market_radar import Radar
 from test_zigzag_trendline import VALUES
 
@@ -102,6 +103,7 @@ class FiveSecTests(unittest.TestCase):
             watch=b.radar.watches['B_otc'];watch.engine.ingest=lambda ts,p,arrival:'call'
             b.event('updateStream',[['B_otc',BASE-500,100.1]])
             self.assertIsNone(b.pending)
+            watch.engine.bars.extend(trend_bars(5))
             b.event('updateStream',[['B_otc',BASE,100.2]])
             orders=[json.loads(p[2:])[1] for p in b.ws.sent if p.startswith('42["openOrder"')]
             self.assertEqual(len(orders),1)
