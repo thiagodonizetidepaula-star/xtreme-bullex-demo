@@ -161,6 +161,10 @@ $('executeSignal').onclick=async()=>{
 };
 // Native Android selects scroll to the selected option. Keep the quick and
 // M5/M1 menus physically separate so 3s, 5s, 6s, 7s and 10s are visible.
+const TECHNICAL_PROFILES=[
+ 'trend_ema','swing_pullback','sr_breakout','sr_reversal',
+ 'bollinger_breakout','rsi_bollinger','candle_patterns','macd_adx'
+];
 const expiryChoices={
  fast:[[3,'3 segundos'],[4,'4 segundos'],[5,'5 segundos'],[6,'6 segundos'],
        [7,'7 segundos'],[8,'8 segundos'],[9,'9 segundos'],[10,'10 segundos'],
@@ -171,17 +175,38 @@ const expiryChoices={
  zigzag_fast:[[3,'3 segundos · ZigZag + PA rompimento'],[5,'5 segundos · ZigZag + PA rompimento'],[60,'1 minuto · ZigZag + PA rompimento']],
  zigzag_m2:[[60,'M1 · expiração 1 minuto'],[120,'M2 · expiração 2 minutos'],[180,'M3 · expiração 3 minutos']],
  zigzag_zones:[[3,'3 segundos · Região confirmada'],[5,'5 segundos · Região confirmada'],[60,'1 minuto · Região confirmada'],[120,'2 minutos · Região confirmada'],[180,'3 minutos · Região confirmada']],
- triangle:[[3,'3 segundos · requer ticks'],[5,'5 segundos'],[60,'M1 · 1 minuto'],[120,'M2 · 2 minutos'],[180,'M3 · 3 minutos'],[300,'M5 · 5 minutos']]
+ triangle:[[3,'3 segundos · requer ticks'],[5,'5 segundos'],[60,'M1 · 1 minuto'],[120,'M2 · 2 minutos'],[180,'M3 · 3 minutos'],[300,'M5 · 5 minutos']],
+ technical_5:[[3,'3 segundos · teste DEMO'],[5,'5 segundos · teste DEMO']],
+ technical_m1:[[60,'M1 · 1 minuto'],[120,'M2 · 2 minutos']],
+ technical_m2:[[120,'M2 · 2 minutos'],[180,'M3 · 3 minutos']],
+ technical_m5:[[300,'M5 · 5 minutos']]
 };
-const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120,zigzag_zones:60,triangle:5};
-const rememberedZigzagByTimeframe={5:5,60:60,120:120};
+const rememberedExpiry={fast:5,m5:60,zigzag:60,zigzag_fast:5,zigzag_m2:120,zigzag_zones:5,triangle:5};
+const rememberedZigzagByTimeframe={5:5,60:60,120:120,300:300};
+const rememberedTechnicalByTimeframe={5:5,60:60,120:120,300:300};
 function populateExpiry(preferred=null){
  const profile=$('expiryProfile').value;
- const timeframe=Number($('zigzagTimeframe').value);
- const values=({5:expiryChoices.zigzag_fast,60:expiryChoices.zigzag,120:expiryChoices.zigzag_m2})[timeframe]||expiryChoices.zigzag_fast;
+ const timeframe=Number(profile==='triangle'?$('triangleTimeframe').value:$('zigzagTimeframe').value);
+ let values;
+ if(profile==='zigzag_zones'){
+  values=expiryChoices.zigzag_zones;
+ }else if(profile==='triangle'){
+  values=expiryChoices.triangle.filter(entry=>(
+   timeframe===5||timeframe===60&&entry[0]>=60||
+   timeframe===120&&entry[0]>=120||timeframe===300&&entry[0]===300));
+ }else if(TECHNICAL_PROFILES.includes(profile)){
+  values=({5:expiryChoices.technical_5,60:expiryChoices.technical_m1,
+           120:expiryChoices.technical_m2,300:expiryChoices.technical_m5})[timeframe]||expiryChoices.technical_5;
+ }else{
+  values=({5:expiryChoices.zigzag_fast,60:expiryChoices.zigzag,
+           120:expiryChoices.zigzag_m2})[timeframe]||expiryChoices.zigzag_fast;
+ }
  const allowed=values.map(entry=>entry[0]);
- const desired=preferred==null?rememberedZigzagByTimeframe[timeframe]:Number(preferred);
- const selected=allowed.includes(Number(desired))?Number(desired):allowed[0];
+ const fallback=TECHNICAL_PROFILES.includes(profile)?
+   rememberedTechnicalByTimeframe[timeframe]:rememberedZigzagByTimeframe[timeframe];
+ const desired=preferred==null?(rememberedExpiry[profile]??fallback):Number(preferred);
+ const selected=allowed.includes(Number(desired))?Number(desired):
+   allowed.includes(Number(fallback))?Number(fallback):allowed[0];
  const select=$('expiry');
  select.replaceChildren();
  for(const [secs,name] of values){
@@ -191,11 +216,14 @@ function populateExpiry(preferred=null){
  }
  select.value=String(selected);
  rememberedExpiry[profile]=selected;
- rememberedZigzagByTimeframe[timeframe]=selected;
+ if(TECHNICAL_PROFILES.includes(profile))rememberedTechnicalByTimeframe[timeframe]=selected;
+ else rememberedZigzagByTimeframe[timeframe]=selected;
 }
 $('expiryProfile').onchange=()=>{
  if(snapshot.auto)return;
- $('expiryProfile').value='zigzag_fast';
+ const profile=$('expiryProfile').value;
+ if(profile==='zigzag_zones')$('zigzagTimeframe').value='5';
+ if(profile==='zigzag_fast'&&$('zigzagTimeframe').value==='300')$('zigzagTimeframe').value='5';
  populateExpiry();render();
 };
 $('zigzagTimeframe').onchange=()=>{
