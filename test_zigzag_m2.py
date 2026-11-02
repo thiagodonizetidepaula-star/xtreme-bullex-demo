@@ -6,7 +6,6 @@ from zigzag_m2 import TwoMinuteBars,ZigZagFractalTrendM2
 from zigzag_trendline import ZigZagFractalTrend
 from historical_bars import extract_closed_history,merge_historical_bars
 from broker import Broker
-from test_heikin_ashi_v33 import trend_bars
 from test_zigzag_trendline import VALUES
 
 BASE=1800000000
@@ -104,7 +103,6 @@ class Tests(unittest.TestCase):
                 b=self.broker();b.start_auto(self.config(expiry))
                 watch=b.radar.watches['B_otc']
                 watch.engine.ingest=lambda ts,p,arrival:'call'
-                watch.engine.bars.extend(trend_bars(120))
                 b.event('updateStream',[['B_otc',BASE,100.1]])
                 orders=[json.loads(p[2:])[1] for p in b.ws.sent if p.startswith('42["openOrder"')]
                 self.assertEqual(len(orders),1)
