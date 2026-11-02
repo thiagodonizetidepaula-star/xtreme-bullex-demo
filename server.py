@@ -49,9 +49,9 @@ def cleanup_once(now=None):
     with LOCK:
         for uid,c in list(CLIENTS.items()):
             broker=c['broker']
-            if broker.auto or broker.schedule_enabled:
+            if broker.auto or getattr(broker,'schedule_enabled',False):
                 broker.snapshot()
-            if broker.schedule_enabled:
+            if getattr(broker,'schedule_enabled',False):
                 # Keep the explicitly armed DEMO session and server-side clock
                 # alive while waiting for the next window, even if Android is shut.
                 c['was_auto']=True
