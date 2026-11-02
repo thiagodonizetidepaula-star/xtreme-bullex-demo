@@ -78,6 +78,7 @@ class AutomaticSettlementTests(unittest.TestCase):
                                        'openTime':BASE,'openPrice':1.1})
             self.assertTrue(b.auto)
             clock.return_value=BASE+36
+            b.received=BASE+36 # Simulate continued fresh broker feed while awaiting close.
             b.snapshot()
             self.assertTrue(b.pending['timed_out'])
             self.assertTrue(b.auto)
