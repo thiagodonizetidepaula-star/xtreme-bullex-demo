@@ -63,7 +63,7 @@ class V40DemoComparison(unittest.TestCase):
         self.assertIn("window.xtRefreshStrategyHistory",ui)
         self.assertIn("xtSummarizeStrategies(s.history||[],savedStrategyHistory,filter)",ui)
         self.assertIn("api('history')",ui)
-        self.assertIn("result.strategy",compare)
+        self.assertIn("detail.strategy",compare)
         self.assertIn("status==='WIN'",compare)
         self.assertIn("trades.set(trade.id,trade)",compare)
         self.assertNotIn('hasHoldout||!expiryVerified',app)
