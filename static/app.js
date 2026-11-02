@@ -82,7 +82,7 @@ $('startSignalAuto').onclick=async()=>{
    triangle_mode:isTriangle,
    triangle_observe:isTriangle&&$('triangleExecution').value==='observe',
    triangle_trial_only:isTriangle&&$('triangleExecution').value==='trial',
-   triangle_sensitivity:$('triangleSensitivity').value,
+   triangle_sensitivity:isTriangle?$('triangleSensitivity').value:'strict',
    triangle_entry:$('triangleEntry').value,
    triangle_adx:Boolean($('triangleADX').checked),
    triangle_ema:Boolean($('triangleEMA').checked),
