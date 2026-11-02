@@ -53,7 +53,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not 0<size<=limit or self.headers.get('Content-Type','').split(';')[0]!='application/json':raise ValueError('Solicitação inválida.')
                 body=json.loads(self.rfile.read(size))
                 if not isinstance(body,dict):raise ValueError('Solicitação inválida.')
-            files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/vector':'vector.html'}
+            files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/vector':'vector.html','/vector.css':'vector.css','/vector.js':'vector.js'}
             if not post and path in files:
                 f=BASE/'static'/files[path];return self.reply(200,f.read_bytes(),{'html':'text/html; charset=utf-8','js':'text/javascript; charset=utf-8','css':'text/css; charset=utf-8'}[f.suffix[1:]])
             if path=='/health':return self.reply(200,{'ok':True,'version':'pocket-chart-1.0.0','mode':'analysis-only','auth_configured':bool(KEY)})
