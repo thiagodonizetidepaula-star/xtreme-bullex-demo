@@ -1,3 +1,22 @@
+## V33 — Filtro Heikin Ashi por maioria das velas dos últimos 30 minutos
+
+The **only user-facing strategy remains ZigZag + Fractal**. On the DEMO
+automatic scanner, prior to every ZigZag signal becoming a Pocket Option order,
+calculate **Heikin Ashi from real CLOSED contiguous OHLC broker candles**:
+- **5s:** 360 completed consecutive 5-second bars; **M1:** 30 bars; **M2:** 15 bars. No candles from the current forming bucket, historical gap, stale stream or artificial interpolation.
+- Count **green versus red** HA candles over exactly the last 30 minutes; require a clear >=58% winning color majority with >=16 percentage-point gap. More greens means CALL-only; more reds PUT-only. A contradictory ZigZag/Fractal signal is discarded.
+- Last candle direction and latest 2 minutes must still support that 30m direction.
+- Reject dojis, body-to-range weakness and many both-sided wicks (including last two candles); reject low net displacement and low directional movement efficiency as **sideways**. Rejected signals do not place orders.
+- A prior closed-candle HA opening may seed the recursive conversion, but vote counts never include candles from before 30 minutes. HA colors are *synthetic-derived indicators*, not broker execution prices.
+- Require the latest real ZigZag candle to have just closed. Old or sparse historical data never create new orders. Broker history reading for 5s was expanded from 90 to 450 bars and its deque increased to 500 so a genuine 30m trend can be evaluated.
+
+The **Operação** tab shows the counts and reasons for each chosen chart. Original
+ZigZag/Fractal, stops, configured order limit, cooldown, official result wait,
+expiry validation and DEMO-only authorization are unchanged. The filter may
+substantially reduce entries, particularly while history is unavailable. It
+cannot guarantee that winning-color majority predicts the next 3s/5s/M1 expiry;
+it is a directional filter to test, not a verified profit improvement.
+
 ## V32 — Uma única estratégia visível: ZIGZAG + FRACTAL · automático DEMO com múltiplas entradas
 
 The clean V31 Android/Web panel now exposes **ZIGZAG + FRACTAL only** in the strategy dropdown. User selects a separate chart timeframe:
