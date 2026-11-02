@@ -172,7 +172,7 @@ class Tests(unittest.TestCase):
             b.event('updateStream',[['A_otc',BASE,100.6]])
             orders=[v for v in b.ws.sent if v.startswith('42["openOrder"')]
             self.assertEqual(len(orders),1)
-            self.assertIn('"isDemo":1',orders[0])
+            self.assertEqual(__import__('json').loads(orders[0][2:])[1]['isDemo'],1)
             self.assertEqual(b.pending['strategy'],'triangle')
             self.assertTrue(b.auto)
             b2=broker();b2.validated_expiries.add(60)
