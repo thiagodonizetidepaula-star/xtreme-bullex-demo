@@ -1,3 +1,44 @@
+## V37 — ZigZag + Fractal original restaurado · pendências DEMO conciliadas automaticamente
+
+As requested, restored the **pre-Heikin-Ashi V32 ZigZag + Fractal** broker,
+radar, original OHLC builder, and clean UI. Heikin Ashi is no longer an
+entry rule, chart filter or displayed indicator. ZigZag, Fractal and Price
+Action logic are *not modified*; the usual DEMO stake, chosen expiry,
+maximum-order count, stops, payout, cooldown and single unresolved position
+guard remain.
+
+**Official trade result handling is improved without replaying trades:**
+- A new DE​MO trade still requires an explicit start of auto. The existing
+  `successopenOrder` event must acknowledge that **exact requestId** and
+  return the broker order ID.
+- `successcloseOrder` and `updateClosedDeals` are both accepted as official
+  closing-result sources. They may contain a single deal, an array, or
+  `data.deals`; **only an exact broker order ID match** can settle the
+  pending record. A close that arrives before its open ACK is cached briefly
+  and reconciled only after the matching ACK arrives.
+- Upon verified broker close with internally consistent opening/closing
+  prices and payout, WIN/LOSS/EMPATE is registered, the pending flag is
+  cleared automatically, and (if the user-activated DEMO scanner is still
+  running) it resumes **new** signal checks after the configured cooldown.
+- An official `failopenOrder` with the exact requestId releases a rejected
+  pending request as `REJEITADA` and halts auto to avoid repeating a
+  potentially unsupported order.
+- On the expiry-aware timeout, a pending order remains blocked, but a
+  running DEMO scanner does not unnecessarily stop merely because the
+  official close is delayed. A later matched close will release it without
+  manual user action. There is **no unsafe time-only release**, invented
+  WIN/LOSS, assumed balance update, trade retry, or automatic real-money
+  execution.
+- If Pocket Option never sends enough authenticated close information,
+  automatic reconciliation cannot prove the position closed and the
+  manual reconciliation fallback remains available. This is a limitation
+  of the unofficial integration rather than an automatic-trade permission.
+
+Tests cover close-before-ACK, late closes, both close-message shapes, id
+mismatches, explicit rejections, no replay and restoration of V32 controls.
+Automated regression tests are not the same as a live broker DEMO execution
+test.
+
 ## V36 — Heikin Ashi: operar somente após a última vela de cor minoritária
 
 Original **ZigZag + Fractal engine is unchanged**; the Heikin Ashi module
