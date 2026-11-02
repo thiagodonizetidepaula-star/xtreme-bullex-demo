@@ -167,6 +167,7 @@ class Broker:
         self.history_last_request=0
         self.history_loaded_count=0
         self.history_unmatched=0
+        self.recent_closed_deals=deque(maxlen=30)
     def log(self,text):
         self.message=text; self.events.append({'time':time.time(),'text':text})
     def start(self):
@@ -400,76 +401,45 @@ class Broker:
                             self.log(self.auto_stop_reason)
         elif name=='successopenOrder' and isinstance(d,dict) and self.pending:
             if str(d.get('requestId'))!=self.pending['requestId']:return
-            self.pending['broker_order_id']=str(d.get('id',''));self.pending['status']='ABERTA';self.pending['opened']=d
+            bid=d.get('id')
+            if bid is None or str(bid)=='':
+                self.log('Abertura DEMO confirmada sem identificador. Aguardando corretora.')
+                return
+            self.pending['broker_order_id']=str(bid)
+            self.pending['status']='ABERTA';self.pending['opened']=d
             self.log('Ordem demo aceita. Aguardando resultado oficial.');self.save(self.pending)
+            # Close event may precede opening ACK for 3s options. Buffer
+            # until ACK proves exact requestId => broker order ID.
+            for closed in list(self.recent_closed_deals):
+                if str(closed.get('id',''))==str(bid):
+                    self._settle_pending_from_official_deal(closed)
+                    break
         elif name in ('successcloseOrder','updateClosedDeals'):
-            # Broker messages can contain either a single close record or
-            # a list under 'deals'. Match only our acknowledged broker order ID.
-            deals=d.get('deals') if isinstance(d,dict) else d
-            if isinstance(d,dict) and deals is None and d.get('id') is not None:
-                deals=[d]
+            deals=d.get('deals',d.get('data',d.get('closedDeals'))) if isinstance(d,dict) else d
+            if isinstance(deals,dict):
+                deals=deals.get('deals',deals.get('closedDeals',deals))
+            if isinstance(deals,dict) and deals.get('id') is not None:deals=[deals]
+            if not isinstance(deals,list) and isinstance(d,dict) and d.get('id') is not None:deals=[d]
             if not isinstance(deals,list):return
-            for deal in deals:
-                if self.pending and str(deal.get('id',''))==self.pending.get('broker_order_id') and self.pending.get('broker_order_id'):
-                    p=self.pending; profit=deal.get('profit')
-                    if not isinstance(profit,(int,float)) or not math.isfinite(profit):
-                        self.auto=False;self.log('Resultado recebido sem lucro reconhecível. Confira na corretora.');return
-                    op=deal.get('openPrice',p.get('opened',{}).get('openPrice')); cp=deal.get('closePrice')
-                    if not isinstance(op,(int,float)) or not isinstance(cp,(int,float)) or not math.isfinite(op) or not math.isfinite(cp):
-                        self.auto=False;self.log('Fechamento recebido sem preços reconhecíveis. Confira o resultado na corretora.');return
-                    diff=(cp-op)*(1 if p['direction']=='call' else -1)
-                    expected=p['amount']*p['payout']/100
-                    if diff>0:
-                        if abs(profit-expected)<0.02: net=profit
-                        elif abs(profit-p['amount']-expected)<0.02: net=profit-p['amount']
-                        else:
-                            self.auto=False;self.log('Lucro retornado não corresponde ao payout. Confira o resultado na corretora.');return
-                    elif diff<0:
-                        if abs(profit)<0.02 or abs(profit+p['amount'])<0.02:net=-p['amount']
-                        else:
-                            self.auto=False;self.log('Resultado divergente. Confira a ordem na corretora.');return
-                    else:
-                        if abs(profit)<0.02 or abs(profit-p['amount'])<0.02:net=0
-                        else:
-                            self.auto=False;self.log('Empate com retorno divergente. Confira a corretora.');return
-                    p['net']=float(net);p['status']='WIN' if net>0 else 'LOSS' if net<0 else 'EMPATE'
-                    p['result']={'profit':profit,'net':net,'openPrice':op,'closePrice':cp}
-                    opened=p.get('opened',{})
-                    start=deal.get('openTime',opened.get('openTime')); end=deal.get('closeTime',opened.get('closeTime'))
-                    duration=verified_five_second_duration(start,end)
-                    requested=p.get('expiry',5)
-                    if duration is not None and abs(duration-requested)<=0.5:
-                        self.validated_expiries.add(requested)
-                        self.validated=True
-                        if self.auto and self.auto_trial and requested==self.auto_expiry:
-                            self.auto_trial=False
-                            self.log('Teste automático DEMO de %ds confirmado pela corretora. Motor seguirá operando somente novos sinais.'%requested)
-                        self.validation_message=('Expiração de %ds confirmada pela corretora. '
-                                                 'Automático DEMO disponível para esta duração.'%requested)
-                    elif duration is None:
-                        # The broker acknowledged this exact order ID and
-                        # delivered a reconciled official close event (prices
-                        # and payout-consistent result). That proves closure,
-                        # but NOT the actual expiry duration. Keep an already
-                        # running DEMO-only auto in a restricted value-1 mode;
-                        # do not mark this expiry as validated or raise stakes.
-                        self.validated=bool(self.validated_expiries)
-                        self.validation_message=('Resultado oficial da ordem DEMO de %ds confirmado, '
-                                                 'mas a corretora não informou horários suficientes. '
-                                                 'Expiração NÃO verificada; entradas seguintes limitadas a valor 1.'%requested)
-                        if self.auto and requested==self.auto_expiry:
-                            self.auto_trial=True
-                            self.log('Fechamento oficial confirmado sem horários completos. '
-                                     'Automático DEMO continua com valor 1, expiração não verificada e intervalo mínimo de 15s.')
-                    else:
-                        # An explicitly mismatched broker duration is positive
-                        # contrary evidence: stop, rather than guess.
-                        self.auto=False;self.auto_trial=False
-                        self.auto_stop_reason='Duração oficial %.2fs não coincide com %ds.'%(duration,requested)
-                        self.validated=bool(self.validated_expiries)
-                        self.validation_message=('Duração %.2fs diferente dos %ds pedidos. '
-                                                 'Automático bloqueado para esta duração.'%(duration,requested))
-                    self.history.append(p);self.history=self.history[-300:];self.pending=None;self.last_closed_at=time.time();self.save(p);self.log('Resultado confirmado: '+p['status'])
+            for deal in deals[:500]:
+                if not isinstance(deal,dict) or deal.get('id') is None:continue
+                bid=str(deal['id'])
+                if self.pending and str(self.pending.get('broker_order_id') or '')==bid:
+                    self._settle_pending_from_official_deal(deal)
+                    break
+                elif self.pending and not self.pending.get('broker_order_id') and self.pending.get('requestId'):
+                    self.recent_closed_deals.append(deal)
+        elif name=='failopenOrder' and isinstance(d,dict) and self.pending:
+            # Official rejection with the SAME requestId proves no deal
+            # opened; discard only this exact rejected request. No replay.
+            if str(d.get('requestId',''))!=str(self.pending.get('requestId')):return
+            p=self.pending;p['status']='REJEITADA'
+            p['result']={'reason':'A corretora confirmou rejeição da abertura da ordem DEMO.'}
+            self.history.append(p);self.history=self.history[-300:]
+            self.pending=None;self.last_closed_at=time.time();self.auto=False;self.auto_trial=False
+            self.auto_stop_reason='A corretora rejeitou a ordem DEMO. Revise a configuração.'
+            self.save(p)
+            self.log('Ordem DEMO rejeitada oficialmente e pendência liberada automaticamente. Nenhum reenvio.')
         elif name.lower()=='notauthorized':
             self.connection_state='autenticacao_recusada'
             self.connection_failure='Sessão DEMO recusada. Gere nova autenticação no navegador.'
@@ -482,6 +452,72 @@ class Broker:
                                        'não repetiremos a ordem sem verificar o histórico.'%self.auto_expiry)
             self.auto=False
             self.log('A corretora recusou uma solicitação. Confira ativo, valor, vencimento e ordens abertas.')
+    def _settle_pending_from_official_deal(self,deal):
+        """Only an official matched broker ID can close a DEMO pending order."""
+        if not isinstance(deal,dict) or not self.pending:return False
+        bid=self.pending.get('broker_order_id')
+        if not bid or str(deal.get('id',''))!=str(bid):return False
+        p=self.pending; profit=deal.get('profit')
+        if not isinstance(profit,(int,float)) or not math.isfinite(profit):
+            self.auto=False;self.log('Resultado recebido sem lucro reconhecível. Confira na corretora.');return
+        op=deal.get('openPrice',p.get('opened',{}).get('openPrice')); cp=deal.get('closePrice')
+        if not isinstance(op,(int,float)) or not isinstance(cp,(int,float)) or not math.isfinite(op) or not math.isfinite(cp):
+            self.auto=False;self.log('Fechamento recebido sem preços reconhecíveis. Confira o resultado na corretora.');return
+        diff=(cp-op)*(1 if p['direction']=='call' else -1)
+        expected=p['amount']*p['payout']/100
+        if diff>0:
+            if abs(profit-expected)<0.02: net=profit
+            elif abs(profit-p['amount']-expected)<0.02: net=profit-p['amount']
+            else:
+                self.auto=False;self.log('Lucro retornado não corresponde ao payout. Confira o resultado na corretora.');return
+        elif diff<0:
+            if abs(profit)<0.02 or abs(profit+p['amount'])<0.02:net=-p['amount']
+            else:
+                self.auto=False;self.log('Resultado divergente. Confira a ordem na corretora.');return
+        else:
+            if abs(profit)<0.02 or abs(profit-p['amount'])<0.02:net=0
+            else:
+                self.auto=False;self.log('Empate com retorno divergente. Confira a corretora.');return
+        p['net']=float(net);p['status']='WIN' if net>0 else 'LOSS' if net<0 else 'EMPATE'
+        p['result']={'profit':profit,'net':net,'openPrice':op,'closePrice':cp}
+        opened=p.get('opened',{})
+        start=deal.get('openTime',opened.get('openTime')); end=deal.get('closeTime',opened.get('closeTime'))
+        duration=verified_five_second_duration(start,end)
+        requested=p.get('expiry',5)
+        if duration is not None and abs(duration-requested)<=0.5:
+            self.validated_expiries.add(requested)
+            self.validated=True
+            if self.auto and self.auto_trial and requested==self.auto_expiry:
+                self.auto_trial=False
+                self.log('Teste automático DEMO de %ds confirmado pela corretora. Motor seguirá operando somente novos sinais.'%requested)
+            self.validation_message=('Expiração de %ds confirmada pela corretora. '
+                                     'Automático DEMO disponível para esta duração.'%requested)
+        elif duration is None:
+            # The broker acknowledged this exact order ID and
+            # delivered a reconciled official close event (prices
+            # and payout-consistent result). That proves closure,
+            # but NOT the actual expiry duration. Keep an already
+            # running DEMO-only auto in a restricted value-1 mode;
+            # do not mark this expiry as validated or raise stakes.
+            self.validated=bool(self.validated_expiries)
+            self.validation_message=('Resultado oficial da ordem DEMO de %ds confirmado, '
+                                     'mas a corretora não informou horários suficientes. '
+                                     'Expiração NÃO verificada; entradas seguintes limitadas a valor 1.'%requested)
+            if self.auto and requested==self.auto_expiry:
+                self.auto_trial=True
+                self.log('Fechamento oficial confirmado sem horários completos. '
+                         'Automático DEMO continua com valor 1, expiração não verificada e intervalo mínimo de 15s.')
+        else:
+            # An explicitly mismatched broker duration is positive
+            # contrary evidence: stop, rather than guess.
+            self.auto=False;self.auto_trial=False
+            self.auto_stop_reason='Duração oficial %.2fs não coincide com %ds.'%(duration,requested)
+            self.validated=bool(self.validated_expiries)
+            self.validation_message=('Duração %.2fs diferente dos %ds pedidos. '
+                                     'Automático bloqueado para esta duração.'%(duration,requested))
+        self.history.append(p);self.history=self.history[-300:];self.pending=None;self.last_closed_at=time.time();self.save(p);self.log('Resultado confirmado: '+p['status'])
+        self.recent_closed_deals.clear()
+        return True
     def save(self,p):
         # Persist only allowlisted non-sensitive fields.
         row={k:p.get(k) for k in ('id','asset','direction','amount','broker_order_id','status')};row['result']=p.get('result',{})
@@ -947,12 +983,13 @@ class Broker:
                 self.feed_lag_warning=False
                 self.log('Cotações recuperadas. Automático continua aguardando sinais.')
             if self.pending and time.time()-self.pending['sent_at']>max(30,self.pending.get('expiry',5)+30) and not self.pending.get('timed_out'):
-                self.auto=False;self.auto_trial=False
+                # A late official result must clear this automatically.
+                # Keep auto armed, but other orders remain blocked while
+                # this pending record exists (even after this timeout).
                 self.pending['timed_out']=True
                 self.pending['status']='RESULTADO_PENDENTE'
-                self.auto_stop_reason='Ordem sem resultado após expiração e prazo extra de 30s. Confira a corretora antes de reiniciar.'
                 self.save(self.pending)
-                self.log(self.auto_stop_reason)
+                self.log('Reconciliação automática: aguardando resultado oficial da corretora. Sem novas entradas enquanto esta ordem estiver pendente.')
             if self.auto and self.triangle_mode and now-self.triangle_last_report>30:
                 # Validate observed real streams, at most a few assets per
                 # status call; never infer profitability from 3s expiry on 5s bars.
@@ -1008,7 +1045,7 @@ class Broker:
                     'auto_session_remaining':round(max(0,AUTO_MAX_SESSION_SECONDS-(time.time()-self.auto_started_at)),1) if self.auto else 0,
                     'auto_feed_stop_after':M1_FEED_STOP_SECONDS if self.auto_expiry in LONG_EXPIRIES else 20,
                     'next_entry_in':round(max(0,max((self.last_order+AUTO_INTERVAL_SECONDS) if self.last_order else 0,
-                                                  (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
+                                                  (self.last_closed_at+self.pause_after) if self.last_closed_at else 0)-time.time()),1),'pending_reconciliation':('Aguardando confirmação do fechamento oficial '+str(self.pending.get('broker_order_id') or 'da ordem') if self.pending else 'Sem pendência; resultado liberado automaticamente'),'pending':{k:v for k,v in (self.pending or {}).items() if k not in ('opened','requestId')},'history':[{k:v for k,v in h.items() if k not in ('opened','requestId')} for h in self.history],'events':list(self.events)[-15:]}
     def close(self):
         self.auto_stop_reason='Sessão DEMO encerrada.';self.auto=False;self.auto_trial=False;self.closed=True;self.connected=False;self.demo_confirmed=False;self.keepalive_stop.set();self.auth={}
         if self.ws:self.ws.close()
