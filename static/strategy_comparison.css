@@ -1,0 +1,13 @@
+.xt-comparison{margin:14px 0 20px;padding:14px;background:#111e2e;border:1px solid #30465c;border-radius:14px;min-width:0}
+.xt-comparison h3{font-size:15px;margin:0 0 8px;color:#e1fff0}
+.xt-compare-note,.xt-compare-source{font-size:11px;color:#a4b9c8;line-height:1.5;margin:7px 0}
+.xt-compare-filter{display:flex;align-items:center;gap:10px;font-size:12px;margin:12px 0}
+.xt-compare-filter select{max-width:175px;padding:8px;background:#172b3e;color:#e9f8ff;border:1px solid #43637a;border-radius:8px}
+.xt-compare-scroll{max-width:100%;overflow-x:auto}
+.xt-compare-table{width:100%;min-width:665px;border-collapse:collapse;font-size:11px}
+.xt-compare-table th,.xt-compare-table td{padding:9px 7px;text-align:left;border-bottom:1px solid #2c3f52;white-space:nowrap}
+.xt-compare-table th{color:#b8d7e6;background:#17283b}
+.xt-compare-table td:first-child{white-space:normal;min-width:130px;font-weight:650}
+.xt-compare-table td[data-sign="positive"]{color:#84e6ba}
+.xt-compare-table td[data-sign="negative"]{color:#ff939b}
+.xt-compare-table .xt-sample-warning{color:#ffce8d}
