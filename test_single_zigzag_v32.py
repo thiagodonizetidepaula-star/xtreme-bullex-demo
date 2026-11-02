@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from broker import Broker
+from test_heikin_ashi_v33 import trend_bars
 
 ROOT=Path(__file__).parent
 HTML=(ROOT/'static'/'index.html').read_text(encoding='utf8')
@@ -60,7 +61,7 @@ class TestSingleZigzag(unittest.TestCase):
             watch=b.radar.watches['A_otc']
             watch.engine.ingest=lambda ts,price,now:'call'
             watch.engine.reason='ZigZag Fractal confirmado'
-            watch.engine.bars.append(dict(t=1799999995,open=100,high=101,low=99,close=100.5))
+            watch.engine.bars.extend(trend_bars(5))
             b.event('updateStream',[['A_otc',1800000000,100.6]])
             self.assertEqual(b.count,1)
             self.assertEqual(b.limit,24)
