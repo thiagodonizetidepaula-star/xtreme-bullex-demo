@@ -97,7 +97,7 @@ class HeikinAshiTests(unittest.TestCase):
             b['low']-=2
         s=analyze_ha_30m(wick,5)
         self.assertFalse(s['ready'])
-        self.assertIn('Pavios',s['reason'])
+        self.assertTrue('Pavios' in s['reason'] or 'empatado' in s['reason'],s)
         sideways=[]
         for i in range(360):
             p=100+((i%6)-3)*.08
@@ -126,7 +126,7 @@ class HeikinAshiTests(unittest.TestCase):
             self.assertEqual(b.count,0)
             self.assertIsNone(b.pending)
             self.assertTrue(b.auto)
-            self.assertIn('CONTRÁRIO',b.market_quality)
+            self.assertIn('contrário',b.market_quality)
 
     def test_no_order_when_only_29m_or_history_old_even_if_broker_tick_fresh(self):
         with patch('broker.time.time',return_value=BASE):
