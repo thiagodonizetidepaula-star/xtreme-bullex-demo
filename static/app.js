@@ -344,7 +344,7 @@ function render(){
  const triangleSelected=activeProfile==='triangle';
  $('triangleSettings').hidden=!triangleSelected;
  $('technicalSettings').hidden=!technicalSelected;
- $('technicalExecution').disabled=!!s.auto;
+ $('technicalExecution').disabled=!!s.auto||!!s.demo_schedule?.enabled;
  const technicalResults=(s.history||[]).filter(h=>h.strategy===activeProfile&&
    (h.status==='WIN'||h.status==='LOSS'));
  const technicalWins=technicalResults.filter(h=>h.status==='WIN').length;
@@ -360,12 +360,12 @@ function render(){
     (technicalResults.length<30?' · AMOSTRA INSUFICIENTE':' · ainda requer teste fora da amostra')+
     '. Meta de 70% não garantida.'):'';
  $('zigzagTimeframe').closest('label').hidden=triangleSelected;
- $('triangleTimeframe').disabled=!!s.auto;
- $('triangleEntry').disabled=!!s.auto;
- $('triangleExecution').disabled=!!s.auto;
- $('triangleEMA').disabled=!!s.auto;
- $('triangleADX').disabled=!!s.auto;
- $('triangleSensitivity').disabled=!!s.auto;
+ $('triangleTimeframe').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('triangleEntry').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('triangleExecution').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('triangleEMA').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('triangleADX').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('triangleSensitivity').disabled=!!s.auto||!!s.demo_schedule?.enabled;
  if(s.auto&&s.triangle_mode){$('triangleTimeframe').value=String(s.scan_timeframe);}
  const recentReports=s.triangle_reports||[];
  const observations=s.triangle_observations||[];
@@ -501,14 +501,14 @@ function render(){
     (s.auto_stop_reason?' • '+s.auto_stop_reason:'')+
     '. Configure a quantidade de operações e toque INICIAR. A primeira expiração ainda não validada exige valor 1 DEMO.';
  }
- $('amount').disabled=!!s.auto;
- $('expiry').disabled=!!s.auto;
- $('expiryProfile').disabled=!!s.auto;
- $('zigzagTimeframe').disabled=!!s.auto;
- $('fastStrategy').disabled=!!s.auto;
- $('pause_after').disabled=!!s.auto;
- $('min_payout').disabled=!!s.auto;
- for(const id of ['stop_win','stop_loss','limit'])$(id).disabled=!!s.auto;
+ $('amount').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('expiry').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('expiryProfile').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('zigzagTimeframe').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('fastStrategy').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('pause_after').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ $('min_payout').disabled=!!s.auto||!!s.demo_schedule?.enabled;
+ for(const id of ['stop_win','stop_loss','limit'])$(id).disabled=!!s.auto||!!s.demo_schedule?.enabled;
  if(!busy&&!$('offerStatus').textContent.startsWith('ENTRADA NÃO ENVIADA:')&&!$('offerStatus').textContent.startsWith('Ordem DEMO enviada')){
   $('offerStatus').textContent=offer.reason||'Conecte uma conta DEMO para iniciar a análise.';
  }
@@ -537,7 +537,7 @@ function render(){
  $('resolvePending').disabled=busy||!$('confirmNoOpen').checked||!s.pending?.timed_out;
  $('progress').max=s.pending?.expiry||expiry;
  $('progress').value=s.pending?.sent_at?Math.max(0,Math.min($('progress').max,Date.now()/1000-s.pending.sent_at)):0;
- $('resetHistory').disabled=busy||!!s.auto||!!s.pending?.id;
+ $('resetHistory').disabled=busy||!!s.auto||!!s.demo_schedule?.enabled||!!s.pending?.id;
  $('connect').disabled=!!s.connecting;
  $('subscribe').disabled=!s.connected||busy||!!s.pending?.id||!!s.auto;
  drawTrendlineChart(radar);
