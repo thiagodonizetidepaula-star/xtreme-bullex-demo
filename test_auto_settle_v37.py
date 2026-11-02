@@ -67,6 +67,7 @@ class AutomaticSettlementTests(unittest.TestCase):
         with patch('broker.time.time') as clock:
             clock.return_value=BASE
             b=broker();b.symbol=''
+            b.fresh_quote=lambda:True # Simulate a verified live feed only for this isolated settlement test.
             b.start_auto({'strategy':'standard','amount':1,'stop_win':20,
                           'stop_loss':20,'limit':10,'min_payout':80,
                           'pause_after':5,'expiry':5})
