@@ -31,9 +31,9 @@ def bars(tf=5):
     result=[]
     for i in range(43):
         close=100+i*.08 if i<42 else 100+41*.08+.26
-        op=close-.10
-        result.append({'t':BASE+i*tf,'open':op,'high':close+.04,
-                       'low':op-.04,'close':close})
+        op=close-.20
+        result.append({'t':BASE+i*tf,'open':op,'high':close+.06,
+                       'low':op-.03,'close':close})
     return result
 
 class TechnicalTests(unittest.TestCase):
