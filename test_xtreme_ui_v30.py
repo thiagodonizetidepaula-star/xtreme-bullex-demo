@@ -50,10 +50,11 @@ class DashboardTests(unittest.TestCase):
         self.assertNotIn("api('connect",JS)
         self.assertIn("by('stopSignalAuto').click()",JS)
 
-    def test_martingale_disabled_until_supported(self):
-        self.assertIn('check.type=\'checkbox\';check.disabled=true;check.checked=false',JS)
-        self.assertIn('Martingale · indisponível nesta versão',JS)
-        self.assertIn('não aumenta a entrada após uma perda',JS)
+    def test_martingale_opt_in_demo_one_level_supported(self):
+        self.assertIn("check.type='checkbox';check.id='xt-gale-enabled';check.checked=false",JS)
+        self.assertIn('Martingale · 1 Gale ×2 na próxima vela (DEMO)',JS)
+        self.assertIn('Não faz Gale do Gale',JS)
+        self.assertIn("s.gale_status",JS)
 
     def test_history_uses_actual_server_results_and_textcontent(self):
         self.assertIn('Array.isArray(s.history)',JS)
