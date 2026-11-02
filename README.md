@@ -1,3 +1,36 @@
+## V38 — Martingale opcional 1 Gale ×2 na próxima vela (DEMO)
+
+The clean **⚙ Configurações** tab now provides an **unchecked by default**
+opt-in checkbox `Martingale · 1 Gale ×2 na próxima vela (DEMO)`. The user must
+enable it **before manually starting auto**. It is sent as boolean
+`gale_enabled` to the existing DEMO ZigZag + Fractal strategy. The ZigZag
+signal detector is not modified, but a *separate follow-up* may be sent after a
+confirmed losing trade, independent of a new ZigZag setup:
+
+- Only after a **broker-acknowledged, matched, payout-consistent official LOSS**,
+  with **broker-validated option duration** and a live current watch on the
+  **same instrument**. An unknown or mismatched duration does not arm Gale.
+- Exactly **one follow-up** (`gale_level=1`) at **2× the losing stake**,
+  in the **same CALL or PUT direction** and using the configured expiry.
+  The next real candle is based on the selected scan timeframe (5s/M1/M2).
+  The bot waits for the **first fresh tick near its opening** (≤1s for
+  5s, ≤2s for M1/M2). If that opening tick is missed, disconnected, stale
+  or the candle window advances, the Gale is discarded (no late retry).
+- The usual 10-second signal cooldown is bypassed **only for this one
+  broker-validated Gale**; otherwise the ordinary ZigZag scanner, pause,
+  expiry and order checks remain untouched.
+- **One unresolved order maximum**, **confirmed DEMO only**, available
+  asset and payout floor, balance, stake ≤100, max-order count,
+  stop-win/stop-loss and an additional hypothetical **worst-case full
+  Gale loss** check. Never exceeds the configured stop-loss budget.
+  After the follow-up settles, it **cannot trigger another Gale**.
+- The server never assumes a WIN/LOSS based on an expired timer: it waits
+  for the matched official broker result. Gale status is visible in
+  Configurações. Any closed/rejected/no-feed failure fails safe.
+- Martingale multiplies possible losses and **cannot guarantee
+  recovery or profit**, even on DEMO; keep the checkbox OFF unless
+  deliberately testing the escalation.
+
 ## V37 — ZigZag + Fractal original restaurado · pendências DEMO conciliadas automaticamente
 
 As requested, restored the **pre-Heikin-Ashi V32 ZigZag + Fractal** broker,
