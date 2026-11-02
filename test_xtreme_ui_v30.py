@@ -12,7 +12,8 @@ APP=(ROOT/'static'/'app.js').read_text(encoding='utf8')
 
 class DashboardTests(unittest.TestCase):
     def test_assets_loaded_after_existing_app_without_replacing_handlers(self):
-        self.assertLess(HTML.index('defer src="/app.js"'),HTML.index('defer src="/xtreme_ui.js?v=30"'))
+        self.assertLess(HTML.index('defer src="/app.js"'),HTML.index('defer src="/strategy_comparison.js?v=40"'))
+        self.assertLess(HTML.index('defer src="/strategy_comparison.js?v=40"'),HTML.index('defer src="/xtreme_ui.js?v=40"'))
         self.assertIn('href="/xtreme_ui.css?v=30"',HTML)
         self.assertIn("'/xtreme_ui.js':'xtreme_ui.js'",SERVER)
         self.assertIn("'/xtreme_ui.css':'xtreme_ui.css'",SERVER)
