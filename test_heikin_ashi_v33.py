@@ -47,12 +47,12 @@ class HeikinAshiTests(unittest.TestCase):
         self.assertEqual(out[1]['close'],13.75)
         self.assertEqual(out[1]['high'],16.)
 
-    def test_only_exact_30_minute_history_per_timeframe(self):
+    def test_full_30_minute_history_if_available_per_timeframe(self):
         for period,n in ((5,360),(60,30),(120,15)):
             with self.subTest(period=period):
                 bars=trend_bars(period)
                 s=analyze_ha_30m(bars[:-1],period)
-                self.assertFalse(s['ready'])
+                self.assertTrue(s['ready'],s) # Up to 30m is a LOOKBACK, not a wait.
                 self.assertEqual(s['required'],n)
                 s=analyze_ha_30m(bars,period)
                 self.assertTrue(s['ready'],s)
@@ -79,7 +79,7 @@ class HeikinAshiTests(unittest.TestCase):
         bad=[dict(b) for b in bars]
         bad[-16]['t']+=1
         self.assertFalse(analyze_ha_30m(bad,5)['ready'])
-        self.assertIn('lacunas',analyze_ha_30m(bad,5)['reason'])
+        self.assertIn('Histórico retroativo insuficiente',analyze_ha_30m(bad,5)['reason'])
         bad=[dict(b) for b in bars]
         bad[-1]['high']=-2
         self.assertFalse(analyze_ha_30m(bad,5)['ready'])
