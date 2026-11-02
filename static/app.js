@@ -112,7 +112,7 @@ $('confirmNoOpen').onchange=()=>{
 $('resolvePending').onclick=async()=>{
  if(busy||!$('confirmNoOpen').checked||!snapshot.pending?.id||!snapshot.pending.timed_out)return;
  const pendingId=snapshot.pending.id;busy=true;$('resolvePending').disabled=true;
- $('pendingRecoveryResult').textContent='Conferindo a pendência no servidor…';
+ $('pendingRecoveryResult').textContent='Aguardando resultado oficial; a conciliação automática continua ativa…';
  try{
   await api('resolve-pending',{pending_id:pendingId,confirm_no_open_orders:true});
   $('confirmNoOpen').checked=false;
@@ -402,7 +402,7 @@ function render(){
   $('offerStatus').textContent='AUTOMÁTICO ATIVO · '+s.symbol+' · '+blockers+
    (s.auto_trial?' · PRIMEIRA ENTRADA RESTRITA A 1 DEMO até validar duração':'');
  }
- $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · resultado oficial pendente':'Nenhuma ordem pendente.';
+ $('pending').textContent=s.pending?.id?s.pending.status+' · '+s.pending.asset+' · aguardando confirmação oficial (liberação automática ao receber fechamento)':'Nenhuma ordem pendente.';
  $('pendingRecovery').hidden=!(s.pending?.id&&s.pending?.timed_out);
  if($('pendingRecovery').hidden)$('confirmNoOpen').checked=false;
  $('resolvePending').disabled=busy||!$('confirmNoOpen').checked||!s.pending?.timed_out;
