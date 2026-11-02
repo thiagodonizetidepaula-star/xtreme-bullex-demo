@@ -729,3 +729,13 @@ async function poll(){
 }
 setInterval(poll,750);
 jsonFetch('/config').then(c=>{config=c}).catch(()=>{$('loginStatus').textContent='Servidor indisponível. Recarregue a página.'});
+
+// REAL/DEMO visual selector. This broker remains DEMO-only; never route real orders.
+const accountSelector=$('accountSelector');
+if(accountSelector){
+ accountSelector.addEventListener('change',()=>{
+  const real=accountSelector.value==='REAL';
+  $('realAccountNotice').hidden=!real;
+  if(real)status('Conta REAL: integração indisponível. Nenhuma ordem real será enviada.');
+ });
+}
