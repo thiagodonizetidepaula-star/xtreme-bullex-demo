@@ -71,7 +71,7 @@ class DemoScheduleTests(unittest.TestCase):
             b.demo_schedule_tick()
             b.event('updateStream',[['C_otc',at(10,1),100.2]])
             self.assertEqual(len(orders(b)),1)
-            self.assertRaisesRegex(ValueError,'Agenda DEMO',
+            self.assertRaisesRegex(ValueError,'pendente',
                 b.order,'call',1,5,symbol='C_otc')
 
     def test_three_slots_and_no_repeat_after_official_close(self):
