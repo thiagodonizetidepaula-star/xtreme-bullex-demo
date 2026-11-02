@@ -365,7 +365,8 @@ function render(){
  const chartTfLabel={5:'5s',60:'M1',120:'M2',300:'M5'}[chartTf]||'M1';
  const exhaustionActive=[3,5].includes(expiry)&&selectedQuickStrategy()==='exhaustion';
  const micro=expiry===3?s.exhaustion_3:s.exhaustion_5;
- const offer=(isZigzag?{}:isM1?s.long_signal_offer:exhaustionActive?
+ const offer=(isZigzag?(radar.last_signal_age!=null&&radar.last_signal_age<=1.5?
+   {direction:radar.last_direction,age:radar.last_signal_age,ready:false}:{}):isM1?s.long_signal_offer:exhaustionActive?
               (expiry===3?s.exhaustion_offer_3:s.exhaustion_offer_5):s.signal_offer)||{};
  $('strategyProfile').textContent=technicalSelected?
    ('PESQUISA DEMO · '+$('expiryProfile').selectedOptions[0].textContent+' · '+chartTfLabel+' · expiração '+expiry+'s'+
@@ -430,6 +431,12 @@ function render(){
   $('autoSignalStatus').textContent='TESTE ÚNICO DEMO ATIVO: '+(radar.receiving||0)+' ativos com cotações; esperando triângulo confirmado em 5s para uma única ordem de valor 1 (expiração '+s.auto_expiry+'s).';
  }else if(s.auto&&s.triangle_mode&&s.triangle_observe){
   $('autoSignalStatus').textContent='OBSERVAÇÃO TRIÂNGULO ATIVA · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+observations.length+' sinais observados · NENHUMA ORDEM AUTOMÁTICA.';
+ }else if(s.auto&&s.technical_profile){
+  $('autoSignalStatus').textContent=(s.technical_observe?'OBSERVAÇÃO SEM ORDENS':'TESTE AUTOMÁTICO DEMO')+
+   ' · '+($('expiryProfile').selectedOptions[0]?.textContent||s.technical_profile)+
+   ' · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos recebendo cotações · '+
+   (s.auto_count||0)+' operações enviadas · '+(radar.last_reason||'aguardando candle fechado')+
+   ' · expiração '+s.auto_expiry+'s';
  }else if(s.auto&&s.auto_strategy==='zigzag_fractal'){
   $('autoSignalStatus').textContent='VARREDURA OTC ATIVA • '+(s.auto_count||0)+' / '+(s.auto_limit||10)+
    ' operações · '+(radar.receiving||0)+'/'+(radar.eligible||0)+' ativos com cotações · '+
