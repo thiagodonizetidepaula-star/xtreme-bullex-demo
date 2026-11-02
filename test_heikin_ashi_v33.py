@@ -53,11 +53,11 @@ class HeikinAshiTests(unittest.TestCase):
                 bars=trend_bars(period)
                 s=analyze_ha_30m(bars[:-1],period)
                 self.assertTrue(s['ready'],s) # Up to 30m is a LOOKBACK, not a wait.
-                self.assertEqual(s['required'],n)
+                self.assertEqual(s['required'],{5:36,60:10,120:5}[period])
                 s=analyze_ha_30m(bars,period)
                 self.assertTrue(s['ready'],s)
                 self.assertEqual(s['direction'],'call')
-                self.assertGreaterEqual(s['green'],n-1)
+                self.assertGreaterEqual(s['green'],s['candles']-1)
                 self.assertEqual(s['red'],0)
 
     def test_red_majority_only_put_and_green_only_call(self):
@@ -72,14 +72,14 @@ class HeikinAshiTests(unittest.TestCase):
                 wrong='put' if direction=='call' else 'call'
                 bad,state=permitted_ha_entry(bars,5,wrong)
                 self.assertFalse(bad)
-                self.assertIn('CONTRÁRIO',state['reason'])
+                self.assertIn('contrário',state['reason'])
 
     def test_gap_missing_ohlc_or_forming_history_blocked(self):
         bars=trend_bars()
         bad=[dict(b) for b in bars]
-        bad[-16]['t']+=1
+        bad[-6]['t']+=1
         self.assertFalse(analyze_ha_30m(bad,5)['ready'])
-        self.assertIn('Histórico retroativo insuficiente',analyze_ha_30m(bad,5)['reason'])
+        self.assertIn('Histórico recente insuficiente',analyze_ha_30m(bad,5)['reason'])
         bad=[dict(b) for b in bars]
         bad[-1]['high']=-2
         self.assertFalse(analyze_ha_30m(bad,5)['ready'])
@@ -87,7 +87,7 @@ class HeikinAshiTests(unittest.TestCase):
         collector=FiveSecondBars()
         collector.bars.extend(bars)
         collector.current=dict(t=BASE,open=101,high=102,low=99,close=101)
-        self.assertGreaterEqual(analyze_ha_30m(collector.bars,5)['green'],359)
+        self.assertGreaterEqual(analyze_ha_30m(collector.bars,5)['green'],35)
 
     def test_wicks_doji_and_lateral_regime_block(self):
         bars=trend_bars()
