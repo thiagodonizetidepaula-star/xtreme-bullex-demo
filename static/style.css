@@ -68,3 +68,16 @@ header{background:#081b39;border-bottom:1px solid #214e94}
 .trendline-panel strong{color:#b6e9bd;font-size:11px;letter-spacing:.5px}
 #trendlineChart{display:block;width:100%;height:188px;margin:8px 0 0;background:#111c24;border-radius:7px}
 #trendlineDiagnostic{margin:7px 2px 0;line-height:1.45}
+
+/* V41: fixed São Paulo DEMO schedule, intentionally opt-in. */
+.demo-schedule{margin:16px 0;padding:14px;border:1px solid #376452;
+ background:linear-gradient(135deg,#11291f,#152333);border-radius:13px}
+.demo-schedule h3{font-size:14px;color:#b9f5d0;margin:0 0 10px}
+.schedule-hours{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}
+.schedule-hours strong{flex:1;min-width:66px;padding:11px 5px;border:1px solid #47785f;
+ border-radius:9px;background:#173b2b;color:#e7ffef;text-align:center;font-size:18px}
+.schedule-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.schedule-actions button{flex:1;min-width:160px}
+.demo-schedule .hint{font-size:12px;line-height:1.55}
+#demoScheduleStatus{padding:9px 10px;background:#0c1e1b;border-radius:8px;
+ border:1px solid #355c50;overflow-wrap:anywhere}
