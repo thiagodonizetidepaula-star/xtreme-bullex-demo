@@ -601,7 +601,7 @@ class Broker:
                 allowed,ha=permitted_ha_entry(bars,period,selected_direction)
                 if not valid_close or not allowed:
                     reason=(ha['reason'] if valid_close else 'Última vela HA não é o candle recém-fechado')
-                    self.market_quality='HEIKIN ASHI 30m: '+reason
+                    self.market_quality='HEIKIN ASHI RECENTE: '+reason
                     self.log('SEM ORDEM '+symbol+' · '+self.market_quality)
                     watch.last_signal=None;watch.signal_received=0
                     continue
