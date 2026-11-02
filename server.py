@@ -93,7 +93,7 @@ class Handler(BaseHTTPRequestHandler):
             path=self.path.split('?')[0]
             if path=='/health':return self.reply(200,{'ok':True,'mode':'demo-only','version':'1.0.0','storage_configured':bool(SUPA and KEY),'uptime_seconds':round(time.time()-SERVER_STARTED_AT)})
             if path=='/config' and not post:return self.reply(200,{'url':SUPA,'key':KEY})
-            files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/xtreme_ui.js':'xtreme_ui.js','/xtreme_ui.css':'xtreme_ui.css'}
+            files={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/xtreme_ui.js':'xtreme_ui.js','/xtreme_ui.css':'xtreme_ui.css','/strategy_comparison.js':'strategy_comparison.js','/strategy_comparison.css':'strategy_comparison.css'}
             if path in files and not post:
                 f=BASE/'static'/files[path];return self.reply(200,f.read_bytes(),{'html':'text/html; charset=utf-8','js':'text/javascript; charset=utf-8','css':'text/css; charset=utf-8'}[f.suffix[1:]])
             if not path.startswith('/api/'):return self.reply(404,{'error':'Não encontrado.'})
