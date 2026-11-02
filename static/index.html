@@ -3,13 +3,25 @@
 <div class="signal-fields"><label>ATIVO OTC <select id="asset"><option value="">Conecte a corretora</option></select></label>
 <label>TIPO DE ANÁLISE
 <select id="expiryProfile" aria-label="Estratégia ativa">
-<option value="zigzag_fast" selected>ZIGZAG + FRACTAL</option>
+<option value="zigzag_fast" selected>ZIGZAG + FRACTAL · original</option>
+<option value="zigzag_zones">ZIGZAG · SUPORTE / RESISTÊNCIA 5s</option>
+<option value="triangle">TRIÂNGULO BREAKOUT · PRICE ACTION</option>
+<option value="trend_ema">TENDÊNCIA · EMA 8/21 + ADX</option>
+<option value="swing_pullback">SWING · PULLBACK NA EMA</option>
+<option value="sr_breakout">SUPORTE / RESISTÊNCIA · ROMPIMENTO</option>
+<option value="sr_reversal">SUPORTE / RESISTÊNCIA · REJEIÇÃO</option>
+<option value="bollinger_breakout">BOLLINGER · ROMPIMENTO DE CANAL</option>
+<option value="rsi_bollinger">RSI + BOLLINGER · REVERSÃO</option>
+<option value="candle_patterns">PRICE ACTION · PADRÕES DE VELAS</option>
+<option value="macd_adx">MACD + ADX · CONTINUAÇÃO</option>
+<option value="news" disabled>NOTÍCIAS · aguarda calendário verificado</option>
 </select></label>
 <label>TIMEFRAME DA ANÁLISE
 <select id="zigzagTimeframe" aria-label="Timeframe do ZigZag e Fractal">
 <option value="5" selected>5 segundos · Price Action</option>
 <option value="60">M1 · 1 minuto</option>
 <option value="120">M2 · 2 minutos</option>
+<option value="300">M5 · 5 minutos</option>
 </select></label>
 <label>EXPIRAÇÃO
 <select id="expiry" aria-label="Expiração da ordem DEMO">
@@ -39,6 +51,15 @@
  <label><input type="checkbox" id="triangleEMA"> Exigir alinhamento EMA 8/21</label>
  <label><input type="checkbox" id="triangleADX"> Exigir ADX mínimo (18)</label>
  <p id="triangleValidation" class="hint" role="status">AGUARDANDO DADOS REAIS. Nenhuma estratégia aprovada. Padrões desenhados não geram ordem até validar a combinação de ativo, timeframe e expiração.</p>
+</div>
+<div id="technicalSettings" class="triangle-settings" hidden>
+ <strong>ESTRATÉGIA TÉCNICA · PESQUISA DEMO</strong>
+ <label>MODO DE TESTE
+ <select id="technicalExecution">
+ <option value="observe" selected>OBSERVAÇÃO · registrar sinais sem ordens</option>
+ <option value="demo">TESTAR AUTOMÁTICO · somente DEMO</option>
+ </select></label>
+ <p id="technicalValidation" class="hint" role="status">Estratégia experimental. Sem taxa de acerto validada. DEMO automático exige seleção explícita, cotação atual, fechamento confirmado e controles de risco. Primeira expiração não validada: valor 1.</p>
 </div>
 <button id="subscribe" class="secondary load-symbol">ACOMPANHAR ESTE ATIVO</button>
 <div class="offer-panel">
@@ -71,11 +92,11 @@
 <button id="resolvePending" type="button" class="secondary" disabled>LIBERAR PENDÊNCIA CONFERIDA</button>
 <p id="pendingRecoveryResult" class="hint" role="status" aria-live="polite"></p>
 </div><div class="reset-row"><button id="resetHistory" class="secondary" type="button">ZERAR PLACAR E HISTÓRICO</button><span id="resetMessage" role="status" class="hint">Exige confirmação e nenhuma operação pendente.</span></div></div><details class="card activity"><summary>Diagnóstico e avisos (opcional)</summary><p id="storage" class="hint">Status do armazenamento</p><ul id="events"></ul></details></section><aside><div class="card"><h2>01 / Conectar corretora</h2><label>Sessão demo (SSID)<textarea id="ssid" rows="3" autocomplete="off" spellcheck="false" placeholder='42["auth",{…}]'></textarea></label><button id="connect">Conectar Pocket Option</button><button id="disconnect" class="secondary">Desconectar</button><details><summary>Como obter a sessão demo</summary><ol><li>No computador, abra a Pocket Option oficial e selecione a conta demo.</li><li>Abra F12 → Network/Rede → WS e recarregue a plataforma.</li><li>Abra a conexão socket.io e a aba Messages/Mensagens.</li><li>Copie a mensagem enviada que começa com 42["auth",…] e contém "isDemo":1.</li><li>Cole somente no campo acima. Não envie no chat ou por mensagem.</li></ol><p>A sessão dá acesso à conta: fica somente na memória do servidor e é descartada ao desconectar. Pode expirar. Não pedimos a senha da corretora.</p></details><p class="hint">Integração comunitária, sem vínculo oficial. A disponibilidade depende da corretora e da rede.</p></div><div class="card"><h2>CONFIGURAÇÕES DA ENTRADA</h2>
-<p>Estratégia única: ZIGZAG + FRACTAL. Escolha candles 5s, M1 ou M2 e o vencimento correspondente. O bot analisa ativos OTC com preços reais, pivôs confirmados e fechamento dos candles. Após cada resultado oficial, pode analisar novas entradas até atingir a quantidade máxima configurada, stop win, stop loss ou o tempo de sessão. Apenas conta DEMO. Uma ordem pendente por vez; não há entrada garantida.</p>
+<p>Escolha uma das estratégias no seletor acima: ZigZag + Fractal original, regiões, triângulos, tendência EMA/ADX, swing, rompimento/rejeição de suporte, Bollinger, RSI e padrões de velas. Análise e expiração são configuradas separadamente. O radar procura TODOS os pares OTC DEMO abertos com payout superior a 80% e acima do mínimo escolhido. Estratégias novas começam em OBSERVAÇÃO; teste automático DEMO somente após seleção explícita. Nenhuma taxa de acerto de 70% é garantida.</p>
 <label>Valor da entrada DEMO<input id="amount" type="number" value="1" min="1" max="100" step="0.01"></label>
-<label>Payout mínimo %<input id="min_payout" type="number" value="88" min="88" max="100"></label>
+<label>Payout mínimo % (acima de 80%)<input id="min_payout" type="number" value="80" min="80" max="100" step="1"></label>
 <div class="fields"><label>Stop Win<input id="stop_win" type="number" value="20" min="1" max="10000"></label><label>Stop Loss<input id="stop_loss" type="number" value="20" min="1" max="10000"></label><label>Máx. operações na sessão (1–1000)<input id="limit" type="number" value="20" min="1" max="1000"></label></div>
 <label>Pausa após resultado oficial<select id="pause_after"><option value="5">5 segundos</option><option value="10">10 segundos</option><option value="15">15 segundos</option><option value="20" selected>20 segundos</option><option value="30">30 segundos</option></select></label>
-<div class="mode-description"><strong>Filtro contra lateralização: ATIVO</strong><p>ZigZag + Fractal (5s/M1/M2) opera somente em DEMO, com cotação recente, payout mínimo, confirmação de pivôs, filtro de lateralização, uma ordem pendente por vez e intervalo entre operações. Se a expiração ainda não tiver sido comprovada pela corretora, o primeiro teste usa valor 1; após o resultado oficial validado, as próximas entradas respeitam o valor configurado. Os stops e limites continuam obrigatórios.</p></div>
+<div class="mode-description"><strong>Filtros de segurança DEMO ativos</strong><p>Somente candles reais fechados, sem lacunas, payout superior a 80%, saldo e stop configurados, um único envio pendente e cooldown. Perfis técnicos experimentais têm modo OBSERVAÇÃO sem ordens. Ao escolher TESTAR AUTOMÁTICO, não há promessa de taxa de acerto; expiração ainda não comprovada exige entrada inicial de valor 1 e resultado oficial.</p></div>
 <details><summary>Segurança e manutenção</summary><button id="stop" class="danger">PARAR TODAS AS ENTRADAS AUTOMÁTICAS</button><p>Parar impede novas ordens; uma operação enviada continua aguardando o resultado da corretora.</p></details>
 </div></aside></div><footer>Plano gratuito do Render: pode suspender por inatividade. Não é um serviço garantido 24h. Estratégia experimental; resultados demo não garantem desempenho futuro.</footer></div></main></body></html>
