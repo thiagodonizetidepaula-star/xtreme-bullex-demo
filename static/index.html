@@ -44,22 +44,22 @@
  <label>ENTRADA
  <select id="triangleEntry"><option value="both" selected>Rompimento e reteste</option><option value="breakout">Somente rompimento</option><option value="retest">Somente reteste</option></select></label>
  <label>EXECUÇÃO
- <select id="triangleExecution"><option value="observe" selected>OBSERVAÇÃO · sem ordens</option><option value="trial">TESTE DEMO · apenas 1 ordem de valor 1</option><option value="demo">DEMO automático contínuo · requer validação</option></select></label>
+ <select id="triangleExecution"><option value="demo" selected>OPERAR AUTOMÁTICO · somente DEMO</option><option value="observe">APENAS OBSERVAR · sem ordens</option><option value="trial">TESTE ÚNICO · 1 ordem de valor 1 DEMO</option></select></label>
  <label>FILTRO DE CANDLES
- <select id="triangleSensitivity"><option value="balanced" selected>EQUILIBRADO 5s · menos rígido, sem dojis/lateralização</option><option value="strict">RIGOROSO · filtro original</option></select></label>
- <p class="hint">Teste DEMO de 3s/5s: escolha gráfico 5s, valor 1, uma única operação. A entrada espera triângulo e rompimento/reteste confirmados, nunca um sinal de candle antigo. Sem conta real e sem liberação automática contínua.</p>
+ <select id="triangleSensitivity"><option value="strict" selected>RIGOROSO · automático DEMO com velas confirmadas</option><option value="balanced">EQUILIBRADO · somente observação ou teste único 5s</option></select></label>
+ <p class="hint">Triângulo automático DEMO contínuo: você inicia e interrompe. Exige filtro RIGOROSO, candles reais fechados, stop e limites. Para uma expiração ainda não confirmada, comece com valor 1. Teste único e observação continuam opcionais. Não há garantia de acerto.</p>
  <label><input type="checkbox" id="triangleEMA"> Exigir alinhamento EMA 8/21</label>
  <label><input type="checkbox" id="triangleADX"> Exigir ADX mínimo (18)</label>
- <p id="triangleValidation" class="hint" role="status">AGUARDANDO DADOS REAIS. Nenhuma estratégia aprovada. Padrões desenhados não geram ordem até validar a combinação de ativo, timeframe e expiração.</p>
+ <p id="triangleValidation" class="hint" role="status">Aguardando DEMO conectada. Você pode operar automaticamente em DEMO após iniciar; padrões exigem rompimento ou reteste confirmado e todos os filtros.</p>
 </div>
 <div id="technicalSettings" class="triangle-settings" hidden>
- <strong>ESTRATÉGIA TÉCNICA · PESQUISA DEMO</strong>
- <label>MODO DE TESTE
+ <strong>ESTRATÉGIA TÉCNICA · OPERAÇÕES AUTOMÁTICAS DEMO</strong>
+ <label>COMO OPERAR
  <select id="technicalExecution">
- <option value="observe" selected>OBSERVAÇÃO · registrar sinais sem ordens</option>
- <option value="demo">TESTAR AUTOMÁTICO · somente DEMO</option>
+ <option value="demo" selected>OPERAR AUTOMÁTICO · enviar CALL/PUT DEMO</option>
+ <option value="observe">APENAS OBSERVAR · sem ordens</option>
  </select></label>
- <p id="technicalValidation" class="hint" role="status">Estratégia experimental. Sem taxa de acerto validada. DEMO automático exige seleção explícita, cotação atual, fechamento confirmado e controles de risco. Primeira expiração não validada: valor 1.</p>
+ <p id="technicalValidation" class="hint" role="status">Operação automática DEMO: selecione o perfil, escolha a expiração, configure limites e toque INICIAR. Ordens somente com sinal confirmado. Expiração ainda não verificada: entrada de valor 1. Compare resultados oficiais na aba Histórico.</p>
 </div>
 <button id="subscribe" class="secondary load-symbol">ACOMPANHAR ESTE ATIVO</button>
 <div class="offer-panel">
@@ -92,11 +92,11 @@
 <button id="resolvePending" type="button" class="secondary" disabled>LIBERAR PENDÊNCIA CONFERIDA</button>
 <p id="pendingRecoveryResult" class="hint" role="status" aria-live="polite"></p>
 </div><div class="reset-row"><button id="resetHistory" class="secondary" type="button">ZERAR PLACAR E HISTÓRICO</button><span id="resetMessage" role="status" class="hint">Exige confirmação e nenhuma operação pendente.</span></div></div><details class="card activity"><summary>Diagnóstico e avisos (opcional)</summary><p id="storage" class="hint">Status do armazenamento</p><ul id="events"></ul></details></section><aside><div class="card"><h2>01 / Conectar corretora</h2><label>Sessão demo (SSID)<textarea id="ssid" rows="3" autocomplete="off" spellcheck="false" placeholder='42["auth",{…}]'></textarea></label><button id="connect">Conectar Pocket Option</button><button id="disconnect" class="secondary">Desconectar</button><details><summary>Como obter a sessão demo</summary><ol><li>No computador, abra a Pocket Option oficial e selecione a conta demo.</li><li>Abra F12 → Network/Rede → WS e recarregue a plataforma.</li><li>Abra a conexão socket.io e a aba Messages/Mensagens.</li><li>Copie a mensagem enviada que começa com 42["auth",…] e contém "isDemo":1.</li><li>Cole somente no campo acima. Não envie no chat ou por mensagem.</li></ol><p>A sessão dá acesso à conta: fica somente na memória do servidor e é descartada ao desconectar. Pode expirar. Não pedimos a senha da corretora.</p></details><p class="hint">Integração comunitária, sem vínculo oficial. A disponibilidade depende da corretora e da rede.</p></div><div class="card"><h2>CONFIGURAÇÕES DA ENTRADA</h2>
-<p>Escolha uma das estratégias no seletor acima: ZigZag + Fractal original, regiões, triângulos, tendência EMA/ADX, swing, rompimento/rejeição de suporte, Bollinger, RSI e padrões de velas. Análise e expiração são configuradas separadamente. O radar procura TODOS os pares OTC DEMO abertos com payout superior a 80% e acima do mínimo escolhido. Estratégias novas começam em OBSERVAÇÃO; teste automático DEMO somente após seleção explícita. Nenhuma taxa de acerto de 70% é garantida.</p>
+<p>Escolha uma das estratégias no seletor acima: ZigZag + Fractal original, regiões, triângulos, tendência EMA/ADX, swing, rompimento/rejeição de suporte, Bollinger, RSI e padrões de velas. Análise e expiração são configuradas separadamente. O radar procura TODOS os pares OTC DEMO abertos com payout superior a 80% e acima do mínimo escolhido. Estratégias técnicas começam configuradas para AUTOMÁTICO DEMO, mas só enviam ordens quando você toca INICIAR com a conta DEMO conectada. Nenhuma taxa de acerto de 70% é garantida.</p>
 <label>Valor da entrada DEMO<input id="amount" type="number" value="1" min="1" max="100" step="0.01"></label>
 <label>Payout mínimo % (acima de 80%)<input id="min_payout" type="number" value="80" min="80" max="100" step="1"></label>
 <div class="fields"><label>Stop Win<input id="stop_win" type="number" value="20" min="1" max="10000"></label><label>Stop Loss<input id="stop_loss" type="number" value="20" min="1" max="10000"></label><label>Máx. operações na sessão (1–1000)<input id="limit" type="number" value="20" min="1" max="1000"></label></div>
 <label>Pausa após resultado oficial<select id="pause_after"><option value="5">5 segundos</option><option value="10">10 segundos</option><option value="15">15 segundos</option><option value="20" selected>20 segundos</option><option value="30">30 segundos</option></select></label>
-<div class="mode-description"><strong>Filtros de segurança DEMO ativos</strong><p>Somente candles reais fechados, sem lacunas, payout superior a 80%, saldo e stop configurados, um único envio pendente e cooldown. Perfis técnicos experimentais têm modo OBSERVAÇÃO sem ordens. Ao escolher TESTAR AUTOMÁTICO, não há promessa de taxa de acerto; expiração ainda não comprovada exige entrada inicial de valor 1 e resultado oficial.</p></div>
+<div class="mode-description"><strong>Filtros de segurança DEMO ativos</strong><p>Somente candles reais fechados, sem lacunas, payout superior a 80%, saldo e stop configurados, um único envio pendente e cooldown. Os perfis técnicos e Triângulo podem operar automaticamente apenas em DEMO após seu clique em INICIAR; observação é opcional. A primeira expiração não comprovada exige valor 1 e resultado oficial. A aba Histórico compara acerto, resultado e retorno por estratégia e expiração; nenhuma taxa é garantida.</p></div>
 <details><summary>Segurança e manutenção</summary><button id="stop" class="danger">PARAR TODAS AS ENTRADAS AUTOMÁTICAS</button><p>Parar impede novas ordens; uma operação enviada continua aguardando o resultado da corretora.</p></details>
 </div></aside></div><footer>Plano gratuito do Render: pode suspender por inatividade. Não é um serviço garantido 24h. Estratégia experimental; resultados demo não garantem desempenho futuro.</footer></div></main></body></html>
