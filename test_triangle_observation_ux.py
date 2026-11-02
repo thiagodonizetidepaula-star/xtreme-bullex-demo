@@ -47,7 +47,7 @@ class Tests(unittest.TestCase):
     def test_same_amount_20_unvalidated_automatic_remains_blocked(self):
         with patch('broker.time.time',return_value=NOW):
             b=broker()
-            with self.assertRaisesRegex(ValueError,'expiração ainda não validada'):
+            with self.assertRaisesRegex(ValueError,'primeiro teste automático'):
                 b.start_auto(config(observe=False,amount=20))
             self.assertFalse(b.auto)
 
@@ -62,8 +62,8 @@ class Tests(unittest.TestCase):
         text=(Path(__file__).parent/'static'/'app.js').read_text(encoding='utf8')
         self.assertIn("triangle_mode:isTriangle",text)
         self.assertIn("triangle_observe:isTriangle&&",text)
-        self.assertIn("triangleDemoOption.disabled=!triangleDemoAvailable",text)
-        self.assertIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",text)
+        self.assertIn("triangleDemoOption.disabled=false",text)
+        self.assertNotIn("if(!triangleDemoAvailable&&$('triangleExecution').value==='demo')",text)
         self.assertIn('CORRETORA DESCONECTADA. Toque CONECTAR POCKET DEMO',text)
         self.assertIn('OBSERVAÇÃO ATIVA · varrendo todos os pares elegíveis, SEM ORDENS.',text)
         self.assertIn('INICIAR OBSERVAÇÃO · SEM ORDENS',text)
