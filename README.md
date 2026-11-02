@@ -1,3 +1,48 @@
+## V39 — Múltiplas estratégias técnicas, observação/DEMO e varredura OTC >80%
+
+- **⚙ Configurações / Estratégia** now exposes the original unchanged
+  **ZigZag + Fractal**, **ZigZag zonas**, existing **Triângulo Breakout**,
+  and **eight independent experimental** closed-candle engines:
+  EMA8/21+ADX trend, EMA swing/pullback, support/resistance breakout,
+  support/resistance rejection, Bollinger channel breakout,
+  RSI+Bollinger reversal, confirmed candlestick patterns, MACD+ADX.
+  The *News/Economic* option is visibly disabled until a verifiable,
+  time-stamped economic calendar feed is integrated; no invented news.
+- Technical engines operate on **verified closed OHLC candles only**,
+  using the existing `VerifiedBars` and broker historical validator,
+  with ATR, EMA, ADX, RSI, MACD and Bollinger filters. 42 consecutive
+  completed bars warm up; incomplete/sparse/gapped candles never authorize
+  orders. Historical imports seed context but do not replay old signals.
+- Each new technical strategy has **OBSERVAÇÃO sem ordens** as the
+  default. The operator may explicitly select **TESTAR AUTOMÁTICO ·
+  somente DEMO**, subject to confirmed DEMO account, verified live feed,
+  expiry compatibility, payout, risk stops, broker expiry validation,
+  cooldown and **one unresolved order at a time**. The first unvalidated
+  expiry requires stake 1 DEMO. The operator must manually start.
+  These profiles have **no independent out-of-sample profitability
+  validation** and no promised accuracy. Do not conflate expiry
+  validation with statistical strategy approval.
+- Technical **analysis timeframe / option expiry** research combinations:
+  5s chart → 3s/5s; M1 → 60s/120s; M2 → 120s/180s; M5 → 300s.
+  These are **selectable research combinations**, not broker-confirmed
+  expiry availability or proof that any one is profitable. Original
+  ZigZag timeframe/expiry combinations remain unchanged.
+- The market radar subscribes and monitors **all open OTC DEMO symbols
+  with broker payout strictly >80%**, additionally respecting the
+  operator-selected minimum (UI default 80%). The old hard-coded
+  radar 88% floor and 20-asset status display cap were removed.
+  A requested subscription is not proof of a live stream; every order
+  requires independently verified fresh real quotes.
+- Each submitted DEMO order now records its strategy, expiry and Gale
+  level in the existing audit/history. The opt-in 1×2 Gale remains
+  separate from the technical entry logic and follows the existing
+  official-LOSS/next-candle/stop-budget rules; it is disabled for
+  observation, zones and triangles.
+- **70% accuracy is a research target, not a guarantee**. No new
+  profile is labeled validated. Chronological walk-forward analysis
+  with payout-adjusted net returns, confidence intervals and
+  independent broker DEMO outcomes is required to evaluate it.
+
 ## V38 — Martingale opcional 1 Gale ×2 na próxima vela (DEMO)
 
 The clean **⚙ Configurações** tab now provides an **unchecked by default**
