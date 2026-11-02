@@ -120,7 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                     broker=Broker(auth,save);CLIENTS[uid]={'broker':broker,'token':token,'seen':time.time(),'storage':'Pronto'};broker.start()
                     return self.reply(200,{'ok':True})
                 if path=='/api/history' and not post:
-                    return self.reply(200,supa('/rest/v1/pocket_tiger_demo_history?select=*&order=created_at.desc&limit=300',token))
+                    return self.reply(200,supa('/rest/v1/pocket_tiger_demo_history?user_id=eq.'+uid+'&select=*&order=created_at.desc&limit=300',token))
                 if path=='/api/status' and not post:
                     if not c:return self.reply(200,{'connected':False,'demo_confirmed':False,'connecting':False,'connection_state':'sem_sessao_no_servidor','connection_failure':'A sessão Pocket Option não está ativa no servidor. Reinícios do Render encerram conexões; toque CONECTAR POCKET DEMO com uma sessão atual.', 'message':'SEM SESSÃO DEMO NO SERVIDOR. Após reinício do Render, reconecte no Android. Nenhuma ordem é retomada automaticamente.','assets':[],'ticks':[],'history':[],'events':[]})
                     out=c['broker'].snapshot();out['storage']=c['storage'];return self.reply(200,out)
