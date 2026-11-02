@@ -312,10 +312,20 @@ function render(){
  $('triangleSettings').hidden=!triangleSelected;
  $('technicalSettings').hidden=!technicalSelected;
  $('technicalExecution').disabled=!!s.auto;
+ const technicalResults=(s.history||[]).filter(h=>h.strategy===activeProfile&&
+   (h.status==='WIN'||h.status==='LOSS'));
+ const technicalWins=technicalResults.filter(h=>h.status==='WIN').length;
+ const technicalRate=technicalResults.length?
+   (100*technicalWins/technicalResults.length).toFixed(1)+'%':'—';
+ const technicalNet=technicalResults.reduce((sum,h)=>sum+(Number(h.net)||0),0);
  $('technicalValidation').textContent=technicalSelected?
-   ($('technicalExecution').value==='observe'?
+   (($('technicalExecution').value==='observe'?
     'OBSERVAÇÃO: identifica sinais em todos os pares elegíveis, sem enviar ordens.':
-    'TESTE EXPERIMENTAL: ordens exclusivamente DEMO. A primeira expiração sem validação exige valor 1. Não há backtest independente aprovado nem promessa de 70%.'):'';
+    'TESTE EXPERIMENTAL: ordens exclusivamente DEMO. Expiração não validada exige valor 1.')+
+    ' RESULTADOS OFICIAIS DESTA SESSÃO: '+technicalResults.length+
+    ' operações · '+technicalWins+' WIN · '+technicalRate+' de acerto · saldo líquido '+money(technicalNet)+
+    (technicalResults.length<30?' · AMOSTRA INSUFICIENTE':' · ainda requer teste fora da amostra')+
+    '. Meta de 70% não garantida.'):'';
  $('zigzagTimeframe').closest('label').hidden=triangleSelected;
  $('triangleTimeframe').disabled=!!s.auto;
  $('triangleEntry').disabled=!!s.auto;
