@@ -187,7 +187,7 @@ class Tests(unittest.TestCase):
         for key in ('triangleTimeframe','triangleEntry',
                     'triangleExecution','triangleADX','triangleEMA'):
             self.assertIn(key,html)
-        self.assertNotIn('option value="triangle"',html)
+        self.assertIn('option value="triangle"',html)
         for key in ('triangle_mode:','triangle_observe:','series.triangles','TRIÂNGULO'):
             self.assertIn(key,js)
         body=js.split('function render(){',1)[1]
