@@ -106,6 +106,7 @@ class TechnicalTests(unittest.TestCase):
             for profile in PROFILES:
                 for tf,expiries in EXPIRIES.items():
                     for expiry in expiries:
+                        if profile=='fable_8' and (tf!=60 or expiry!=60):continue
                         with self.subTest(profile=profile,tf=tf,expiry=expiry):
                             b=broker();b.start_auto(config(profile,tf,expiry))
                             self.assertEqual(b.technical_profile,profile)
@@ -120,7 +121,7 @@ class TechnicalTests(unittest.TestCase):
     def test_reject_unsupported_combinations_and_fake_profiles(self):
         with patch('broker.time.time',return_value=BASE):
             for cfg in [config('fake'),config('trend_ema',60,3),
-                        config('trend_ema',5,60),config('trend_ema',300,60),
+                        config('trend_ema',5,60),config('trend_ema',300,60),config('fable_8',5,5),config('fable_8',120,120),
                         {**config(),'scan_all':False},
                         {**config(),'technical_observe':'false'},
                         {**config(),'zone_mode':True}]:
