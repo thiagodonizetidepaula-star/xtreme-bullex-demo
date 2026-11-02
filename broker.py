@@ -559,7 +559,7 @@ class Broker:
             anchor=int(watch.price_time)
             try:
                 self.send('loadHistoryPeriod',{'asset':sym,'index':idx,
-                    'offset':min(172800,period*500) if self.triangle_mode else max(1800,period*28)+period,'period':period,
+                    'offset':min(172800,period*500) if self.triangle_mode else max(180,period*34)+period,'period':period,
                     'time':anchor if period==5 else anchor//period*period})
             except Exception:
                 self.log('Histórico não disponível; estratégia seguirá somente candles reais novos.')
@@ -605,7 +605,7 @@ class Broker:
                     self.log('SEM ORDEM '+symbol+' · '+self.market_quality)
                     watch.last_signal=None;watch.signal_received=0
                     continue
-                self.market_quality='HEIKIN ASHI até 30m retroativos ('+str(ha['observed_minutes'])+'m) · '+str(ha['green'])+' verdes / '+str(ha['red'])+' vermelhas · '+ha['reason']
+                self.market_quality='HEIKIN ASHI '+str(ha['candles'])+' velas recentes · '+str(ha['green'])+' verdes / '+str(ha['red'])+' vermelhas · '+ha['reason']
             if self.triangle_mode:
                 key=(symbol,self.scan_timeframe,self.auto_expiry)
                 report=self.triangle_reports.get(key,{})
