@@ -1,3 +1,36 @@
+## V40 — Operar automaticamente em DEMO e comparar qual estratégia performa melhor
+
+- As oito estratégias técnicas **agora vêm selecionadas em OPERAR
+  AUTOMÁTICO · somente DEMO**, em vez de observação. **Nenhuma ordem
+  inicia sozinha**: usuário deve conectar a Pocket Option DEMO, escolher
+  perfil, timeframe/expiração, valor 1 na primeira expiração não validada,
+  stops, limite, e tocar **INICIAR AUTOMÁTICO DEMO**. A opção
+  **APENAS OBSERVAR** continua disponível.
+- O **Triângulo Breakout RIGOROSO** também permite operação DEMO
+  automática contínua por escolha explícita, sem exigir aprovação
+  anterior de paper trading; o usuário está justamente coletando
+  resultados reais da conta DEMO. Não confundir essa permissão com
+  validação de rentabilidade. Modo EQUILIBRADO permanece restrito a
+  observação ou teste único. Controles de expiração, valor inicial 1,
+  fechamento confirmado, payout, saldo, stop, limite, cooldown,
+  expiração oficial e uma ordem pendente continuam obrigatórios.
+- Aba **Histórico → Comparar estratégias**: combina operações
+  **WIN/LOSS/EMPATE oficialmente confirmadas pela corretora** da sessão
+  com até 300 registros privados anteriores salvos no Supabase (JWT,
+  RLS e filtro adicional por user_id). Remove duplicatas por ID,
+  exclui ordens pendentes e resultados contraditórios, e mostra
+  **número de operações, WIN/LOSS, taxa de acerto, lucro/prejuízo
+  líquido e ROI sobre valor total apostado** por perfil. Filtro por
+  expiração (3s, 5s, M1, M2, M3, M5) permite comparações mais justas.
+  Menos de 30 operações são marcadas **amostra inicial**; nem uma
+  amostra maior prova superioridade sem validação fora da amostra.
+- A comparação usa exclusivamente resultados oficiais da conta DEMO,
+  não sinais simulados, observações ou backtests. O histórico é
+  isolado por usuário e a memória do painel é limpa ao trocar conta
+  ou zerar o histórico. Se o banco estiver indisponível, o painel
+  mostra explicitamente apenas a sessão atual.
+- **Não promete 70% de acerto** e não opera em conta real.
+
 ## V39 — Múltiplas estratégias técnicas, observação/DEMO e varredura OTC >80%
 
 - **⚙ Configurações / Estratégia** now exposes the original unchanged
