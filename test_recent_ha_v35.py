@@ -98,6 +98,30 @@ class TestRecentColors(unittest.TestCase):
         self.assertEqual(s['last_color'],'call')
         self.assertTrue(permitted_ha_entry(sample,5,'call')[0])
 
+    def test_broker_avoids_order_when_last_closed_ha_is_minor_color(self):
+        from unittest.mock import patch
+        from test_heikin_ashi_v33 import demo,cfg,BASE
+        bars=trend_bars(5)[-36:]
+        ha=[]
+        for i,b in enumerate(bars):
+            o=100+i*.3
+            green=(i%2==0 or i==33)
+            c=o+(.15 if green else -.15)
+            ha.append({'t':b['t'],'open':o,'close':c,
+                       'high':max(o,c)+.01,'low':min(o,c)-.01})
+        with patch('broker.time.time',return_value=BASE):
+            b=demo();b.start_auto(cfg())
+            watch=b.radar.watches['A_otc']
+            watch.engine.ingest=lambda ts,price,now:'call'
+            watch.engine.bars.extend(bars)
+            watch.engine.reason='Sinal ZigZag Fractal de COMPRA'
+            with patch('heikin_ashi.heikin_ashi',return_value=ha):
+                b.event('updateStream',[['A_otc',BASE,100.5]])
+            self.assertEqual(b.count,0)
+            self.assertIsNone(b.pending)
+            self.assertTrue(b.auto)
+            self.assertIn('última vela minoritária',b.market_quality)
+
     def test_short_sample_and_sideways(self):
         s=analyze_ha_30m(trend_bars(5)[-12:],5)
         self.assertTrue(s['ready'],s)
