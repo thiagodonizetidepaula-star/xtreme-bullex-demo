@@ -46,7 +46,7 @@ public final class MainActivity extends Activity {
         root.addView(portal,new LinearLayout.LayoutParams(-1,0,1)); root.addView(broker,new LinearLayout.LayoutParams(-1,0,1));
         broker.setVisibility(View.GONE); setContentView(root);
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER) || !WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            new AlertDialog.Builder(this).setTitle("Atualize o Android System WebView")
+            new AlertDialog.Builder(this).setTitle("VECTOR SIGNAL • atualize o WebView")
                 .setMessage("Esta versão do WebView não permite iniciar a conexão integrada. Atualize Android System WebView e Chrome pela Play Store e abra novamente.")
                 .setPositiveButton("Fechar",(d,w)->finish()).setCancelable(false).show();return;
         }
@@ -73,7 +73,7 @@ public final class MainActivity extends Activity {
             try(InputStream input=getAssets().open("session-bridge.js")) {byte[] buffer=new byte[4096];int n;while((n=input.read(buffer))!=-1)bytes.write(buffer,0,n);}
             String script=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
             WebViewCompat.addDocumentStartJavaScript(broker,script,WebPolicy.BROKER_ORIGINS);
-            portal.loadUrl(WebPolicy.PORTAL + "/");
+            portal.loadUrl(WebPolicy.PORTAL + "/vector");
         } catch (Exception ignored) {info.setText("Não foi possível iniciar a conexão integrada.");bar.setVisibility(View.VISIBLE);}
     }
 
