@@ -20,9 +20,19 @@ class ManualSignalsTests(unittest.TestCase):
         candidates=[{'strategy':'ema','name':'EMA','direction':'ALTA','reason':'test'},{'strategy':'sweep','name':'Sweep','direction':'ALTA','reason':'test'}]
         def sleep(_):
             if not s.s['running']:raise EndScan()
-        with patch('signals.web.evaluate',return_value=([{'from':int(now//60)*60-60}],candidates)),patch('signals.web.time.sleep',side_effect=sleep):
+        with patch('signals.web.choose',return_value=(60,{**candidates[0],'confirmations':['EMA','Sweep']},[{'from':int(now//60)*60-60}])),patch('signals.web.evaluate',return_value=([{'from':int(now//60)*60-60}],candidates)),patch('signals.web.time.sleep',side_effect=sleep):
             with self.assertRaises(EndScan):s.scan(s.generation,r)
         self.assertEqual(len(s.s['history']),1);self.assertFalse(s.s['running']);self.assertEqual(r.call.call_count,1)
+    def test_auto_reads_both_periods_before_one_signal(self):
+        s=self.ready();s.s['timeframe']='auto';s.analyze();now=time.time();r=Mock();r.call.return_value={'candles':[],'now':now}
+        chosen={'strategy':'retest','name':'Reteste','direction':'ALTA','reason':'test','confirmations':['Reteste']}
+        def sleep(_):
+            if not s.s['running']:raise EndScan()
+        with patch('signals.web.evaluate',return_value=([],[])),patch('signals.web.choose',return_value=(300,chosen,[{'from':int(now//300)*300-300}])) as select,patch('signals.web.time.sleep',side_effect=sleep):
+            with self.assertRaises(EndScan):s.scan(s.generation,r)
+        self.assertEqual([c.kwargs['tf'] for c in r.call.call_args_list],[60,300])
+        self.assertEqual(set(select.call_args.args[0]),{60,300})
+        self.assertEqual(len(s.s['history']),1);self.assertEqual(s.s['history'][0]['tf'],300)
     def test_cancelled_inflight_read_cannot_emit(self):
         s=self.ready();s.analyze();r=Mock()
         def call(*a,**k):

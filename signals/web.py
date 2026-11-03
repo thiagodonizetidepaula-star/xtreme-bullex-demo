@@ -1,6 +1,7 @@
 import json,time,threading,subprocess,sys,pathlib,queue,secrets
 from flask import Blueprint,request,jsonify,session,render_template
 from .engine import NAMES,evaluate,settle
+from .review import choose
 
 class Reader:
     def __init__(self):
@@ -59,7 +60,7 @@ class Scanner:
             if self.s['running']:return 'Análise em andamento. Aguarde.'
             if any(x['result']=='PENDENTE' for x in self.s['history']):return 'Aguarde o vencimento e a apuração do sinal atual.'
             if not self.s['enabled']:return 'Selecione pelo menos uma estratégia.'
-            self.search_id+=1;self.checked=set();self.deadline=time.time()+120
+            self.search_id+=1;self.checked=set();self.deadline=time.time()+60
             self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…')
             return None
     def finish_search(self,message):
@@ -94,6 +95,12 @@ class Scanner:
                 self.cursor+=1;asset,tf=job
                 with self.lock:self.s.update(asset=asset,message='Lendo '+asset+' · M'+str(tf//60))
                 data=r.call('signal_bars',asset=asset,tf=tf);now=data['now'];bars,signals=evaluate(data['candles'],tf,now)
+                readings={tf:(bars,signals)}
+                if running and tfchoice=='auto':
+                    other_tf=300 if tf==60 else 60
+                    other_data=r.call('signal_bars',asset=asset,tf=other_tf)
+                    now=max(now,other_data['now'])
+                    readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
                 with self.lock:
                     if g!=self.generation:return
                     self.cache[(asset,tf)]=bars;self.s.update(last_read=now,scans=self.s['scans']+1,error=None)
@@ -103,19 +110,22 @@ class Scanner:
                             if result:rec.update(result)
                             elif now>rec['expires_at']+tf*155:rec['result']='SEM DADOS'
                     if not running or not self.s['running'] or search_id!=self.search_id:continue
-                    self.checked.add((asset,tf))
-                    if not bars:continue
-                    signals=[x for x in signals if x['strategy'] in self.s['enabled']]
-                    # Conflicting strategies produce no signal. Choose one explanation per asset/bar.
-                    if len({x['direction'] for x in signals})!=1:continue
+                    self.checked.update((asset,t) for t in readings)
+                    if time.time()>=self.deadline:
+                        self.finish_search('Tempo de busca encerrado sem sinal confirmado. Toque em Analisar para tentar novamente.');continue
+                    selected=choose(readings,self.s['enabled'],now)
+                    if not selected:
+                        self.s['message']='Sem confirmação suficiente em '+asset+'; verificando outro ativo.'
+                        continue
+                    tf,chosen,bars=selected
                     key=(asset,bars[-1]['from'],tf)
                     if key in self.seen:continue
                     if any(x['result']=='PENDENTE' for x in self.s['history']):
                         self.finish_search('Acompanhando o sinal atual');continue
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
-                    chosen=signals[0];entry=(int(now)//tf+1)*tf
-                    rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','confirmations':[x['name'] for x in signals],'basis_at':bars[-1]['from'],'selection':'Critérios objetivos; sem probabilidade estimada'}
+                    entry=(int(now)//tf+1)*tf
+                    rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. Aguarde seu vencimento antes de analisar novamente.')
                     # Never discard unresolved records.
