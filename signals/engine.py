@@ -1,6 +1,7 @@
 """Experimental price-action rules. No broker access and no order execution."""
 import math
-NAMES={'ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela'}
+from .momentum import candidate as momentum_candidate
+NAMES={'rsi_adx':'RSI + ADX v1','ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela'}
 
 def clean(raw,tf,now):
     rows={}
@@ -74,6 +75,8 @@ def detect(bars):
     # Hanging man variant from the submitted video, followed by a break confirmation.
     pb=abs(p['close']-p['open']);pl=min(p['open'],p['close'])-p['low'];ps=p['high']-p['low']
     if p['close']>bars[-8]['close'] and pl>=max(2*pb,.55*ps) and pb>=.1*ps and b['close']<p['low']:add('rejection','BAIXA','Enforcado após alta com confirmação inferior')
+    momentum=momentum_candidate(bars)
+    if momentum:found.insert(0,momentum)
     return found
 
 def evaluate(raw,tf,now):
