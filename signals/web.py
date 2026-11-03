@@ -101,6 +101,12 @@ class Scanner:
                     other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
+                # Refresh this account's options catalogue before announcing a candidate.
+                verified=None
+                if running and self.s['running'] and search_id==self.search_id and any(items[1] for items in readings.values()):
+                    catalog=r.call('catalog')
+                    verified=next((a for a in catalog['assets'] if a['asset']==asset and a['open']),None)
+                    now+=max(0,time.time()-now)
                 with self.lock:
                     if g!=self.generation:return
                     self.cache[(asset,tf)]=bars;self.s.update(last_read=now,scans=self.s['scans']+1,error=None)
@@ -113,7 +119,7 @@ class Scanner:
                     self.checked.update((asset,t) for t in readings)
                     if time.time()>=self.deadline:
                         self.finish_search('Tempo de busca encerrado sem sinal confirmado. Toque em Analisar para tentar novamente.');continue
-                    selected=choose(readings,self.s['enabled'],now)
+                    selected=choose(readings,self.s['enabled'],now) if verified else None
                     if not selected:
                         self.s['message']='Sem confirmação suficiente em '+asset+'; verificando outro ativo.'
                         continue
@@ -125,7 +131,7 @@ class Scanner:
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
                     entry=(int(now)//tf+1)*tf
-                    rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
+                    rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. Aguarde seu vencimento antes de analisar novamente.')
                     # Never discard unresolved records.

@@ -1,14 +1,15 @@
 """Read-only process using the existing verified broker adapter."""
 import sys,json,contextlib
 import worker
+from signals.catalog import build_catalog
 
 def dispatch(c):
     op=c.get('op')
     if op=='connect':return worker.dispatch(c)
     worker.demo()
     if op=='catalog':
-        values=worker.market(force=True)
-        return {'assets':[{'asset':a,**v} for a,v in sorted(values.items())]}
+        with worker.stage('catálogo de opções para sinais',10):info=worker.api.get_all_init_v2()
+        return {'assets':build_catalog(info,worker.api.get_all_ACTIVES_OPCODE())}
     if op=='signal_bars':
         now=worker.broker_now();asset=c['asset'];tf=c['tf']
         if tf not in (60,300) or asset not in worker.api.get_all_ACTIVES_OPCODE():raise ValueError('Ativo ou período inválido.')
