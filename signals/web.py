@@ -28,7 +28,7 @@ class Reader:
 class Scanner:
     def __init__(self):
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
-        self.s={'connected':False,'running':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['rsi_adx'],'error':None}
+        self.s={'connected':False,'running':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
         self.seen=set();self.cache={};self.catalog_at=0;self.cursor=0
         self.search_id=0;self.checked=set();self.deadline=0
     def snapshot(self):

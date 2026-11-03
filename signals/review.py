@@ -1,5 +1,6 @@
 """Experimental context ranking. Scores are rule weights, never probabilities."""
 from .engine import ema
+from .reaction import review as review_reaction
 
 def context(bars):
     if len(bars)<35:return None
@@ -44,6 +45,9 @@ def entry_quality(bars,direction):
     return reasons
 
 def review(bars,signals,other):
+    if any(s['strategy']=='reaction' for s in signals):
+        if len({s['direction'] for s in signals})!=1:return None
+        return review_reaction(bars,signals)
     ctx=context(bars)
     if not ctx or not signals:return None
     if len({s['direction'] for s in signals})!=1:return None

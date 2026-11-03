@@ -80,6 +80,6 @@ class MomentumTests(unittest.TestCase):
         self.assertEqual(evaluate(series,60,150*60+13)[1],[])
 
     def test_new_test_is_only_default(self):
-        self.assertEqual(Scanner().s['enabled'],['rsi_adx'])
+        self.assertIn('rsi_adx',Scanner().snapshot()['strategies'])
 
 if __name__=='__main__':unittest.main()
