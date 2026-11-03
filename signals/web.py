@@ -28,9 +28,9 @@ class Reader:
 class Scanner:
     def __init__(self):
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
-        self.s={'connected':False,'running':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
+        self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
         self.seen=set();self.cache={};self.catalog_at=0;self.cursor=0
-        self.search_id=0;self.checked=set();self.deadline=0
+        self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
     def snapshot(self):
         with self.lock:return json.loads(json.dumps({**self.s,'server_now':time.time(),'strategies':NAMES,'experimental':True}))
     def connect(self,email,password):
@@ -38,7 +38,7 @@ class Scanner:
             if self.s['connecting']:return False
             self.generation+=1;g=self.generation
             old=self.reader;self.reader=None
-            self.s.update(connected=False,running=False,connecting=True,error=None,message='Autenticando na Bulex…')
+            self.s.update(connected=False,running=False,automatic=False,connecting=True,error=None,message='Autenticando na Bulex…')
         if old:old.close()
         def run():
             r=Reader()
@@ -47,7 +47,7 @@ class Scanner:
                 cat=r.call('catalog')
                 with self.lock:
                     if g!=self.generation:r.close();return
-                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=False,connecting=False,assets=cat['assets'],message='Conectado. Toque em Analisar para buscar um sinal.',error=None)
+                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=False,automatic=True,connecting=False,assets=cat['assets'],message='Conectado. Análise automática ativa.',error=None)
                     self.thread=threading.Thread(target=self.scan,args=(g,r),daemon=True);self.thread.start()
             except Exception as e:
                 r.close()
@@ -63,15 +63,28 @@ class Scanner:
             self.search_id+=1;self.checked=set();self.deadline=time.time()+60
             self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…')
             return None
+    def resume_automatic(self):
+        with self.lock:
+            if not self.s['automatic'] or not self.s['connected'] or self.s['running']:return
+            if any(x['result']=='PENDENTE' for x in self.s['history']):return
+            if time.time()<self.next_search:return
+            error=self.analyze()
+            if error:self.s.update(automatic=False,message=error)
+    def pause_automatic(self):
+        with self.lock:
+            self.s['automatic']=False;self.search_id+=1
+            self.finish_search('Busca pausada. O sinal atual, se houver, continuará até a apuração.')
     def finish_search(self,message):
+        self.next_search=time.time()+3
         self.s.update(running=False,message=message)
     def scan(self,g,r):
         while True:
             with self.lock:
                 if g!=self.generation:return
+                self.resume_automatic()
                 running=self.s['running'];market=self.s['market'];tfchoice=self.s['timeframe'];search_id=self.search_id
                 if running and time.time()>=self.deadline:
-                    self.finish_search('Nenhum sinal confirmado nesta análise. Toque em Analisar para tentar novamente.');running=False
+                    self.finish_search('Nenhum sinal confirmado nesta rodada. Nova busca automática em instantes, se ativa.');running=False
                 pending=[x for x in self.s['history'] if x['result']=='PENDENTE']
             if not running and not pending:time.sleep(.6);continue
             try:
@@ -88,7 +101,7 @@ class Scanner:
                 elif jobs:job=jobs[0]
                 else:
                     with self.lock:
-                        if running:self.finish_search('Nenhum sinal confirmado nesta análise. Toque em Analisar para tentar novamente.')
+                        if running:self.finish_search('Nenhum sinal confirmado nesta rodada. Nova busca automática em instantes, se ativa.')
                         elif pending:self.s['message']='Acompanhando o sinal atual'
                         else:self.s['message']='Toque em Analisar para buscar um sinal.'
                     time.sleep(1);continue
@@ -114,11 +127,11 @@ class Scanner:
                         if rec['asset']==asset and rec['tf']==tf and rec['result']=='PENDENTE' and now>=rec['expires_at']:
                             result=settle(rec,bars,tf)
                             if result:rec.update(result)
-                            elif now>rec['expires_at']+tf*155:rec['result']='SEM DADOS'
+                            elif now>rec['expires_at']+60:rec['result']='SEM DADOS'
                     if not running or not self.s['running'] or search_id!=self.search_id:continue
                     self.checked.update((asset,t) for t in readings)
                     if time.time()>=self.deadline:
-                        self.finish_search('Tempo de busca encerrado sem sinal confirmado. Toque em Analisar para tentar novamente.');continue
+                        self.finish_search('Rodada encerrada sem sinal. Nova busca automática em instantes, se ativa.');continue
                     selected=choose(readings,self.s['enabled'],now) if verified else None
                     if not selected:
                         self.s['message']='Sem confirmação suficiente em '+asset+'; verificando outro ativo.'
@@ -133,7 +146,7 @@ class Scanner:
                     entry=(int(now)//tf+1)*tf
                     rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
-                    self.finish_search('Sinal encontrado. Aguarde seu vencimento antes de analisar novamente.')
+                    self.finish_search('Sinal encontrado. A próxima busca aguarda o vencimento e a apuração deste sinal.')
                     # Never discard unresolved records.
                     done=[x for x in self.s['history'] if x['result']!='PENDENTE'][-1500:]
                     self.s['history']=done+[x for x in self.s['history'] if x['result']=='PENDENTE']
@@ -141,7 +154,7 @@ class Scanner:
                 with self.lock:
                     if g!=self.generation:return
                     self.s.update(error=str(e),message='Leitura indisponível')
-                    if r.p.poll() is not None:self.s.update(connected=False,running=False);return
+                    if r.p.poll() is not None:self.s.update(connected=False,running=False,automatic=False);return
                 time.sleep(3)
             time.sleep(.8)
 
@@ -169,14 +182,21 @@ def control():
         if 'enabled' in d:
             if not isinstance(d['enabled'],list) or any(x not in NAMES for x in d['enabled']):return jsonify(error='Estratégia inválida'),400
             scanner.s['enabled']=d['enabled']
+        if 'automatic' in d:
+            if not isinstance(d['automatic'],bool):return jsonify(error='Controle inválido'),400
+            if d['automatic']:
+                if not scanner.s['connected']:return jsonify(error='Conecte a Bulex primeiro.'),409
+                if not scanner.s['enabled']:return jsonify(error='Selecione uma estratégia.'),409
+                scanner.s['automatic']=True;scanner.next_search=0
+                scanner.resume_automatic()
+            else:scanner.pause_automatic()
         if 'running' in d:
             if not isinstance(d['running'],bool):return jsonify(error='Controle inválido'),400
             if d['running']:
                 error=scanner.analyze()
                 if error:return jsonify(error=error),409
             else:
-                scanner.search_id+=1
-                scanner.finish_search('Análise cancelada. Toque em Analisar para recomeçar.')
+                scanner.pause_automatic()
     return jsonify(ok=True)
 
 @bp.post('/api/signals/analyze')
