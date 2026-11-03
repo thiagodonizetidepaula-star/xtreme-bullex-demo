@@ -10,15 +10,25 @@ def context(bars):
     trend=1 if fast[-1]>slow[-1] and slope>.1 else -1 if fast[-1]<slow[-1] and slope<-.1 else 0
     return scale,fast[-1],trend
 
+def trend_gate(bars,direction):
+    """Mandatory closed-candle EMA gate for every strategy, including reversals."""
+    ctx=context(bars)
+    if not ctx or direction not in ('ALTA','BAIXA'):return None
+    values=[b['close'] for b in bars];fast=ema(values,8);slow=ema(values,21)
+    sign=1 if direction=='ALTA' else -1
+    if ctx[2]!=sign or (fast[-1]-fast[-2])*sign<=0:return None
+    if (values[-1]-fast[-1])*sign<=0 or (values[-1]-slow[-1])*sign<=0:return None
+    return {'ema8':fast[-1],'ema21':slow[-1],'close':values[-1],'basis_at':bars[-1]['from'],'rule':'ema8_21_trend_v1'}
+
 def review(bars,signals,other):
     ctx=context(bars)
     if not ctx or not signals:return None
     if len({s['direction'] for s in signals})!=1:return None
     scale,fast,trend=ctx;b=bars[-1];direction=signals[0]['direction'];sign=1 if direction=='ALTA' else -1
+    gate=trend_gate(bars,direction)
+    if gate is None:return None
     strengths=[s['reason'] for s in signals];risks=[];score=3+min(1,len({s['strategy'] for s in signals})-1)
-    if trend==sign:score+=1;strengths.append('Médias e inclinação favoráveis')
-    elif trend==-sign:score-=1;risks.append('Entrada contra a tendência local')
-    else:risks.append('Médias sem direção clara')
+    score+=1;strengths.append('Fechamento acima das EMA 8/21, alinhadas e subindo' if sign==1 else 'Fechamento abaixo das EMA 8/21, alinhadas e descendo')
     span=b['high']-b['low'];body=abs(b['close']-b['open'])
     if (b['close']-b['open'])*sign>0 and body/span>=.45:score+=1;strengths.append('Fechamento direcional com corpo definido')
     if body/span<.15:score-=1;risks.append('Vela de confirmação com indecisão')
@@ -29,12 +39,12 @@ def review(bars,signals,other):
     cross=context(other)
     if cross:
         if cross[2]==sign:score+=1;strengths.append('Outro período alinhado')
-        elif cross[2]==-sign:score-=1;risks.append('Outro período em direção contrária')
+        elif cross[2]==-sign:return None
         else:risks.append('Outro período sem tendência definida')
     else:risks.append('Contexto do outro período indisponível')
-    # Reversals may qualify in a range; no universal trend filter.
+    # Scores cannot override the mandatory trend gate.
     if score<3:return None
-    return {**signals[0],'strengths':strengths,'risks':risks,'score':score,'confirmations':[s['name'] for s in signals]}
+    return {**signals[0],'trend_filter':gate,'strengths':strengths,'risks':risks,'score':score,'confirmations':[s['name'] for s in signals]}
 
 def choose(readings,enabled,now):
     eligible=[]
