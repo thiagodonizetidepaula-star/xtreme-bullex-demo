@@ -541,7 +541,7 @@ def auth():
         if not office_origin_allowed():return office_error('Origem não autorizada.',403)
         if request.method=='OPTIONS':return make_response('',204)
         return
-    if request.path in ['/','/office','/legacy','/health','/api/access']:return
+    if request.path in ['/','/office','/legacy','/health','/api/access','/sinais']:return
     if not session.get('owner'):return jsonify(error='Entre com a chave do painel.'),401
     # Start/recover research threads inside the serving Gunicorn worker, not
     # only at module import time (which may happen before a process fork).
@@ -962,6 +962,9 @@ def ensure_research_threads():
             research_last_start[label]=time.time()
             thread.start()
             print('XTREME LAB THREAD STARTED '+label+' pid='+str(pid),flush=True)
+
+from signals.web import bp as signals_blueprint
+app.register_blueprint(signals_blueprint)
 
 ensure_research_threads()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
