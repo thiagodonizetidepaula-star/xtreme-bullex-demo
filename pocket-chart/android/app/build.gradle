@@ -4,11 +4,11 @@ android {
     namespace 'com.pocketlens.app'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.pocketlens.app'
+        applicationId 'com.vectorsignal.app'
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName '1.0.4-test'
+        versionCode 1
+        versionName '1.0.0-beta'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
