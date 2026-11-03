@@ -29,6 +29,7 @@ class Scanner:
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
         self.s={'connected':False,'running':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':list(NAMES),'error':None}
         self.seen=set();self.cache={};self.catalog_at=0;self.cursor=0
+        self.search_id=0;self.checked=set();self.deadline=0
     def snapshot(self):
         with self.lock:return json.loads(json.dumps({**self.s,'server_now':time.time(),'strategies':NAMES,'experimental':True}))
     def connect(self,email,password):
@@ -45,18 +46,31 @@ class Scanner:
                 cat=r.call('catalog')
                 with self.lock:
                     if g!=self.generation:r.close();return
-                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=True,connecting=False,assets=cat['assets'],message='Procurando oportunidades',error=None)
+                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=False,connecting=False,assets=cat['assets'],message='Conectado. Toque em Analisar para buscar um sinal.',error=None)
                     self.thread=threading.Thread(target=self.scan,args=(g,r),daemon=True);self.thread.start()
             except Exception as e:
                 r.close()
                 with self.lock:
                     if g==self.generation:self.s.update(connecting=False,error=str(e),message='Não foi possível conectar.')
         threading.Thread(target=run,daemon=True).start();return True
+    def analyze(self):
+        with self.lock:
+            if not self.s['connected']:return 'Conecte a Bulex primeiro.'
+            if self.s['running']:return 'Análise em andamento. Aguarde.'
+            if any(x['result']=='PENDENTE' for x in self.s['history']):return 'Aguarde o vencimento e a apuração do sinal atual.'
+            if not self.s['enabled']:return 'Selecione pelo menos uma estratégia.'
+            self.search_id+=1;self.checked=set();self.deadline=time.time()+120
+            self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…')
+            return None
+    def finish_search(self,message):
+        self.s.update(running=False,message=message)
     def scan(self,g,r):
         while True:
             with self.lock:
                 if g!=self.generation:return
-                running=self.s['running'];market=self.s['market'];tfchoice=self.s['timeframe']
+                running=self.s['running'];market=self.s['market'];tfchoice=self.s['timeframe'];search_id=self.search_id
+                if running and time.time()>=self.deadline:
+                    self.finish_search('Nenhum sinal confirmado nesta análise. Toque em Analisar para tentar novamente.');running=False
                 pending=[x for x in self.s['history'] if x['result']=='PENDENTE']
             if not running and not pending:time.sleep(.6);continue
             try:
@@ -66,13 +80,16 @@ class Scanner:
                 with self.lock:
                     assets=[a['asset'] for a in self.s['assets'] if a['open'] and (market=='both' or a['otc']==(market=='otc'))]
                 periods=(60,300) if tfchoice=='auto' else (int(tfchoice),)
-                jobs=[(a,tf) for a in assets for tf in periods] if running else []
+                jobs=[(a,tf) for a in assets for tf in periods if (a,tf) not in self.checked] if running else []
                 # Settle announced signals before scanning more assets, even if paused/filtered.
                 due=[(x['asset'],x['tf']) for x in pending if time.time()>=x['expires_at']+2]
                 if due:job=due[self.cursor%len(due)]
-                elif jobs:job=jobs[self.cursor%len(jobs)]
+                elif jobs:job=jobs[0]
                 else:
-                    with self.lock:self.s['message']='Nenhum ativo disponível no filtro.' if running else 'Leitura pausada'
+                    with self.lock:
+                        if running:self.finish_search('Nenhum sinal confirmado nesta análise. Toque em Analisar para tentar novamente.')
+                        elif pending:self.s['message']='Acompanhando o sinal atual'
+                        else:self.s['message']='Toque em Analisar para buscar um sinal.'
                     time.sleep(1);continue
                 self.cursor+=1;asset,tf=job
                 with self.lock:self.s.update(asset=asset,message='Lendo '+asset+' · M'+str(tf//60))
@@ -85,18 +102,22 @@ class Scanner:
                             result=settle(rec,bars,tf)
                             if result:rec.update(result)
                             elif now>rec['expires_at']+tf*155:rec['result']='SEM DADOS'
-                    if not running or not bars:continue
+                    if not running or not self.s['running'] or search_id!=self.search_id:continue
+                    self.checked.add((asset,tf))
+                    if not bars:continue
                     signals=[x for x in signals if x['strategy'] in self.s['enabled']]
                     # Conflicting strategies produce no signal. Choose one explanation per asset/bar.
                     if len({x['direction'] for x in signals})!=1:continue
                     key=(asset,bars[-1]['from'],tf)
                     if key in self.seen:continue
-                    if any(x['asset']==asset and x['result']=='PENDENTE' for x in self.s['history']):continue
+                    if any(x['result']=='PENDENTE' for x in self.s['history']):
+                        self.finish_search('Acompanhando o sinal atual');continue
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
                     chosen=signals[0];entry=(int(now)//tf+1)*tf
                     rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','confirmations':[x['name'] for x in signals],'basis_at':bars[-1]['from'],'selection':'Critérios objetivos; sem probabilidade estimada'}
                     self.s['history'].append(rec)
+                    self.finish_search('Sinal encontrado. Aguarde seu vencimento antes de analisar novamente.')
                     # Never discard unresolved records.
                     done=[x for x in self.s['history'] if x['result']!='PENDENTE'][-1500:]
                     self.s['history']=done+[x for x in self.s['history'] if x['result']=='PENDENTE']
@@ -134,6 +155,16 @@ def control():
             scanner.s['enabled']=d['enabled']
         if 'running' in d:
             if not isinstance(d['running'],bool):return jsonify(error='Controle inválido'),400
-            if d['running'] and not scanner.s['connected']:return jsonify(error='Conecte primeiro.'),409
-            scanner.s['running']=d['running']
+            if d['running']:
+                error=scanner.analyze()
+                if error:return jsonify(error=error),409
+            else:
+                scanner.search_id+=1
+                scanner.finish_search('Análise cancelada. Toque em Analisar para recomeçar.')
+    return jsonify(ok=True)
+
+@bp.post('/api/signals/analyze')
+def analyze_once():
+    error=scanner.analyze()
+    if error:return jsonify(error=error),409
     return jsonify(ok=True)

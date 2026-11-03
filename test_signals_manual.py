@@ -1,0 +1,43 @@
+import time,unittest
+from unittest.mock import Mock,patch
+from signals.web import Scanner
+
+class EndScan(BaseException):pass
+
+class ManualSignalsTests(unittest.TestCase):
+    def ready(self):
+        s=Scanner();s.s.update(connected=True,assets=[{'asset':'AAA','open':True,'otc':False},{'asset':'BBB','open':True,'otc':False}],timeframe='60');s.catalog_at=time.time();return s
+    def test_only_explicit_click_starts_search(self):
+        s=self.ready();self.assertFalse(s.s['running']);self.assertIsNone(s.analyze());self.assertTrue(s.s['running'])
+    def test_double_click_cannot_start_another_search(self):
+        s=self.ready();s.analyze();token=s.search_id;self.assertIsNotNone(s.analyze());self.assertEqual(s.search_id,token)
+    def test_any_pending_asset_blocks_next_search(self):
+        s=self.ready();s.s['history']=[{'asset':'OTHER','result':'PENDENTE'}];self.assertIsNotNone(s.analyze());self.assertFalse(s.s['running'])
+    def test_completed_signal_allows_new_click(self):
+        s=self.ready();s.s['history']=[{'result':'WIN'}];self.assertIsNone(s.analyze())
+    def test_multiple_candidates_produce_exactly_one_record(self):
+        s=self.ready();s.analyze();now=time.time();r=Mock();r.call.return_value={'candles':[],'now':now}
+        candidates=[{'strategy':'ema','name':'EMA','direction':'ALTA','reason':'test'},{'strategy':'sweep','name':'Sweep','direction':'ALTA','reason':'test'}]
+        def sleep(_):
+            if not s.s['running']:raise EndScan()
+        with patch('signals.web.evaluate',return_value=([{'from':int(now//60)*60-60}],candidates)),patch('signals.web.time.sleep',side_effect=sleep):
+            with self.assertRaises(EndScan):s.scan(s.generation,r)
+        self.assertEqual(len(s.s['history']),1);self.assertFalse(s.s['running']);self.assertEqual(r.call.call_count,1)
+    def test_cancelled_inflight_read_cannot_emit(self):
+        s=self.ready();s.analyze();r=Mock()
+        def call(*a,**k):
+            s.search_id+=1;s.s['running']=False
+            return {'candles':[],'now':time.time()}
+        r.call.side_effect=call
+        with patch('signals.web.evaluate',return_value=([{'from':0}],[{'strategy':'ema','direction':'ALTA'}])),patch('signals.web.time.sleep',side_effect=EndScan):
+            with self.assertRaises(EndScan):s.scan(s.generation,r)
+        self.assertEqual(s.s['history'],[])
+    def test_exhausted_round_stops_without_inventing_signal(self):
+        s=self.ready();s.analyze();r=Mock();r.call.return_value={'candles':[],'now':time.time()}
+        def sleep(_):
+            if not s.s['running']:raise EndScan()
+        with patch('signals.web.evaluate',return_value=([],[])),patch('signals.web.time.sleep',side_effect=sleep):
+            with self.assertRaises(EndScan):s.scan(s.generation,r)
+        self.assertEqual(r.call.call_count,2);self.assertFalse(s.s['running']);self.assertEqual(s.s['history'],[])
+
+if __name__=='__main__':unittest.main()
