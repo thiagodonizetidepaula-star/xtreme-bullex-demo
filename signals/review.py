@@ -20,19 +20,42 @@ def trend_gate(bars,direction):
     if (values[-1]-fast[-1])*sign<=0 or (values[-1]-slow[-1])*sign<=0:return None
     return {'ema8':fast[-1],'ema21':slow[-1],'close':values[-1],'basis_at':bars[-1]['from'],'rule':'ema8_21_trend_v1'}
 
+def entry_quality(bars,direction):
+    """Initial hypotheses for timing; closed bars only, no martingale recovery."""
+    ctx=context(bars)
+    if not ctx:return ['Histórico insuficiente']
+    scale,fast,_=ctx;sign=1 if direction=='ALTA' else -1
+    b,p=bars[-1],bars[-2];span=b['high']-b['low'];body=abs(b['close']-b['open'])
+    reasons=[]
+    if (b['close']-b['open'])*sign<=0 or (b['close']-p['close'])*sign<=0 or body/span<.2:
+        reasons.append('Retomada ainda não confirmada no fechamento')
+    wick=b['high']-max(b['open'],b['close']) if sign==1 else min(b['open'],b['close'])-b['low']
+    if wick>=.5*span and wick>=1.5*body:
+        reasons.append('Rejeição forte contra o sinal')
+    if span>2.5*scale or abs(b['close']-fast)>3*scale:
+        reasons.append('Movimento esticado; aguardar nova formação')
+    values=[x['close'] for x in bars];f=ema(values,8)
+    recent_slope=(f[-1]-f[-3])*sign;prior_slope=(f[-3]-f[-5])*sign
+    recent=bars[-4:]
+    overlap=sum(max(0,min(x['high'],y['high'])-max(x['low'],y['low']))/min(x['high']-x['low'],y['high']-y['low'])>=.6 for x,y in zip(recent,recent[1:]))
+    progress=(recent[-1]['close']-recent[0]['close'])*sign
+    if overlap>=2 and progress<.25*scale and recent_slope<max(.05*scale,.5*prior_slope):
+        reasons.append('Velas sobrepostas, pouco avanço e média perdendo força')
+    return reasons
+
 def review(bars,signals,other):
     ctx=context(bars)
     if not ctx or not signals:return None
     if len({s['direction'] for s in signals})!=1:return None
     scale,fast,trend=ctx;b=bars[-1];direction=signals[0]['direction'];sign=1 if direction=='ALTA' else -1
     gate=trend_gate(bars,direction)
-    if gate is None:return None
+    if gate is None or entry_quality(bars,direction):return None
     strengths=[s['reason'] for s in signals];risks=[];score=3+min(1,len({s['strategy'] for s in signals})-1)
     score+=1;strengths.append('Fechamento acima das EMA 8/21, alinhadas e subindo' if sign==1 else 'Fechamento abaixo das EMA 8/21, alinhadas e descendo')
     span=b['high']-b['low'];body=abs(b['close']-b['open'])
     if (b['close']-b['open'])*sign>0 and body/span>=.45:score+=1;strengths.append('Fechamento direcional com corpo definido')
     if body/span<.15:score-=1;risks.append('Vela de confirmação com indecisão')
-    if span>2.5*scale or abs(b['close']-fast)>3*scale:score-=2;risks.append('Movimento esticado; risco de retorno')
+    strengths.append('Fechamento confirma avanço, sem bloqueio de exaustão')
     prior=bars[-22:-2];level=max(x['high'] for x in prior) if sign==1 else min(x['low'] for x in prior)
     distance=(level-b['close'])*sign
     if 0<=distance<.35*scale:score-=1;risks.append('Barreira de preço próxima à frente')
@@ -44,7 +67,7 @@ def review(bars,signals,other):
     else:risks.append('Contexto do outro período indisponível')
     # Scores cannot override the mandatory trend gate.
     if score<3:return None
-    return {**signals[0],'trend_filter':gate,'strengths':strengths,'risks':risks,'score':score,'confirmations':[s['name'] for s in signals]}
+    return {**signals[0],'entry_filter_version':'closed_confirmation_v1','trend_filter':gate,'strengths':strengths,'risks':risks,'score':score,'confirmations':[s['name'] for s in signals]}
 
 def choose(readings,enabled,now):
     eligible=[]

@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch
-from signals.review import review,choose,trend_gate
+from signals.review import review,choose,trend_gate,entry_quality
 
 def bars(tf=60):
     return [{'from':i*tf,'open':100+i*.2,'close':100+i*.2+.15,'high':100+i*.2+.22,'low':100+i*.2-.08} for i in range(40)]
@@ -8,6 +8,28 @@ def signal(d='ALTA'):
     return {'strategy':'retest','name':'Reteste','direction':d,'reason':'Reteste confirmado'}
 
 class ReviewTests(unittest.TestCase):
+    def test_pullback_still_in_progress_blocks_buy(self):
+        a=bars();a[-1].update(open=108,close=107.7,high=108.1,low=107.6)
+        self.assertIsNotNone(trend_gate(a,'ALTA'))
+        self.assertIsNone(review(a,[signal()],[]))
+    def test_confirmed_recovery_after_pullback_passes(self):
+        a=bars();a[-2].update(open=107.8,close=107.5,high=107.85,low=107.4)
+        self.assertIsNotNone(review(a,[signal()],[]))
+    def test_adverse_wick_blocks_despite_ema_alignment(self):
+        a=bars();a[-1]['high']=108.5
+        self.assertIn('Rejeição forte contra o sinal',entry_quality(a,'ALTA'))
+        self.assertIsNone(review(a,[signal()],bars()))
+    def test_extension_cannot_be_overridden_by_confirmations(self):
+        a=bars();a[-1].update(open=107.8,close=109,high=109.1,low=107.7)
+        self.assertIsNone(review(a,[signal(),{**signal(),'strategy':'ema'}],bars()))
+    def test_stalling_overlap_is_detected(self):
+        a=bars()
+        for n,c in enumerate([105.5]*12,28):
+            a[n].update(open=c-.02,close=c,high=105.8,low=105.2)
+        self.assertIn('Velas sobrepostas, pouco avanço e média perdendo força',entry_quality(a,'ALTA'))
+    def test_sell_pullback_and_recovery_symmetry(self):
+        a=self.down();a[-1].update(open=112,close=112.3,high=112.4,low=111.9)
+        self.assertIsNone(review(a,[signal('BAIXA')],[]))
     def down(self):
         return [{**b,'open':220-b['open'],'close':220-b['close'],'high':220-b['low'],'low':220-b['high']} for b in bars()]
     def test_buy_in_downtrend_blocked_for_every_family(self):
