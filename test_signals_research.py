@@ -49,7 +49,7 @@ class ResearchLabTests(unittest.TestCase):
         now=42*60-4
         lab.observe('PAIR',60,candles(41),now)
         self.assertEqual(lab.snapshot()['pending'],0)
-        self.assertEqual(lab.snapshot()['rejected_late'],1)
+        self.assertEqual(lab.snapshot()['scans'],0) # stale basis cannot create a paper trade
     def test_duplicate_hypotheses_not_unique_trades(self):
         lab=ResearchLab()
         lab.ledger.append({'key':'impulse_follow','asset':'ABC','tf':60,'entry_at':600,'direction':'ALTA','result':'WIN','issued_at':550})
