@@ -17,13 +17,13 @@ button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:9px;flex
 </style></head><body><main>
 <header><b style="font-size:24px">pulse<span style="color:var(--green)">↗</span> <small class="muted">LAB</small></b><span id="connection" class="chip">Verificando conexão…</span></header>
 <h1>Laboratório Inteligente</h1>
-<p class="muted">Pesquisa contínua de comportamento das velas. Estratégias experimentais separadas dos sinais oficiais, sem ordens na corretora.</p>
+<p class="muted">Pesquisa contínua de comportamento das velas, com histórico no Supabase. Estratégias validadas entram na escolha de sinais; não há ordens automáticas na corretora.</p>
 <nav class="tabs"><a href="/sinais">Sinais principais</a><a class="active" href="/sinais/laboratorio" aria-current="page">Laboratório Inteligente</a></nav>
 <div class="summary">
 <div class="metric"><span class="muted">Leituras</span><strong id="scans">0</strong></div>
 <div class="metric"><span class="muted">Testes virtuais encerrados</span><strong id="settled">0</strong></div>
 <div class="metric"><span class="muted">Hipóteses pendentes</span><strong id="pending">0</strong></div>
-<div class="metric"><span class="muted">Promissoras (provisórias)</span><strong id="promising">0</strong></div>
+<div class="metric"><span class="muted">Aprovadas para sinais</span><strong id="promising">0</strong></div>
 </div>
 <section class="card"><h2>Qualidade da apuração</h2>
 <p class="notice">Versão de avaliação <b id="version">—</b>. O sinal é registrado antes de uma vela futura, que é apurada apenas após fechar. O mesmo movimento pode gerar mais de uma hipótese, mas conta como uma única oportunidade.</p>
@@ -33,14 +33,18 @@ button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:9px;flex
 <div class="metric"><span class="muted">Hipóteses coincidentes</span><strong id="duplicates">0</strong></div>
 <div class="metric"><span class="muted">Falhas de pesquisa</span><strong id="lab-errors">0</strong></div>
 </div><p class="notice" id="clock-warning"></p></section>
+<section class="card"><h2>Supabase e seleção automática</h2>
+<p id="storage" class="muted">Conferindo persistência…</p>
+<p class="notice">Somente padrões com no mínimo 80 resultados prospectivos, 30 na validação posterior e limite inferior de confiança acima do equilíbrio estimado podem ser promovidos. Estratégias reprovadas ficam fora do motor, mas os dados continuam guardados para auditoria. Nenhuma estratégia gera ordens automaticamente.</p>
+</section>
 <section class="card"><h2>Investigação automática</h2>
 <p id="message" class="muted">Carregando…</p>
 <div class="actions"><button id="toggle" type="button" disabled>Ativar pesquisa</button><button id="export" type="button">Exportar histórico completo JSON</button></div>
-<p class="notice">A análise usa somente dados disponíveis após conectar a Bulex na aba Sinais. É um motor estatístico de pesquisa, não uma IA treinada continuamente e nem um trader profissional humano. O histórico do servidor é temporário e pode reiniciar em um deploy.</p>
+<p class="notice">A análise usa dados disponíveis após conectar a Bulex na aba Sinais. O Supabase preserva resultados quando o status indica CONECTADO. Isto é um motor estatístico de pesquisa, não inteligência autônoma capaz de garantir ganhos.</p>
 </section>
 <section class="card"><h2>Ranking de estratégias descobertas</h2>
-<p class="notice">Cada estratégia recebe nome e versão fixos para comparação justa. Um candidato só pode ser chamado de promissor com 30 resultados, pelo menos 12 no período de validação (40% mais recente), 62% de acerto nessa validação e 58% no total. Resultados não implicam lucro ou acerto futuro.</p>
-<div class="tablewrap"><table><thead><tr><th>Estratégia</th><th>Período</th><th>WIN / Total</th><th>Acerto</th><th>Validação</th><th>Status</th></tr></thead><tbody id="rank"></tbody></table></div>
+<p class="notice">Novas versões são avaliadas em M1 e M5 separadamente. Para entrar automaticamente no motor de sinais, exigimos no mínimo 80 resultados válidos, 30 na validação posterior, acerto nessa validação ≥68%, acerto geral ≥60% e limite inferior de Wilson de 95% acima de 55,6%, além de consistência recente. Não representa chance garantida de WIN.</p>
+<div class="tablewrap"><table><thead><tr><th>Estratégia</th><th>Período</th><th>WIN / Total</th><th>Acerto</th><th>Validação</th><th>Status</th><th>No motor</th></tr></thead><tbody id="rank"></tbody></table></div>
 </section>
 <section class="card"><h2>Movimentos anormais em observação</h2>
 <p class="notice">Detecta amplitude extrema, gaps e amplitude muito baixa. Não comprova manipulação, fraude ou causa externa; não temos acesso à auditoria independente de ticks e preços de referência.</p>
@@ -59,10 +63,11 @@ function render(d){
  $('scans').textContent=d.scans;$('settled').textContent=d.settled;$('pending').textContent=d.pending;
  $('version').textContent=d.schema_version||'anterior';$('unique').textContent=d.unique_opportunities||0;$('hypotheses').textContent=d.hypothesis_outcomes||0;$('duplicates').textContent=d.duplicate_hypotheses||0;$('lab-errors').textContent=d.errors||0;
  $('clock-warning').textContent=(d.invalid_timing?'Atenção: '+d.invalid_timing+' registros antigos com horário inválido. ':'')+'Consultas fora do prazo descartadas: '+(d.rejected_late||0)+(d.last_error?' · Última falha técnica: '+d.last_error:'');
- $('promising').textContent=d.ranking.filter(x=>x.status==='PROMISSORA').length;
+ $('promising').textContent=d.promoted_count||0;
+ $('storage').textContent='Banco: '+(d.storage_status||'NÃO CONFIGURADO')+' · Registros enviados nesta sessão: '+(d.persisted_records||0)+' · Aguardando envio: '+(d.pending_writes||0)+(d.storage_error?' · Falha: '+d.storage_error:'');
  $('toggle').disabled=!d.connected;$('toggle').textContent=d.enabled?'Pausar pesquisa':'Ativar pesquisa';
  $('message').textContent=d.connected?(d.enabled?'Pesquisa ativa, verificando velas fechadas':'Pesquisa pausada'):'Conecte sua conta prática na aba Sinais para iniciar a pesquisa';
- const rb=$('rank');rb.replaceChildren();for(const r of d.ranking)row(rb,[r.name,'M'+r.tf/60,r.wins+' / '+r.signals,r.rate==null?'—':(100*r.rate).toFixed(1)+'%',r.validation_rate==null?'—':r.validation_wins+' / '+r.validation_signals+' ('+(100*r.validation_rate).toFixed(1)+'%)',r.status]);
+ const rb=$('rank');rb.replaceChildren();for(const r of d.ranking)row(rb,[r.name,'M'+r.tf/60,r.wins+' / '+r.signals,r.rate==null?'—':(100*r.rate).toFixed(1)+'%',r.validation_rate==null?'—':r.validation_wins+' / '+r.validation_signals+' ('+(100*r.validation_rate).toFixed(1)+'%)',r.status,r.active?'ATIVA · em sinais':r.status==='REPROVADA'?'FORA DA SELEÇÃO':'AGUARDANDO']);
  const ab=$('anomalies');ab.replaceChildren();for(const x of d.anomalies)row(ab,[date(x.at),x.asset,'M'+x.tf/60,x.event]);
  const tb=$('recent');tb.replaceChildren();for(const x of d.recent)row(tb,[date(x.entry_at),x.asset,x.name,x.direction==='ALTA'?'CALL':'PUT',x.result+(x.issued_at>=x.entry_at?' · HORÁRIO INVÁLIDO':'')]);
  $('footer').textContent=d.note+' Promoção automática para operações: desabilitada.';
