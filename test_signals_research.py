@@ -111,6 +111,41 @@ class ResearchLabTests(unittest.TestCase):
         bars=candles(50)
         self.assertEqual(lab.promoted_candidates(bars,60,50*60),[])
 
+    def test_four_user_selected_pilot_strategies_and_loser_filter(self):
+        import time
+        from unittest.mock import patch
+        lab=ResearchLab()
+        now=int(time.time())
+        base=now-1800
+        for key in ('wick_reversal','three_step','impulse_follow','pullback_resume'):
+            for i in range(25):
+                entry=base+i*60
+                lab.ledger.append({'asset':'TEST-OTC','tf':60,
+                    'basis_at':entry-120,'entry_at':entry,'issued_at':entry-60,
+                    'key':key,'name':key,'version':'v1',
+                    'direction':'BAIXA',
+                    'result':'WIN' if i%5!=0 else 'LOSS',
+                    'clock_guard':'v2_future_entry'})
+        pilots=lab.pilot_list()
+        self.assertEqual({x['key'] for x in pilots},
+                         {'wick_reversal','three_step','impulse_follow','pullback_resume'})
+        bars=candles(45)
+        with patch('signals.research_lab.candidates',return_value=[
+            {'key':'impulse_follow','name':'Pulso Direcional','version':'v1',
+             'direction':'ALTA','reason':'Teste de hipótese confirmada'}]):
+            found=lab.pilot_candidates(bars,60,45*60)
+        self.assertEqual(len(found),1)
+        self.assertTrue(found[0]['pilot'])
+        self.assertEqual(found[0]['score'],2.9)
+        self.assertEqual(found[0]['direction'],'ALTA')
+        for i in range(100):
+            entry=now-200+i
+            lab.ledger.append({'asset':'TEST-OTC','tf':60,
+                'basis_at':entry-120,'entry_at':entry,'issued_at':entry-60,
+                'key':'impulse_follow','version':'v1','direction':'ALTA',
+                'result':'LOSS','clock_guard':'v2_future_entry'})
+        self.assertNotIn('impulse_follow',{x['key'] for x in lab.pilot_list()})
+
     def test_no_signal_on_open_candle(self):
         lab=ResearchLab();lab.enabled=True
         lab.observe('PAIR',60,candles(41),40*60+30)
