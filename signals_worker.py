@@ -16,6 +16,21 @@ def dispatch(c):
         with worker.stage('leitura de sinais',12):bars=worker.api.get_candles(asset,tf,150,int(now))
         if not isinstance(bars,list):raise RuntimeError('A corretora não entregou velas.')
         return {'candles':bars,'now':worker.broker_now()}
+    if op=='signal_quote':
+        asset=c['asset'];tf=c['tf']
+        if tf not in (60,300) or asset not in worker.api.get_all_ACTIVES_OPCODE():raise ValueError('Ativo ou período inválido.')
+        with worker.stage('leitura parcial para validação pré-entrada',10):
+            now=worker.broker_now()
+            bars=worker.api.get_candles(asset,tf,3,int(now))
+        if not isinstance(bars,list):raise RuntimeError('Cotação parcial indisponível.')
+        current_start=(int(worker.broker_now())//tf)*tf
+        current=next((b for b in reversed(bars) if int(b.get('from',-1))==current_start),None)
+        if current is None:raise RuntimeError('Vela atual indisponível: sinal cancelado por segurança.')
+        price=float(current['close']);opened=float(current['open'])
+        import math
+        if not math.isfinite(price) or not math.isfinite(opened) or price<=0 or opened<=0:
+            raise RuntimeError('Preço parcial inválido.')
+        return {'price':price,'open':opened,'now':worker.broker_now(),'candle_from':current_start,'source':'partial_candle_close'}
     raise ValueError('Canal somente de leitura; comando recusado.')
 
 if __name__=='__main__':
