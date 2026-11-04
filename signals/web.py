@@ -275,9 +275,19 @@ class Scanner:
                 if running and tf==60 and tfchoice!='300' and 'double_m5s' in self.s['enabled']:
                     five=r.call('signal_bars5',asset=asset)
                     pattern_m=m5s_candidate(five['candles'],five['now'])
-                # Refresh this account's options catalogue before announcing a candidate.
+                # Independent motors can qualify without a basic engine match.
                 verified=None
-                if running and self.s['running'] and search_id==self.search_id and (pattern_m or any(items[1] for items in readings.values())):
+                promoted=[]
+                if running and self.s['running'] and search_id==self.search_id:
+                    with self.lock:enabled=list(self.s['enabled'])
+                    if self.research.enabled:
+                        for period,(closed,_signals) in readings.items():
+                            promoted.extend((period,c,closed) for c in self.research.promoted_candidates(closed,period,now))
+                    candidate=choose(readings,enabled,now)
+                else:
+                    candidate=None
+                # Confirm that the candidate's market remains open before preflight.
+                if candidate or promoted or pattern_m:
                     catalog=r.call('catalog')
                     verified=next((a for a in catalog['assets'] if a['asset']==asset and a['open']),None)
                     now+=max(0,time.time()-now)
@@ -298,12 +308,11 @@ class Scanner:
                         self.finish_search('Rodada encerrada sem sinal. Nova busca automática em instantes, se ativa.');continue
                     selected=choose(readings,self.s['enabled'],now) if verified else None
                     if verified and self.research.enabled:
-                        # Auto-promoted hypotheses join the same one-signal choice,
-                        # only after independent, forward-only minimum sample gates.
-                        for research_tf,(research_bars,_raw_candidates) in readings.items():
-                            for research_candidate in self.research.promoted_candidates(research_bars,research_tf,now):
-                                if selected is None or research_candidate['score']>selected[1].get('score',0):
-                                    selected=(research_tf,research_candidate,research_bars)
+                        for period,research_candidate,closed in promoted:
+                            if not closed or not 0<=now-(closed[-1]['from']+period)<=12:
+                                continue
+                            if selected is None or research_candidate['score']>selected[1].get('score',0):
+                                selected=(period,research_candidate,closed)
                     if verified and pattern_m and bars and 0<=now-(bars[-1]['from']+60)<60:
                         # Use M1 candles for expiration/settlement, M5s for setup.
                         # Prefer an already qualified higher-scored signal, when present.
