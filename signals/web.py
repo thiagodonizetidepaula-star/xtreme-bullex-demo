@@ -140,6 +140,7 @@ class Scanner:
                     self.finish_search('Nenhum sinal confirmado nesta rodada. Nova busca automática em instantes, se ativa.');running=False
                 pending=[x for x in self.s['history'] if x['result']=='PENDENTE']
             if not running and not pending and not self.research.enabled:time.sleep(.6);continue
+            research_probe=False
             try:
                 if time.time()-self.catalog_at>60:
                     cat=r.call('catalog')
