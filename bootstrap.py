@@ -42,7 +42,7 @@ py_compile.compile(str(ROOT/'dual_motor.py'),doraise=True)
 py_compile.compile(str(ROOT/'closed_m1_cache.py'),doraise=True)
 py_compile.compile(str(ROOT/'lab40_autoupdate.py'),doraise=True)
 suite=unittest.defaultTestLoader.discover(str(ROOT),pattern='test_*.py')
-result=unittest.TextTestRunner(verbosity=1).run(suite)
+result=unittest.TextTestRunner(verbosity=2).run(suite)
 if not result.wasSuccessful():
     raise RuntimeError('Falha nos testes de regressão do laboratório Xtreme Sniper 40.')
 print('Laboratório Xtreme Sniper: testes de regressão aprovados.')
