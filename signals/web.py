@@ -1,9 +1,10 @@
-import json,time,threading,subprocess,sys,pathlib,queue,secrets
+import json,time,threading,subprocess,sys,pathlib,queue,secrets,os
 from flask import Blueprint,request,jsonify,session,render_template
 from .engine import NAMES,evaluate,settle
 from .review import choose
 from .double_m5s import candidate as m5s_candidate
 from .research_lab import ResearchLab
+from .pulse_store import PulseStore
 
 class Reader:
     def __init__(self):
@@ -33,6 +34,7 @@ class Scanner:
         self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
         self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
         self.research=ResearchLab();self.research_seen={};self.research_cursor=0
+        self.store=PulseStore();self._storage_worker=None;self._storage_pid=None
         self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
         self.s['preflight']={'status':'idle','detail':'Aguardando oportunidade'}
     def snapshot(self):
@@ -81,6 +83,54 @@ class Scanner:
     def finish_search(self,message):
         self.next_search=time.time()+3
         self.s.update(running=False,message=message)
+    def ensure_store_worker(self):
+        """Start only after Gunicorn forks; do not make Supabase calls in scan loop."""
+        if not self.store.configured:
+            self.research.store_status='NÃO CONFIGURADO'
+            return
+        with self.lock:
+            pid=os.getpid()
+            if self._storage_pid==pid and self._storage_worker and self._storage_worker.is_alive():
+                return
+            self._storage_pid=pid
+            self._storage_worker=threading.Thread(target=self.storage_loop,daemon=True,name='pulse-supabase-sync')
+            self._storage_worker.start()
+
+    def storage_loop(self):
+        restored=False
+        next_models=0
+        while True:
+            if not restored:
+                try:
+                    events,_models=self.store.load(max_records=4000)
+                    self.research.restore(events)
+                    with self.research.lock:
+                        self.research.store_status='CONECTADO'
+                        self.research.storage_error=None
+                    restored=True
+                except Exception as exc:
+                    with self.research.lock:
+                        self.research.store_status='ERRO DE CONEXÃO'
+                        self.research.storage_error=type(exc).__name__
+                    time.sleep(15)
+                    continue
+            batch=self.research.dirty_batch(160)
+            now=time.monotonic()
+            models=self.research.model_rows() if now>=next_models else []
+            if batch or models:
+                try:
+                    self.store.save([v for _,v in batch],models)
+                    self.research.confirm_saved(batch)
+                    with self.research.lock:
+                        self.research.store_status='CONECTADO'
+                        self.research.storage_error=None
+                    if models:next_models=now+45
+                except Exception as exc:
+                    with self.research.lock:
+                        self.research.store_status='SINCRONIZAÇÃO PENDENTE'
+                        self.research.storage_error=type(exc).__name__
+            time.sleep(10)
+
     def preflight(self,g,r,search_id,asset,tf,direction,entry,reference):
         """Confirm roughly seven seconds of short-term movement, ending early
         enough to deliver a usable signal. Missing/late data fails closed.
@@ -226,6 +276,13 @@ class Scanner:
                     if time.time()>=self.deadline:
                         self.finish_search('Rodada encerrada sem sinal. Nova busca automática em instantes, se ativa.');continue
                     selected=choose(readings,self.s['enabled'],now) if verified else None
+                    if verified and self.research.enabled:
+                        # Auto-promoted hypotheses join the same one-signal choice,
+                        # only after independent, forward-only minimum sample gates.
+                        for research_tf,(research_bars,_raw_candidates) in readings.items():
+                            for research_candidate in self.research.promoted_candidates(research_bars,research_tf,now):
+                                if selected is None or research_candidate['score']>selected[1].get('score',0):
+                                    selected=(research_tf,research_candidate,research_bars)
                     if verified and pattern_m and bars and 0<=now-(bars[-1]['from']+60)<60:
                         # Use M1 candles for expiration/settlement, M5s for setup.
                         # Prefer an already qualified higher-scored signal, when present.
@@ -294,9 +351,16 @@ scanner=Scanner();bp=Blueprint('signals',__name__)
 @bp.get('/sinais')
 def page():return render_template('signals.html')
 @bp.get('/api/signals/state')
-def state():return jsonify(**scanner.snapshot(),csrf=session['csrf'])
+def state():
+    scanner.ensure_store_worker()
+    snap=scanner.snapshot()
+    promoted=[{'strategy':x['id'],'name':x['name'],'tf':x['tf'],
+               'validation_rate':x['validation_rate']} for x in scanner.research._ranking()
+              if x['active']]
+    return jsonify(**snap,csrf=session['csrf'],promoted_research=promoted)
 @bp.post('/api/signals/connect')
 def connect():
+    scanner.ensure_store_worker()
     d=request.get_json(silent=True) or {};email=d.get('email');password=d.get('password')
     if not isinstance(email,str) or not isinstance(password,str) or not email.strip() or not password or len(email)>254 or len(password)>512:return jsonify(error='Informe e-mail e senha.'),400
     if not scanner.connect(email.strip(),password):return jsonify(error='Conexão em andamento.'),409
@@ -336,6 +400,7 @@ def research_page():return render_template('signals_research.html')
 
 @bp.get('/api/signals/research')
 def research_state():
+    scanner.ensure_store_worker()
     return jsonify(**scanner.research.snapshot(),connected=scanner.s['connected'],csrf=session['csrf'])
 
 @bp.get('/api/signals/research/export')
