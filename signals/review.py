@@ -1,6 +1,7 @@
 """Experimental context ranking. Scores are rule weights, never probabilities."""
 from .engine import ema
 from .reaction import review as review_reaction
+from .trend_consensus import candidate as trend_consensus_candidate
 
 def context(bars):
     if len(bars)<35:return None
@@ -81,11 +82,13 @@ def choose(readings,enabled,now):
         other=readings.get(other_tf,([],[]))[0]
         if other and not 0<=now-(other[-1]['from']+other_tf)<other_tf:other=[]
         candidate=review(bars,[s for s in signals if s['strategy'] in enabled],other)
+        trend=trend_consensus_candidate(bars,tf,now) if 'trend_consensus_v1' in enabled else None
         # A confirmação deve ser recente: em M1 não anunciar depois de 6 s; em M5 depois de 10 s.
         # O filtro se aplica no servidor, independentemente de atraso do navegador.
         age=now-(bars[-1]['from']+tf)
         if age>(6 if tf==60 else 10):continue
         if candidate:eligible.append((candidate['score'],tf,candidate,bars))
+        if trend:eligible.append((trend['score'],tf,trend,bars))
     if not eligible:return None
     _,tf,candidate,bars=max(eligible,key=lambda x:(x[0],x[1]))
     return tf,candidate,bars
