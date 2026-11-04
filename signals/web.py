@@ -114,7 +114,12 @@ class Scanner:
             minimum=max(base*.015,abs(first['price'])*1e-7)
             if delta<=minimum:
                 return None,'Movimento nos 5 segundos finais contrário ou insuficiente para '+direction
-            return {'window_seconds':round(second['now']-first['now'],2),
+            # Reject a five-second bounce that still leaves the current candle
+            # strongly opposed to the signal (such as PUT while candle is green).
+            candle_delta=sign*(second['price']-second['open'])
+            if candle_delta < max(base*.025,abs(second['open'])*1e-7):
+                return None,'Vela atual ainda contrária ou sem avanço suficiente para '+direction
+            return {'candle_directional_move':candle_delta,'window_seconds':round(second['now']-first['now'],2),
                     'first_price':first['price'],'last_price':second['price'],
                     'movement_in_signal_direction':delta,'minimum_movement':minimum,
                     'source':'partial M1/M5 candle; 2 broker readings',
