@@ -1,6 +1,6 @@
 import json,time,threading,subprocess,sys,pathlib,queue,secrets,os
 from flask import Blueprint,request,jsonify,session,render_template
-from .engine import NAMES,evaluate,settle
+from .engine import NAMES,clean,evaluate,settle
 from .review import choose
 from .double_m5s import candidate as m5s_candidate
 from .research_lab import ResearchLab
@@ -35,15 +35,19 @@ class Scanner:
         self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
         self.research=ResearchLab();self.research_seen={};self.research_cursor=0
         self.store=PulseStore();self._storage_worker=None;self._storage_pid=None
+        self.market_frames={}
         self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
         self.s['preflight']={'status':'idle','detail':'Aguardando oportunidade'}
-    def snapshot(self):
-        with self.lock:return json.loads(json.dumps({**self.s,'server_now':time.time(),'strategies':NAMES,'experimental':True}))
+    def snapshot(self, terminal=False):
+        with self.lock:
+            data={**self.s,'server_now':time.time(),'strategies':NAMES,'experimental':True}
+            if terminal:data['market_frames']=self.market_frames
+            return json.loads(json.dumps(data))
     def connect(self,email,password):
         with self.lock:
             if self.s['connecting']:return False
             self.generation+=1;g=self.generation
-            old=self.reader;self.reader=None
+            old=self.reader;self.reader=None;self.market_frames={}
             self.s.update(connected=False,running=False,automatic=False,connecting=True,error=None,message='Autenticando na Bulex…')
         if old:old.close()
         def run():
@@ -240,14 +244,31 @@ class Scanner:
                     try:self.research.observe(asset,tf,bars,now)
                     except Exception as exc:self.research.report_error(exc)
                 readings={tf:(bars,signals)}
+                source_frames={tf:data}
                 if running and tfchoice=='auto':
                     other_tf=300 if tf==60 else 60
                     other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
+                    source_frames[other_tf]=other_data
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
                     if self.research.enabled:
                         try:self.research.observe(asset,other_tf,readings[other_tf][0],other_data['now'])
                         except Exception as exc:self.research.report_error(exc)
+                frames={}
+                for period,source in source_frames.items():
+                    broker_time=source['now']
+                    current_start=int(broker_time)//period*period
+                    # The forming bar is for display only; the engines use evaluate().
+                    chart=clean(source['candles'],period,current_start+period)[-90:]
+                    closed,candidates=readings[period]
+                    frames[period]={'asset':asset,'tf':period,'read_at':broker_time,
+                                    'candles':chart,'closed_count':len(closed),
+                                    'latest_closed':closed[-1]['from']+period if closed else None,
+                                    'candidates':[{k:c[k] for k in ('strategy','direction','name') if k in c}
+                                                  for c in candidates]}
+                with self.lock:
+                    if g!=self.generation:return
+                    self.market_frames=frames
                 # For the 5-second M pattern, require confirmed 5s bars, then
                 # still use M1 as the signal expiry and for settlement.
                 pattern_m=None
@@ -349,11 +370,11 @@ class Scanner:
 
 scanner=Scanner();bp=Blueprint('signals',__name__)
 @bp.get('/sinais')
-def page():return render_template('signals.html')
+def page():return render_template('signals.html',terminal=request.args.get('view')=='terminal')
 @bp.get('/api/signals/state')
 def state():
     scanner.ensure_store_worker()
-    snap=scanner.snapshot()
+    snap=scanner.snapshot(terminal=request.args.get('view')=='terminal')
     promoted=[{'strategy':x['id'],'name':x['name'],'tf':x['tf'],
                'validation_rate':x['validation_rate']} for x in scanner.research._ranking()
               if x['active']]
