@@ -190,7 +190,7 @@ class Scanner:
                     if time.time()>=self.deadline:
                         self.finish_search('Rodada encerrada sem sinal. Nova busca automática em instantes, se ativa.');continue
                     selected=choose(readings,self.s['enabled'],now) if verified else None
-                    if verified and pattern_m and bars and now-(bars[-1]['from']+60)<=12:
+                    if verified and pattern_m and bars and 0<=now-(bars[-1]['from']+60)<60:
                         # Use M1 candles for expiration/settlement, M5s for setup.
                         # Prefer an already qualified higher-scored signal, when present.
                         m_selected=(60,pattern_m,bars)
