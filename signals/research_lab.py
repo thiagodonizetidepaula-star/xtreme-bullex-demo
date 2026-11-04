@@ -313,6 +313,66 @@ class ResearchLab:
                 'selection':'Laboratório validado prospectivamente; sempre sujeito a filtro pré-entrada'})
         return found
 
+    # User-requested research hypotheses, allowed only as lower-priority
+    # read-only SIGNAL candidates during supervised testing. This does not
+    # modify the independently validated "PROMISSORA" approval flag.
+    PILOT_KEYS=frozenset({'wick_reversal','three_step','impulse_follow','pullback_resume'})
+
+    def pilot_list(self):
+        with self.lock:
+            ranking=self._ranking()
+            # A minimum set of independently timestamped results limits
+            # tiny-sample W streaks. M1/M5 remain distinct.
+            return [
+                {'key':r['id'],'name':r['name'],'tf':r['tf'],
+                 'samples':r['signals'],'rate':r['rate'],
+                 'status':r['status']}
+                for r in ranking
+                if r['id'] in self.PILOT_KEYS
+                and r['tf'] in (60,300)
+                and r['signals']>=20
+                and r['rate'] is not None and r['rate']>=.50
+                and (r['recent_rate'] is None or r['recent_rate']>=.45)
+                and r['status'] not in ('REPROVADA','PAUSADA')
+                and self._latest_result_at(r['id'],r['tf'])>=__import__('time').time()-86400
+            ]
+
+    def _latest_result_at(self,key,tf):
+        return max((x['entry_at'] for x in self.ledger
+                    if x.get('key')==key and x.get('tf')==tf and
+                    x.get('result') in ('WIN','LOSS') and
+                    x.get('clock_guard')=='v2_future_entry'),default=0)
+
+    def pilot_candidates(self,bars,tf,now):
+        """Optional user-requested M1/M5 pilot; NEVER auto-place an order.
+        These hypotheses remain in validation, not in the approved registry.
+        """
+        if tf not in (60,300) or not bars or not 0<=now-(bars[-1]['from']+tf)<=10:
+            return []
+        with self.lock:
+            if not self.enabled:return []
+            allowed={r['key']:r for r in self.pilot_list() if r['tf']==tf}
+        if not allowed:return []
+        out=[]
+        for raw in candidates(bars):
+            record=allowed.get(raw['key'])
+            if not record:continue
+            out.append({'strategy':'research_'+raw['key'],
+                'name':raw['name']+' '+raw['version']+' · TESTE',
+                'direction':raw['direction'],'reason':raw['reason'],
+                'strengths':['Padrão confirmado em vela fechada',
+                    'Incluída a pedido para testes no motor de sinais'],
+                'risks':['Estratégia ainda EM VALIDAÇÃO; não possui aprovação estatística',
+                    'O resultado virtual não representa uma ordem enviada à Bulex'],
+                'confirmations':[raw['name']],
+                'research_validation':{'total':record['samples'],
+                    'rate':round(record['rate'],4),
+                    'status':record['status']},
+                'score':2.9,'pilot':True,
+                'strategy_version':raw['version'],
+                'selection':'Candidata experimental M'+str(tf//60)+' no motor de sinais; sem ordens automáticas'})
+        return out
+
     def report_error(self,exc):
         with self.lock:
             self.errors+=1
