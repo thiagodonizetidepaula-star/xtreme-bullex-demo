@@ -82,53 +82,61 @@ class Scanner:
         self.next_search=time.time()+3
         self.s.update(running=False,message=message)
     def preflight(self,g,r,search_id,asset,tf,direction,entry,reference):
-        """Evaluate the final five seconds before the scheduled entry.
-        No signal is exposed until two *live* partial-candle samples pass.
-        Missing or late samples fail closed, never fall back to an unvalidated signal.
+        """Confirm roughly seven seconds of short-term movement, ending early
+        enough to deliver a usable signal. Missing/late data fails closed.
+        This remains a read-only broker snapshot; not a guaranteed execution.
         """
+        min_notice=8.0
+        first_window=22.0
+        second_window=15.0
         with self.lock:
-            self.s['preflight']={'status':'waiting','asset':asset,'timeframe':tf,'entry_at':entry,'detail':'Aguardando os 5 segundos finais'}
+            self.s['preflight']={'status':'waiting','asset':asset,'timeframe':tf,
+                'entry_at':entry,'detail':'Aguardando a janela de confirmação antecipada (5–7s de preço)'}
+        if entry-time.time()<first_window-1:
+            return None,'Padrão detectado tarde demais para análise e aviso com antecedência'
         while True:
             with self.lock:
                 if g!=self.generation or search_id!=self.search_id or not self.s['running']:
                     return None,'Busca alterada ou interrompida'
-            left=entry-time.time()
-            if left<=5.0:break
-            if left<=0:return None,'Janela de confirmação perdida'
-            time.sleep(min(.5,max(.05,left-5)))
+            remaining=entry-time.time()
+            if remaining<=first_window:break
+            time.sleep(min(.5,max(.05,remaining-first_window)))
         try:
             first=r.call('signal_quote',asset=asset,tf=tf)
-            if first['candle_from']!=entry-tf or first['now']>=entry-1.2:
-                return None,'Primeira amostra atrasada ou fora da vela atual'
+            if first['candle_from']!=entry-tf or first['now']>entry-12 or time.time()>entry-12:
+                return None,'Primeira leitura demorou: sinal descartado'
             with self.lock:
-                self.s['preflight']={'status':'observing','asset':asset,'timeframe':tf,'entry_at':entry,'detail':'Comparando movimento nos últimos 5 segundos'}
-            while entry-time.time()>1.6:
+                self.s['preflight']={'status':'observing','asset':asset,'timeframe':tf,
+                    'entry_at':entry,'detail':'Comparando preços com antecedência para entrega do sinal'}
+            while entry-time.time()>second_window:
                 with self.lock:
                     if g!=self.generation or search_id!=self.search_id or not self.s['running']:
                         return None,'Busca cancelada'
                 time.sleep(.15)
             second=r.call('signal_quote',asset=asset,tf=tf)
-            if second['candle_from']!=entry-tf or second['now']>=entry or entry-time.time()<=.25:
-                return None,'Segunda amostra atrasada: não publicar sinal'
+            left=entry-time.time()
+            if second['candle_from']!=entry-tf or second['now']>=entry-min_notice or left<min_notice:
+                return None,'Confirmação tardia: aviso não teria antecedência suficiente'
+            if second['now']-first['now']<3:
+                return None,'Amostras muito próximas ou cotação desatualizada'
             sign=1 if direction=='ALTA' else -1
             delta=sign*(second['price']-first['price'])
             base=abs(reference['high']-reference['low'])
-            # Tiny non-directional tick movement is not meaningful confirmation.
             minimum=max(base*.015,abs(first['price'])*1e-7)
             if delta<=minimum:
-                return None,'Movimento nos 5 segundos finais contrário ou insuficiente para '+direction
-            # Reject a five-second bounce that still leaves the current candle
-            # strongly opposed to the signal (such as PUT while candle is green).
+                return None,'Movimento de curto prazo contrário ou insuficiente para '+direction
             candle_delta=sign*(second['price']-second['open'])
-            if candle_delta < max(base*.025,abs(second['open'])*1e-7):
+            if candle_delta<max(base*.025,abs(second['open'])*1e-7):
                 return None,'Vela atual ainda contrária ou sem avanço suficiente para '+direction
-            return {'candle_directional_move':candle_delta,'window_seconds':round(second['now']-first['now'],2),
+            return {'candle_directional_move':candle_delta,
+                    'window_seconds':round(second['now']-first['now'],2),
                     'first_price':first['price'],'last_price':second['price'],
                     'movement_in_signal_direction':delta,'minimum_movement':minimum,
-                    'source':'partial M1/M5 candle; 2 broker readings',
+                    'notice_seconds':round(left,2),
+                    'source':'partial M1/M5 candle; 2 live broker readings',
                     'checked_at':second['now']},None
         except Exception as exc:
-            return None,'Validação de 5 segundos indisponível: '+str(exc)
+            return None,'Validação de curto prazo indisponível: '+type(exc).__name__
 
     def scan(self,g,r):
         while True:
