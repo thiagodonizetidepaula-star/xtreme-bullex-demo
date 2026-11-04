@@ -3,6 +3,7 @@ from flask import Blueprint,request,jsonify,session,render_template
 from .engine import NAMES,evaluate,settle
 from .review import choose
 from .double_m5s import candidate as m5s_candidate
+from .research_lab import ResearchLab
 
 class Reader:
     def __init__(self):
@@ -31,6 +32,7 @@ class Scanner:
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
         self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
         self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
+        self.research=ResearchLab();self.research_seen={};self.research_cursor=0
         self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
         self.s['preflight']={'status':'idle','detail':'Aguardando oportunidade'}
     def snapshot(self):
@@ -49,7 +51,7 @@ class Scanner:
                 cat=r.call('catalog')
                 with self.lock:
                     if g!=self.generation:r.close();return
-                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=False,automatic=True,connecting=False,assets=cat['assets'],message='Conectado. Análise automática ativa.',error=None)
+                    self.reader=r;self.catalog_at=time.time();self.research.enabled=True;self.s.update(connected=True,running=False,automatic=True,connecting=False,assets=cat['assets'],message='Conectado. Análise automática ativa.',error=None)
                     self.thread=threading.Thread(target=self.scan,args=(g,r),daemon=True);self.thread.start()
             except Exception as e:
                 r.close()
@@ -137,7 +139,7 @@ class Scanner:
                 if running and time.time()>=self.deadline:
                     self.finish_search('Nenhum sinal confirmado nesta rodada. Nova busca automática em instantes, se ativa.');running=False
                 pending=[x for x in self.s['history'] if x['result']=='PENDENTE']
-            if not running and not pending:time.sleep(.6);continue
+            if not running and not pending and not self.research.enabled:time.sleep(.6);continue
             try:
                 if time.time()-self.catalog_at>60:
                     cat=r.call('catalog')
@@ -146,10 +148,24 @@ class Scanner:
                     assets=[a['asset'] for a in self.s['assets'] if a['open'] and (market=='both' or a['otc']==(market=='otc'))]
                 periods=(60,300) if tfchoice=='auto' else (int(tfchoice),)
                 jobs=[(a,tf) for a in sorted(assets,key=lambda a:self.asset_volatility.get(a,0),reverse=True) for tf in periods if (a,tf) not in self.checked] if running else []
+                # Research runs read-only on the existing account connection. While
+                # a public signal is pending, probe fresh *closed* bars independently.
+                research_jobs=[]
+                if self.research.enabled and not running and len(assets)>0:
+                    now_slot=int(time.time()//60)
+                    for a in assets:
+                        for research_tf in (60,300):
+                            slot=int(time.time()//research_tf)
+                            if self.research_seen.get((a,research_tf))!=slot:
+                                research_jobs.append((a,research_tf,slot))
+                    research_jobs=research_jobs[:80]
                 # Settle announced signals before scanning more assets, even if paused/filtered.
                 due=[(x['asset'],x['tf']) for x in pending if time.time()>=x['expires_at']+2]
                 if due:job=due[self.cursor%len(due)]
                 elif jobs:job=jobs[0]
+                elif research_jobs:
+                    job=research_jobs[0][:2]
+                    self.research_seen[(job[0],job[1])]=research_jobs[0][2]
                 else:
                     with self.lock:
                         if running:self.finish_search('Nenhum sinal confirmado nesta rodada. Nova busca automática em instantes, se ativa.')
@@ -159,12 +175,14 @@ class Scanner:
                 self.cursor+=1;asset,tf=job
                 with self.lock:self.s.update(asset=asset,message='Lendo '+asset+' · M'+str(tf//60))
                 data=r.call('signal_bars',asset=asset,tf=tf);now=data['now'];bars,signals=evaluate(data['candles'],tf,now)
+                if self.research.enabled:self.research.observe(asset,tf,bars,now)
                 readings={tf:(bars,signals)}
                 if running and tfchoice=='auto':
                     other_tf=300 if tf==60 else 60
                     other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
+                    if self.research.enabled:self.research.observe(asset,other_tf,readings[other_tf][0],other_data['now'])
                 # For the 5-second M pattern, require confirmed 5s bars, then
                 # still use M1 as the signal expiry and for settlement.
                 pattern_m=None
@@ -287,6 +305,20 @@ def control():
                 if error:return jsonify(error=error),409
             else:
                 scanner.pause_automatic()
+    return jsonify(ok=True)
+
+@bp.get('/sinais/laboratorio')
+def research_page():return render_template('signals_research.html')
+
+@bp.get('/api/signals/research')
+def research_state():
+    return jsonify(**scanner.research.snapshot(),connected=scanner.s['connected'],csrf=session['csrf'])
+
+@bp.post('/api/signals/research/control')
+def research_control():
+    data=request.get_json(silent=True) or {}
+    if not isinstance(data.get('enabled'),bool):return jsonify(error='Controle inválido.'),400
+    with scanner.research.lock:scanner.research.enabled=data['enabled']
     return jsonify(ok=True)
 
 @bp.post('/api/signals/analyze')
