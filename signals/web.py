@@ -247,7 +247,7 @@ class Scanner:
                             self.s['message']='Trend Consensus: 3 candles M5 de pausa para '+asset
                             continue
                         if verified.get('payout',0)<80:
-                            self.s['message']='Trend Consensus: payout/liquidez insuficiente no catálogo para '+asset
+                            self.s['message']='Trend Consensus: payout abaixo de 80% para '+asset+'; a liquidez real não é medida pela integração.'
                             continue
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
