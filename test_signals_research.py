@@ -1,6 +1,5 @@
 import unittest
 from signals.research_lab import ResearchLab, candidates, EXPERIMENTS
-from unittest.mock import patch
 
 def candles(n=40,tf=60):
     rows=[]
@@ -72,8 +71,6 @@ class ResearchLabTests(unittest.TestCase):
                 'direction':'ALTA','result':'WIN' if won else 'LOSS',
                 'clock_guard':'v2_future_entry'})
         # Synthetic timestamps in this test are historical: status pauses stale
-        with patch('signals.research_lab.__import__',create=True) as unused:
-            pass
         status=next(x for x in lab._ranking() if x['id']=='impulse_follow' and x['tf']==60)
         self.assertEqual(status['status'],'PAUSADA')
         # Use recent timestamps to demonstrate promotion into the choice
