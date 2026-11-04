@@ -2,7 +2,7 @@
 import math
 from .reaction import candidate as reaction_candidate
 from .momentum import candidate as momentum_candidate
-NAMES={'reaction':'Falha de continuação v1','rsi_adx':'RSI + ADX v1','ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela','engulf':'Engolfo com deslocamento','pullback3':'Recuo de 3 velas e retomada','double_m5s':'Topo duplo M (velas 5s → PUT M1)'}
+NAMES={'reaction':'Falha de continuação v1','rsi_adx':'RSI + ADX v1','ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela','engulf':'Engolfo com deslocamento','pullback3':'Recuo de 3 velas e retomada','double_m5s':'Topo duplo M (velas 5s → PUT M1)','trend_consensus_v1':'Trend Consensus V1 (M5)'}
 
 def clean(raw,tf,now):
     rows={}
