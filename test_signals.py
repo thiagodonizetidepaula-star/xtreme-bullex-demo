@@ -1,5 +1,6 @@
 import unittest,math
 from signals.engine import clean,detect,evaluate,settle
+from signals.double_m5s import candidate as double_m5s_candidate
 
 def bar(t,o,c,l=None,h=None):return {'from':t,'open':o,'close':c,'min':min(o,c)-.2 if l is None else l,'max':max(o,c)+.2 if h is None else h}
 
@@ -36,6 +37,20 @@ class SignalTests(unittest.TestCase):
         before=evaluate(raw,60,79*60+3)[1]
         raw[-1]=bar(79*60,100,10000)
         self.assertEqual(before,evaluate(raw,60,79*60+3)[1])
+    def test_double_m_5s_needs_closed_neckline_break(self):
+        rows=[{'from':i*5,'open':100.24,'close':100.25,'max':100.45,'min':100.05} for i in range(40)]
+        rows[25].update(open=100.65,close=100.9,max=101.2,min=100.5)
+        rows[32].update(open=100.75,close=100.87,max=101.15,min=100.6)
+        rows[38].update(open=100.15,close=100.1,max=100.35,min=100.05)
+        rows[39].update(open=100.1,close=99.72,max=100.16,min=99.65)
+        self.assertIsNone(double_m5s_candidate(rows,199)) # Last candle remains open.
+        found=double_m5s_candidate(rows,200)
+        self.assertIsNotNone(found)
+        self.assertEqual(found['direction'],'BAIXA')
+        self.assertEqual(found['execution_tf'],60)
+        rows[39].update(open=100.12,close=100.09,max=100.25,min=100.01)
+        self.assertIsNone(double_m5s_candidate(rows,200)) # Neckline did not break.
+
     def test_no_broker_order_path(self):
         import ast,pathlib
         tree=ast.parse(pathlib.Path('signals_worker.py').read_text())
