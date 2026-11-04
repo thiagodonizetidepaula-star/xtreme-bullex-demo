@@ -1,5 +1,6 @@
 import unittest
 from signals.research_lab import ResearchLab, candidates, EXPERIMENTS
+from unittest.mock import patch
 
 def candles(n=40,tf=60):
     rows=[]
@@ -60,6 +61,59 @@ class ResearchLabTests(unittest.TestCase):
         self.assertEqual(snap['duplicate_hypotheses'],1)
         self.assertEqual(len(lab.export()['history']),2)
         self.assertNotIn('csrf',lab.export())
+    def test_promote_only_with_forward_validation_then_retire_losers(self):
+        lab=ResearchLab()
+        for i in range(100):
+            # More than 80 successful paper outcomes; both segments validated
+            won=(i%6)!=0
+            lab.ledger.append({'asset':'TEST','tf':60,'basis_at':i*60,
+                'entry_at':i*60+120,'issued_at':i*60+5,
+                'key':'impulse_follow','name':'Pulso Direcional','version':'v1',
+                'direction':'ALTA','result':'WIN' if won else 'LOSS',
+                'clock_guard':'v2_future_entry'})
+        # Synthetic timestamps in this test are historical: status pauses stale
+        with patch('signals.research_lab.__import__',create=True) as unused:
+            pass
+        status=next(x for x in lab._ranking() if x['id']=='impulse_follow' and x['tf']==60)
+        self.assertEqual(status['status'],'PAUSADA')
+        # Use recent timestamps to demonstrate promotion into the choice
+        import time
+        base=int(time.time())-8000
+        for row in lab.ledger:row['entry_at']=base+row['entry_at']
+        status=next(x for x in lab._ranking() if x['id']=='impulse_follow' and x['tf']==60)
+        self.assertEqual(status['status'],'PROMISSORA')
+        self.assertTrue(status['active'])
+        self.assertTrue(any(x['experiment_id']=='impulse_follow' and x['active'] for x in lab.model_rows()))
+        for i in range(100,160):
+            lab.ledger.append({'asset':'TEST','tf':60,'basis_at':base+i*60,
+                'entry_at':base+i*60+120,'issued_at':base+i*60+5,
+                'key':'impulse_follow','version':'v1','direction':'ALTA',
+                'result':'LOSS','clock_guard':'v2_future_entry'})
+        status=next(x for x in lab._ranking() if x['id']=='impulse_follow' and x['tf']==60)
+        self.assertEqual(status['status'],'REPROVADA')
+        self.assertFalse(status['active'])
+    def test_persistence_keys_restore_and_upsert(self):
+        lab=ResearchLab()
+        record={'asset':'EURUSD-OTC','tf':60,'basis_at':6000,'entry_at':6120,
+                'expires_at':6180,'issued_at':6060.0,'key':'impulse_follow',
+                'name':'Pulso Direcional','version':'v1','direction':'ALTA',
+                'result':'WIN','clock_guard':'v2_future_entry'}
+        with lab.lock:
+            lab.ledger.append(record)
+            lab._mark_dirty(record)
+        batch=lab.dirty_batch()
+        self.assertEqual(len(batch),1)
+        self.assertEqual(len(batch[0][0]),64)
+        restored=ResearchLab()
+        restored.restore([batch[0][1]])
+        self.assertEqual(restored.snapshot()['settled'],1)
+        lab.confirm_saved(batch)
+        self.assertEqual(lab.dirty_batch(),[])
+    def test_only_promoted_hypotheses_eligible(self):
+        lab=ResearchLab()
+        bars=candles(50)
+        self.assertEqual(lab.promoted_candidates(bars,60,50*60),[])
+
     def test_no_signal_on_open_candle(self):
         lab=ResearchLab();lab.enabled=True
         lab.observe('PAIR',60,candles(41),40*60+30)
