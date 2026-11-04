@@ -253,7 +253,7 @@ class Scanner:
                     self.seen.add(key)
                     entry=(int(now)//tf+1)*tf
                     # One reserved candidate: search stays blocked during preflight.
-                    self.s['message']='Padrão identificado em '+asset+'. Verificando os 5 segundos antes da entrada.'
+                    self.s['message']='Padrão identificado em '+asset+'. Observando 5 a 7 segundos de preço com antecedência.'
                 validation,blocked=self.preflight(g,r,search_id,asset,tf,chosen['direction'],entry,bars[-1])
                 with self.lock:
                     if g!=self.generation:return
@@ -265,8 +265,12 @@ class Scanner:
                         continue
                     if any(x['result']=='PENDENTE' for x in self.s['history']):
                         self.finish_search('Acompanhando o sinal atual');continue
-                    self.s['preflight']={'status':'approved','detail':'Últimos 5 segundos confirmaram a direção','asset':asset,'timeframe':tf}
+                    self.s['preflight']={'status':'approved','detail':'Movimento recente validado; aviso antecipado para a entrada','asset':asset,'timeframe':tf}
                     now=time.time()
+                    if entry-now<8:
+                        self.s['preflight']={'status':'rejected','detail':'Aviso ficou atrasado após validação'}
+                        self.s['message']='Sinal descartado: antecedência insuficiente'
+                        continue
                     rec={**chosen,'pre_entry_check':validation,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':chosen.get('basis_at_5s',bars[-1]['from']),'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. A próxima busca aguarda o vencimento e a apuração deste sinal.')
