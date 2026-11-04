@@ -437,7 +437,7 @@ def research_page():return render_template('signals_research.html')
 @bp.get('/api/signals/research')
 def research_state():
     scanner.ensure_store_worker()
-    return jsonify(**scanner.research.snapshot(),connected=scanner.s['connected'],csrf=session['csrf'])
+    return jsonify(**scanner.research.snapshot(),connected=scanner.s['connected'],csrf=session['csrf'],pilot_enabled=scanner.s['research_pilot'],pilot_strategies=scanner.research.pilot_list())
 
 @bp.get('/api/signals/research/export')
 def research_export():
