@@ -637,7 +637,10 @@ def legacy_panel():
     # Old control dashboard remains available if troubleshooting is necessary.
     return render_template('index.html')
 @app.get('/health')
-def health():return jsonify(status='ok')
+def health():
+    from signals.web import scanner
+    scanner.ensure_store_worker()
+    return jsonify(status='ok',pulse_lab_storage=scanner.research.store_status)
 @app.post('/api/access')
 def access():
     data=request.get_json(silent=True) or {}
