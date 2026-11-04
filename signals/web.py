@@ -175,14 +175,18 @@ class Scanner:
                 self.cursor+=1;asset,tf=job
                 with self.lock:self.s.update(asset=asset,message='Lendo '+asset+' · M'+str(tf//60))
                 data=r.call('signal_bars',asset=asset,tf=tf);now=data['now'];bars,signals=evaluate(data['candles'],tf,now)
-                if self.research.enabled:self.research.observe(asset,tf,bars,now)
+                if self.research.enabled:
+                    try:self.research.observe(asset,tf,bars,now)
+                    except Exception as exc:self.research.report_error(exc)
                 readings={tf:(bars,signals)}
                 if running and tfchoice=='auto':
                     other_tf=300 if tf==60 else 60
                     other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
-                    if self.research.enabled:self.research.observe(asset,other_tf,readings[other_tf][0],other_data['now'])
+                    if self.research.enabled:
+                        try:self.research.observe(asset,other_tf,readings[other_tf][0],other_data['now'])
+                        except Exception as exc:self.research.report_error(exc)
                 # For the 5-second M pattern, require confirmed 5s bars, then
                 # still use M1 as the signal expiry and for settlement.
                 pattern_m=None
