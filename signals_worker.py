@@ -16,6 +16,13 @@ def dispatch(c):
         with worker.stage('leitura de sinais',12):bars=worker.api.get_candles(asset,tf,150,int(now))
         if not isinstance(bars,list):raise RuntimeError('A corretora não entregou velas.')
         return {'candles':bars,'now':worker.broker_now()}
+    if op=='signal_bars5':
+        now=worker.broker_now();asset=c['asset']
+        if asset not in worker.api.get_all_ACTIVES_OPCODE():raise ValueError('Ativo inválido.')
+        with worker.stage('leitura de velas 5s para padrão M',12):
+            bars=worker.api.get_candles(asset,5,80,int(now))
+        if not isinstance(bars,list):raise RuntimeError('A corretora não entregou velas 5s; padrão M indisponível.')
+        return {'candles':bars,'now':worker.broker_now()}
     if op=='signal_quote':
         asset=c['asset'];tf=c['tf']
         if tf not in (60,300) or asset not in worker.api.get_all_ACTIVES_OPCODE():raise ValueError('Ativo ou período inválido.')
