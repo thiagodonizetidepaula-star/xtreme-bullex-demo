@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pulse — Laboratório Inteligente</title>
+<style>
+:root{color-scheme:dark;--bg:#080e13;--panel:#132029;--line:#273945;--muted:#9cb0be;--green:#6ce8ac;--red:#ff858e}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0,#14322b66,transparent 60%),var(--bg);color:#eef7fb;font:15px system-ui,sans-serif}
+main{max-width:1080px;margin:auto;padding:24px 16px 64px}header{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+a{color:var(--green);text-decoration:none}h1{font-size:clamp(22px,4.5vw,36px);margin:18px 0 4px}h2{font-size:18px;margin:0 0 10px}
+p{line-height:1.55}.muted{color:var(--muted)}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0}.tabs a{border:1px solid var(--line);padding:10px 17px;border-radius:12px}
+.tabs a.active{border-color:var(--green);background:#17362c}.card{padding:22px;background:linear-gradient(140deg,#15232d,#0e1921);border:1px solid var(--line);border-radius:18px;margin:15px 0}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{padding:16px;border-radius:14px;background:#192832}.metric strong{font-size:25px;display:block;margin:5px 0}
+button{background:#1a3036;color:#eff;border:1px solid #37504d;border-radius:10px;padding:11px 15px;cursor:pointer}button:hover{border-color:var(--green)}
+button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}.positive{color:var(--green)}.negative{color:var(--red)}
+.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px;min-width:740px}th,td{padding:12px 9px;text-align:left;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
+.chip{display:inline-block;border:1px solid #38535c;padding:5px 9px;border-radius:20px;font-size:11px;white-space:nowrap}.notice{color:var(--muted);font-size:13px}
+@media(max-width:650px){.summary{grid-template-columns:repeat(2,1fr)}.card{padding:16px}}
+</style></head><body><main>
+<header><b style="font-size:24px">pulse<span style="color:var(--green)">↗</span> <small class="muted">LAB</small></b><span id="connection" class="chip">Verificando conexão…</span></header>
+<h1>Laboratório Inteligente</h1>
+<p class="muted">Pesquisa contínua de comportamento das velas. Estratégias experimentais separadas dos sinais oficiais, sem ordens na corretora.</p>
+<nav class="tabs"><a href="/sinais">Sinais principais</a><a class="active" href="/sinais/laboratorio" aria-current="page">Laboratório Inteligente</a></nav>
+<div class="summary">
+<div class="metric"><span class="muted">Leituras</span><strong id="scans">0</strong></div>
+<div class="metric"><span class="muted">Testes encerrados</span><strong id="settled">0</strong></div>
+<div class="metric"><span class="muted">Hipóteses pendentes</span><strong id="pending">0</strong></div>
+<div class="metric"><span class="muted">Promissoras</span><strong id="promising">0</strong></div>
+</div>
+<section class="card"><h2>Investigação automática</h2>
+<p id="message" class="muted">Carregando…</p>
+<div class="actions"><button id="toggle" type="button" disabled>Ativar pesquisa</button><button id="export" type="button">Exportar resultados JSON</button></div>
+<p class="notice">A análise usa somente dados disponíveis após conectar a Bulex na aba Sinais. É um motor estatístico de pesquisa, não uma IA treinada continuamente e nem um trader profissional humano. O histórico do servidor é temporário e pode reiniciar em um deploy.</p>
+</section>
+<section class="card"><h2>Ranking de estratégias descobertas</h2>
+<p class="notice">Cada estratégia recebe nome e versão fixos para comparação justa. Um candidato só pode ser chamado de promissor com 30 resultados, pelo menos 12 no período de validação (40% mais recente), 62% de acerto nessa validação e 58% no total. Resultados não implicam lucro ou acerto futuro.</p>
+<div class="tablewrap"><table><thead><tr><th>Estratégia</th><th>Período</th><th>WIN / Total</th><th>Acerto</th><th>Validação</th><th>Status</th></tr></thead><tbody id="rank"></tbody></table></div>
+</section>
+<section class="card"><h2>Movimentos anormais em observação</h2>
+<p class="notice">Detecta amplitude extrema, gaps e amplitude muito baixa. Não comprova manipulação, fraude ou causa externa; não temos acesso à auditoria independente de ticks e preços de referência.</p>
+<div class="tablewrap"><table><thead><tr><th>Horário</th><th>Ativo</th><th>Período</th><th>Evento</th></tr></thead><tbody id="anomalies"></tbody></table></div>
+</section>
+<section class="card"><h2>Últimos testes prospectivos</h2>
+<div class="tablewrap"><table><thead><tr><th>Entrada</th><th>Ativo</th><th>Estratégia</th><th>Direção</th><th>Resultado</th></tr></thead><tbody id="recent"></tbody></table></div>
+</section>
+<p class="notice" id="footer">Os sinais continuam separados do motor principal. Promoção automática para operações desabilitada.</p>
+</main><script>
+let csrf='',latest=null,busy=false;const $=id=>document.getElementById(id);
+const date=t=>t?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(t*1000)):'—';
+function row(body,items){const tr=document.createElement('tr');for(const v of items){const td=document.createElement('td');td.textContent=String(v);tr.appendChild(td)}body.appendChild(tr)}
+function render(d){
+ latest=d;$('connection').textContent=d.connected?'● Corretora conectada':'● Abra Sinais para conectar';
+ $('scans').textContent=d.scans;$('settled').textContent=d.settled;$('pending').textContent=d.pending;
+ $('promising').textContent=d.ranking.filter(x=>x.status==='PROMISSORA').length;
+ $('toggle').disabled=!d.connected;$('toggle').textContent=d.enabled?'Pausar pesquisa':'Ativar pesquisa';
+ $('message').textContent=d.connected?(d.enabled?'Pesquisa ativa, verificando velas fechadas':'Pesquisa pausada'):'Conecte sua conta prática na aba Sinais para iniciar a pesquisa';
+ const rb=$('rank');rb.replaceChildren();for(const r of d.ranking)row(rb,[r.name,'M'+r.tf/60,r.wins+' / '+r.signals,r.rate==null?'—':(100*r.rate).toFixed(1)+'%',r.validation_rate==null?'—':r.validation_wins+' / '+r.validation_signals+' ('+(100*r.validation_rate).toFixed(1)+'%)',r.status]);
+ const ab=$('anomalies');ab.replaceChildren();for(const x of d.anomalies)row(ab,[date(x.at),x.asset,'M'+x.tf/60,x.event]);
+ const tb=$('recent');tb.replaceChildren();for(const x of d.recent)row(tb,[date(x.entry_at),x.asset,x.name,x.direction==='ALTA'?'CALL':'PUT',x.result]);
+ $('footer').textContent=d.note+' Promoção automática para operações: desabilitada.';
+}
+async function poll(){if(busy)return;busy=true;try{const r=await fetch('/api/signals/research',{cache:'no-store'});if(!r.ok)throw Error('Consulta falhou');const d=await r.json();csrf=d.csrf;render(d)}catch(e){$('message').textContent='Erro ao consultar laboratório: '+e.message}finally{busy=false}}
+$('toggle').onclick=async()=>{if(!latest||!csrf)return;try{const r=await fetch('/api/signals/research/control',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({enabled:!latest.enabled})});if(!r.ok)throw Error('Não foi possível alterar pesquisa');await poll()}catch(e){$('message').textContent=e.message}};
+$('export').onclick=()=>{if(!latest)return;const blob=new Blob([JSON.stringify({exported_at:new Date().toISOString(),research:latest},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='pulse-laboratorio-pesquisas.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+poll();setInterval(poll,5000);
+</script></body></html>
