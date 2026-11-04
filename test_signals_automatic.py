@@ -26,7 +26,7 @@ class AutomaticTests(unittest.TestCase):
         self.assertTrue(s.s['running'])
     def test_disconnect_and_no_strategy_do_not_spin(self):
         s=self.ready();s.s['connected']=False;s.resume_automatic();self.assertFalse(s.s['running'])
-        s.s.update(connected=True,enabled=[]);s.resume_automatic();self.assertFalse(s.s['automatic'])
+        s.s.update(connected=True,enabled=[],research_pilot=False);s.resume_automatic();self.assertFalse(s.s['automatic'])
     def test_pending_is_settled_before_automatic_next_search(self):
         s=self.ready();s.catalog_at=10000
         s.s['history']=[{'asset':'AAA','tf':60,'entry_at':120,'expires_at':180,'direction':'ALTA','result':'PENDENTE'}]
