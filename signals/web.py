@@ -326,6 +326,10 @@ def research_page():return render_template('signals_research.html')
 def research_state():
     return jsonify(**scanner.research.snapshot(),connected=scanner.s['connected'],csrf=session['csrf'])
 
+@bp.get('/api/signals/research/export')
+def research_export():
+    return jsonify(**scanner.research.export())
+
 @bp.post('/api/signals/research/control')
 def research_control():
     data=request.get_json(silent=True) or {}
