@@ -30,7 +30,7 @@ class Scanner:
     def __init__(self):
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
         self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
-        self.seen=set();self.cache={};self.catalog_at=0;self.cursor=0
+        self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
         self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
         self.s['preflight']={'status':'idle','detail':'Aguardando oportunidade'}
     def snapshot(self):
@@ -145,7 +145,7 @@ class Scanner:
                 with self.lock:
                     assets=[a['asset'] for a in self.s['assets'] if a['open'] and (market=='both' or a['otc']==(market=='otc'))]
                 periods=(60,300) if tfchoice=='auto' else (int(tfchoice),)
-                jobs=[(a,tf) for a in assets for tf in periods if (a,tf) not in self.checked] if running else []
+                jobs=[(a,tf) for a in sorted(assets,key=lambda a:self.asset_volatility.get(a,0),reverse=True) for tf in periods if (a,tf) not in self.checked] if running else []
                 # Settle announced signals before scanning more assets, even if paused/filtered.
                 due=[(x['asset'],x['tf']) for x in pending if time.time()>=x['expires_at']+2]
                 if due:job=due[self.cursor%len(due)]
@@ -180,6 +180,9 @@ class Scanner:
                 with self.lock:
                     if g!=self.generation:return
                     self.cache[(asset,tf)]=bars;self.s.update(last_read=now,scans=self.s['scans']+1,error=None)
+                    if tf==300 and len(bars)>=20 and bars[-1]['close']>0:
+                        recent_ranges=sorted((x['high']-x['low']) for x in bars[-20:])
+                        self.asset_volatility[asset]=recent_ranges[len(recent_ranges)//2]/bars[-1]['close']
                     for rec in self.s['history']:
                         if rec['asset']==asset and rec['tf']==tf and rec['result']=='PENDENTE' and now>=rec['expires_at']:
                             result=settle(rec,bars,tf)
@@ -204,6 +207,15 @@ class Scanner:
                     if key in self.seen:continue
                     if any(x['result']=='PENDENTE' for x in self.s['history']):
                         self.finish_search('Acompanhando o sinal atual');continue
+                    if chosen.get('strategy')=='trend_consensus_v1':
+                        # A separate 3xM5 cooldown for any recorded signals on this asset.
+                        previous=max((x.get('entry_at',0) for x in self.s['history'] if x.get('asset')==asset),default=0)
+                        if previous and (int(now)//300+1)*300-previous < 3*300:
+                            self.s['message']='Trend Consensus: 3 candles M5 de pausa para '+asset
+                            continue
+                        if verified.get('payout',0)<80:
+                            self.s['message']='Trend Consensus: payout/liquidez insuficiente no catálogo para '+asset
+                            continue
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
                     entry=(int(now)//tf+1)*tf
