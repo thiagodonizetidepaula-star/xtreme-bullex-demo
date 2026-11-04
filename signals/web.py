@@ -12,7 +12,7 @@ class Reader:
             self.q.put(None)
         threading.Thread(target=read,daemon=True).start()
     def call(self,op,**kw):
-        if op not in ('connect','catalog','signal_bars'):raise ValueError('Somente leitura')
+        if op not in ('connect','catalog','signal_bars','signal_quote'):raise ValueError('Somente leitura')
         with self.lock:
             if self.p.poll() is not None:raise RuntimeError('Sessão encerrada; reconecte.')
             self.p.stdin.write(json.dumps({'op':op,**kw})+'\n');self.p.stdin.flush()
@@ -31,6 +31,7 @@ class Scanner:
         self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
         self.seen=set();self.cache={};self.catalog_at=0;self.cursor=0
         self.search_id=0;self.checked=set();self.deadline=0;self.next_search=0
+        self.s['preflight']={'status':'idle','detail':'Aguardando oportunidade'}
     def snapshot(self):
         with self.lock:return json.loads(json.dumps({**self.s,'server_now':time.time(),'strategies':NAMES,'experimental':True}))
     def connect(self,email,password):
@@ -61,7 +62,7 @@ class Scanner:
             if any(x['result']=='PENDENTE' for x in self.s['history']):return 'Aguarde o vencimento e a apuração do sinal atual.'
             if not self.s['enabled']:return 'Selecione pelo menos uma estratégia.'
             self.search_id+=1;self.checked=set();self.deadline=time.time()+60
-            self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…')
+            self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…',preflight={'status':'idle','detail':'Buscando padrão'})
             return None
     def resume_automatic(self):
         with self.lock:
@@ -77,6 +78,50 @@ class Scanner:
     def finish_search(self,message):
         self.next_search=time.time()+3
         self.s.update(running=False,message=message)
+    def preflight(self,g,r,search_id,asset,tf,direction,entry,reference):
+        """Evaluate the final five seconds before the scheduled entry.
+        No signal is exposed until two *live* partial-candle samples pass.
+        Missing or late samples fail closed, never fall back to an unvalidated signal.
+        """
+        with self.lock:
+            self.s['preflight']={'status':'waiting','asset':asset,'timeframe':tf,'entry_at':entry,'detail':'Aguardando os 5 segundos finais'}
+        while True:
+            with self.lock:
+                if g!=self.generation or search_id!=self.search_id or not self.s['running']:
+                    return None,'Busca alterada ou interrompida'
+            left=entry-time.time()
+            if left<=5.0:break
+            if left<=0:return None,'Janela de confirmação perdida'
+            time.sleep(min(.5,max(.05,left-5)))
+        try:
+            first=r.call('signal_quote',asset=asset,tf=tf)
+            if first['candle_from']!=entry-tf or first['now']>=entry-1.2:
+                return None,'Primeira amostra atrasada ou fora da vela atual'
+            with self.lock:
+                self.s['preflight']={'status':'observing','asset':asset,'timeframe':tf,'entry_at':entry,'detail':'Comparando movimento nos últimos 5 segundos'}
+            while entry-time.time()>1.6:
+                with self.lock:
+                    if g!=self.generation or search_id!=self.search_id or not self.s['running']:
+                        return None,'Busca cancelada'
+                time.sleep(.15)
+            second=r.call('signal_quote',asset=asset,tf=tf)
+            if second['candle_from']!=entry-tf or second['now']>=entry or entry-time.time()<=.25:
+                return None,'Segunda amostra atrasada: não publicar sinal'
+            sign=1 if direction=='ALTA' else -1
+            delta=sign*(second['price']-first['price'])
+            base=abs(reference['high']-reference['low'])
+            # Tiny non-directional tick movement is not meaningful confirmation.
+            minimum=max(base*.015,abs(first['price'])*1e-7)
+            if delta<=minimum:
+                return None,'Movimento nos 5 segundos finais contrário ou insuficiente para '+direction
+            return {'window_seconds':round(second['now']-first['now'],2),
+                    'first_price':first['price'],'last_price':second['price'],
+                    'movement_in_signal_direction':delta,'minimum_movement':minimum,
+                    'source':'partial M1/M5 candle; 2 broker readings',
+                    'checked_at':second['now']},None
+        except Exception as exc:
+            return None,'Validação de 5 segundos indisponível: '+str(exc)
+
     def scan(self,g,r):
         while True:
             with self.lock:
@@ -144,7 +189,22 @@ class Scanner:
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
                     self.seen.add(key)
                     entry=(int(now)//tf+1)*tf
-                    rec={**chosen,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
+                    # One reserved candidate: search stays blocked during preflight.
+                    self.s['message']='Padrão identificado em '+asset+'. Verificando os 5 segundos antes da entrada.'
+                validation,blocked=self.preflight(g,r,search_id,asset,tf,chosen['direction'],entry,bars[-1])
+                with self.lock:
+                    if g!=self.generation:return
+                    if not running or not self.s['running'] or search_id!=self.search_id:
+                        continue
+                    if blocked:
+                        self.s['preflight']={'status':'rejected','detail':blocked,'asset':asset,'timeframe':tf}
+                        self.s['message']='Sinal descartado: '+blocked
+                        continue
+                    if any(x['result']=='PENDENTE' for x in self.s['history']):
+                        self.finish_search('Acompanhando o sinal atual');continue
+                    self.s['preflight']={'status':'approved','detail':'Últimos 5 segundos confirmaram a direção','asset':asset,'timeframe':tf}
+                    now=time.time()
+                    rec={**chosen,'pre_entry_check':validation,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. A próxima busca aguarda o vencimento e a apuração deste sinal.')
                     # Never discard unresolved records.
