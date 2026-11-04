@@ -31,7 +31,7 @@ class Reader:
 class Scanner:
     def __init__(self):
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
-        self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'error':None}
+        self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'research_pilot':True,'error':None}
         self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
         self.research=ResearchLab();self.research_seen={};self.research_cursor=0
         self.store=PulseStore();self._storage_worker=None;self._storage_pid=None
@@ -69,7 +69,7 @@ class Scanner:
             if not self.s['connected']:return 'Conecte a Bulex primeiro.'
             if self.s['running']:return 'Análise em andamento. Aguarde.'
             if any(x['result']=='PENDENTE' for x in self.s['history']):return 'Aguarde o vencimento e a apuração do sinal atual.'
-            if not self.s['enabled']:return 'Selecione pelo menos uma estratégia.'
+            if not self.s['enabled'] and not self.s['research_pilot']:return 'Selecione pelo menos uma estratégia.'
             self.search_id+=1;self.checked=set();self.deadline=time.time()+60
             self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…',preflight={'status':'idle','detail':'Buscando padrão'})
             return None
@@ -283,6 +283,8 @@ class Scanner:
                     if self.research.enabled:
                         for period,(closed,_signals) in readings.items():
                             promoted.extend((period,c,closed) for c in self.research.promoted_candidates(closed,period,now))
+                            if self.s['research_pilot']:
+                                promoted.extend((period,c,closed) for c in self.research.pilot_candidates(closed,period,now))
                     candidate=choose(readings,enabled,now)
                 else:
                     candidate=None
@@ -387,7 +389,8 @@ def state():
     promoted=[{'strategy':x['id'],'name':x['name'],'tf':x['tf'],
                'validation_rate':x['validation_rate']} for x in scanner.research._ranking()
               if x['active']]
-    return jsonify(**snap,csrf=session['csrf'],promoted_research=promoted)
+    pilots=scanner.research.pilot_list() if snap.get('research_pilot') else []
+    return jsonify(**snap,csrf=session['csrf'],promoted_research=promoted,pilot_research=pilots)
 @bp.post('/api/signals/connect')
 def connect():
     scanner.ensure_store_worker()
@@ -408,11 +411,14 @@ def control():
         if 'enabled' in d:
             if not isinstance(d['enabled'],list) or any(x not in NAMES for x in d['enabled']):return jsonify(error='Estratégia inválida'),400
             scanner.s['enabled']=d['enabled']
+        if 'research_pilot' in d:
+            if not isinstance(d['research_pilot'],bool):return jsonify(error='Piloto inválido'),400
+            scanner.s['research_pilot']=d['research_pilot']
         if 'automatic' in d:
             if not isinstance(d['automatic'],bool):return jsonify(error='Controle inválido'),400
             if d['automatic']:
                 if not scanner.s['connected']:return jsonify(error='Conecte a Bulex primeiro.'),409
-                if not scanner.s['enabled']:return jsonify(error='Selecione uma estratégia.'),409
+                if not scanner.s['enabled'] and not scanner.s['research_pilot']:return jsonify(error='Selecione uma estratégia.'),409
                 scanner.s['automatic']=True;scanner.next_search=0
                 scanner.resume_automatic()
             else:scanner.pause_automatic()
