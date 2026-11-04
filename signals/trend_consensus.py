@@ -34,6 +34,12 @@ def rsi_wilder(closes, length=14):
         return 100.0
     return 100-100/(1+avg_gain/avg_loss)
 
+def confidence_label(score):
+    if 85 <= score <= 89:return 'MODERADO'
+    if 90 <= score <= 94:return 'FORTE'
+    if 95 <= score <= 100:return 'MUITO FORTE'
+    return 'DESCARTADO'
+
 def candidate(bars, tf, now, spread=None):
     # bars are supplied by engine.clean(): an uninterrupted sequence
     # of confirmed OHLC candles. Unfinished candles are never scored.
@@ -99,16 +105,17 @@ def candidate(bars, tf, now, spread=None):
         spread_status='unavailable'
     score_breakdown = {'ema':30,'price':25,'rsi':25,'candle':20}
     score = sum(score_breakdown.values())
+    if score < 85:return None
     return {
         'strategy':KEY,'name':NAME,'direction':direction,
         'reason':'Tendência EMA9/21, fechamento, RSI e candle M5 alinhados ('+guard+').',
-        'score':score,'score_breakdown':score_breakdown,'confidence':'MUITO FORTE',
+        'score':score,'score_breakdown':score_breakdown,'confidence':confidence_label(score),
         'confidence_note':'Classificação de regras, não chance estatística de WIN',
         'rsi':round(rsi,2),'ema9':round(e9,8),'ema21':round(e21,8),
         'indicators':{'rsi':round(rsi,2),'ema9':round(e9,8),'ema21':round(e21,8)},
         'signal_at':now,'timeframe':300,'basis_at':last['from'],
         'recent_volatility_pct':round(100*scale/close,5) if close else 0,
-        'spread_status':spread_status,'spread_guard':'fail_closed_without_bid_ask',
+        'spread_status':spread_status,'spread_guard':'unavailable_for_signal_only; no orders executed',
         'strategy_version':'trend_consensus_v1',
         'strengths':['EMA 9/21 alinhadas e com inclinação',
                      'Preço acima da EMA9' if direction=='ALTA' else 'Preço abaixo da EMA9',
