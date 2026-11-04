@@ -2,6 +2,7 @@ import json,time,threading,subprocess,sys,pathlib,queue,secrets
 from flask import Blueprint,request,jsonify,session,render_template
 from .engine import NAMES,evaluate,settle
 from .review import choose
+from .double_m5s import candidate as m5s_candidate
 
 class Reader:
     def __init__(self):
@@ -12,7 +13,7 @@ class Reader:
             self.q.put(None)
         threading.Thread(target=read,daemon=True).start()
     def call(self,op,**kw):
-        if op not in ('connect','catalog','signal_bars','signal_quote'):raise ValueError('Somente leitura')
+        if op not in ('connect','catalog','signal_bars','signal_quote','signal_bars5'):raise ValueError('Somente leitura')
         with self.lock:
             if self.p.poll() is not None:raise RuntimeError('Sessão encerrada; reconecte.')
             self.p.stdin.write(json.dumps({'op':op,**kw})+'\n');self.p.stdin.flush()
@@ -164,9 +165,15 @@ class Scanner:
                     other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
+                # For the 5-second M pattern, require confirmed 5s bars, then
+                # still use M1 as the signal expiry and for settlement.
+                pattern_m=None
+                if running and tf==60 and tfchoice!='300' and 'double_m5s' in self.s['enabled']:
+                    five=r.call('signal_bars5',asset=asset)
+                    pattern_m=m5s_candidate(five['candles'],five['now'])
                 # Refresh this account's options catalogue before announcing a candidate.
                 verified=None
-                if running and self.s['running'] and search_id==self.search_id and any(items[1] for items in readings.values()):
+                if running and self.s['running'] and search_id==self.search_id and (pattern_m or any(items[1] for items in readings.values())):
                     catalog=r.call('catalog')
                     verified=next((a for a in catalog['assets'] if a['asset']==asset and a['open']),None)
                     now+=max(0,time.time()-now)
@@ -183,11 +190,17 @@ class Scanner:
                     if time.time()>=self.deadline:
                         self.finish_search('Rodada encerrada sem sinal. Nova busca automática em instantes, se ativa.');continue
                     selected=choose(readings,self.s['enabled'],now) if verified else None
+                    if verified and pattern_m and bars and now-(bars[-1]['from']+60)<=12:
+                        # Use M1 candles for expiration/settlement, M5s for setup.
+                        # Prefer an already qualified higher-scored signal, when present.
+                        m_selected=(60,pattern_m,bars)
+                        if selected is None or pattern_m['score']>selected[1].get('score',0):
+                            selected=m_selected
                     if not selected:
                         self.s['message']='Sem confirmação suficiente em '+asset+'; verificando outro ativo.'
                         continue
                     tf,chosen,bars=selected
-                    key=(asset,bars[-1]['from'],tf)
+                    key=(asset,chosen.get('basis_at_5s',bars[-1]['from']),tf)
                     if key in self.seen:continue
                     if any(x['result']=='PENDENTE' for x in self.s['history']):
                         self.finish_search('Acompanhando o sinal atual');continue
@@ -209,7 +222,7 @@ class Scanner:
                         self.finish_search('Acompanhando o sinal atual');continue
                     self.s['preflight']={'status':'approved','detail':'Últimos 5 segundos confirmaram a direção','asset':asset,'timeframe':tf}
                     now=time.time()
-                    rec={**chosen,'pre_entry_check':validation,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':bars[-1]['from'],'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
+                    rec={**chosen,'pre_entry_check':validation,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':chosen.get('basis_at_5s',bars[-1]['from']),'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. A próxima busca aguarda o vencimento e a apuração deste sinal.')
                     # Never discard unresolved records.
