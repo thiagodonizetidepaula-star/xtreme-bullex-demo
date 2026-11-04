@@ -2,7 +2,7 @@
 import math
 from .reaction import candidate as reaction_candidate
 from .momentum import candidate as momentum_candidate
-NAMES={'reaction':'Falha de continuação v1','rsi_adx':'RSI + ADX v1','ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela'}
+NAMES={'reaction':'Falha de continuação v1','rsi_adx':'RSI + ADX v1','ema':'EMA 8/21','rejection':'Rejeição em zona','sweep':'Falso rompimento','retest':'Rompimento com reteste','block':'Continuação na zona de origem','structure':'Topo/fundo duplo','formation':'Compressão com rompimento','sequence':'Harami / estrela','engulf':'Engolfo com deslocamento','pullback3':'Recuo de 3 velas e retomada'}
 
 def clean(raw,tf,now):
     rows={}
@@ -76,6 +76,28 @@ def detect(bars):
     # Hanging man variant from the submitted video, followed by a break confirmation.
     pb=abs(p['close']-p['open']);pl=min(p['open'],p['close'])-p['low'];ps=p['high']-p['low']
     if p['close']>bars[-8]['close'] and pl>=max(2*pb,.55*ps) and pb>=.1*ps and b['close']<p['low']:add('rejection','BAIXA','Enforcado após alta com confirmação inferior')
+    # Novas hipóteses independentes, disponíveis inicialmente só por seleção manual.
+    # Nenhuma vela em formação é usada; filtros de tendência adicionais ficam em review.py.
+    if len(bars)>=38:
+        trend_window=bars[-7:-2]
+        recent_pressure=sum(x['close']-x['open'] for x in trend_window)
+        prev_body=abs(p['close']-p['open'])
+        curr_body=abs(b['close']-b['open'])
+        if prev_body>=.3*atr and curr_body>=.65*atr and curr_body>=1.25*prev_body and span<=2.2*atr:
+            if p['close']<p['open'] and recent_pressure<0 and b['close']>b['open'] and b['open']<=p['close']+.1*atr and b['close']>p['open']+.1*atr and b['close']>=b['high']-.25*span:
+                add('engulf','ALTA','Engolfo comprador com corpo forte e fechamento próximo da máxima')
+            if p['close']>p['open'] and recent_pressure>0 and b['close']<b['open'] and b['open']>=p['close']-.1*atr and b['close']<p['open']-.1*atr and b['close']<=b['low']+.25*span:
+                add('engulf','BAIXA','Engolfo vendedor com corpo forte e fechamento próximo da mínima')
+        # Retomada após três velas de recuo: só se o movimento anterior foi direcional.
+        previous_impulse=bars[-9:-4]
+        pullback=bars[-4:-1]
+        impulse=sum(x['close']-x['open'] for x in previous_impulse)
+        pull=sum(x['close']-x['open'] for x in pullback)
+        if .25*atr<=span<=1.8*atr and curr_body>=.5*span:
+            if impulse>=1.5*atr and -.95*abs(impulse)<=pull<=-.35*atr and all(x['close']<x['open'] for x in pullback) and b['close']>b['open'] and b['close']>p['high'] and b['close']>=b['high']-.25*span:
+                add('pullback3','ALTA','Três velas de recuo e retomada compradora confirmada')
+            if impulse<=-1.5*atr and .35*atr<=pull<=.95*abs(impulse) and all(x['close']>x['open'] for x in pullback) and b['close']<b['open'] and b['close']<p['low'] and b['close']<=b['low']+.25*span:
+                add('pullback3','BAIXA','Três velas de recuo e retomada vendedora confirmada')
     momentum=momentum_candidate(bars)
     if momentum:found.insert(0,momentum)
     reaction=reaction_candidate(bars)
