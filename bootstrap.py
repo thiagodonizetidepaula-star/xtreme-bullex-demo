@@ -46,4 +46,15 @@ result=unittest.TextTestRunner(verbosity=2).run(suite)
 if not result.wasSuccessful():
     raise RuntimeError('Falha nos testes de regressão do laboratório Xtreme Sniper 40.')
 print('Laboratório Xtreme Sniper: testes de regressão aprovados.')
+# Connectivity probe: server-only token, logs status but never prints the key.
+try:
+    from signals.pulse_store import PulseStore
+    store=PulseStore()
+    if store.configured:
+        print('PULSE SUPABASE HEALTH: OK' if store.health() else 'PULSE SUPABASE HEALTH: FAILED',flush=True)
+    else:
+        print('PULSE SUPABASE HEALTH: NOT CONFIGURED',flush=True)
+except Exception as exc:
+    print('PULSE SUPABASE HEALTH: '+type(exc).__name__,flush=True)
+
 
