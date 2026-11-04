@@ -8,13 +8,12 @@ from collections import deque
 from math import isfinite
 from statistics import median
 from threading import RLock
-from datetime import datetime, timezone
 
 EXPERIMENTS = {
     "impulse_follow": {"name":"Pulso Direcional","version":"v1","description":"Corpo forte alinhado ao avanço de fechamentos; testa continuidade"},
     "wick_reversal": {"name":"Rejeição de Extremo","version":"v1","description":"Pavio dominante após avanço prévio; testa reversão"},
     "compression_break": {"name":"Ruptura da Compressão","version":"v1","description":"Faixa estreita seguida de expansão e fechamento direcional"},
-    "three_step": {"name":"Ritmo Três Velas","version":"v1","description":"Duas velas direcionais com confirmação de momentum"},
+    "three_step": {"name":"Ritmo Três Velas","version":"v2","description":"Três velas direcionais com confirmação de momentum"},
     "pullback_resume": {"name":"Retomada Pós-Recuo","version":"v1","description":"Impulso, uma correção e retomada no sentido do impulso"},
 }
 
@@ -71,8 +70,11 @@ class ResearchLab:
         self.anomaly_seen=set()
         self.scans=0
         self.last_scan=None
+        self.rejected_late=0
+        self.errors=0
+        self.last_error=None
     def observe(self,asset,tf,bars,now):
-        """Observe closed bars ONLY. A prediction for t+tf is settled on later reads."""
+        """Observe closed bars only; issue prediction BEFORE a full future entry candle opens."""
         if tf not in (60,300) or len(bars)<25 or not bars:return
         latest=bars[-1]
         if not 0<=now-(latest['from']+tf)<=max(15,tf*.1):return
@@ -84,7 +86,7 @@ class ResearchLab:
             for k,record in list(self.pending.items()):
                 if record['asset']!=asset or record['tf']!=tf:continue
                 candle=by_time.get(record['entry_at'])
-                if candle:
+                if candle and now>=record['expires_at'] and record['issued_at'] <= record['entry_at']-5:
                     delta=candle['close']-candle['open']
                     record['result']='EMPATE' if delta==0 else ('WIN' if (delta>0)==(record['direction']=='ALTA') else 'LOSS')
                     record['entry_price']=candle['open']
@@ -92,7 +94,7 @@ class ResearchLab:
                     record['settled_at']=now
                     self.ledger.append(record)
                     del self.pending[k]
-                elif now>record['entry_at']+tf*2:
+                elif now>record['expires_at']+tf:
                     record['result']='SEM DADOS'
                     record['settled_at']=now
                     self.ledger.append(record)
@@ -102,12 +104,23 @@ class ResearchLab:
             self.seen.add(candle_id)
             if len(self.seen)>12000:self.seen=set(list(self.seen)[-6000:])
             self._anomaly(asset,tf,bars,now)
+            # Detection uses a bar that ended at latest['from']+tf. Because broker
+            # responses arrive after that boundary, predicting the very next
+            # candle would claim an entry at a price already in the past.
+            # Research therefore waits one full interval: signal is locked now
+            # for the candle AFTER the immediately starting candle.
+            entry=latest['from']+2*tf
+            minimum_lead=5 if tf==60 else 10
+            if not entry-now>=minimum_lead:
+                self.rejected_late+=1
+                return
             for found in candidates(bars):
-                entry=latest['from']+tf
                 k=(asset,tf,entry,found['key'])
                 if k in self.pending:continue
                 self.pending[k]={**found,'asset':asset,'tf':tf,'basis_at':latest['from'],
                                  'entry_at':entry,'expires_at':entry+tf,'issued_at':now,
+                                 'minimum_lead_seconds':minimum_lead,
+                                 'clock_guard':'v2_future_entry','execution':'PAPER_ONLY_NOT_EXECUTED',
                                  'result':'PENDENTE'}
     def _anomaly(self,asset,tf,bars,now):
         recent=bars[-21:-1]
@@ -124,6 +137,21 @@ class ResearchLab:
             self.anomalies.append({'asset':asset,'tf':tf,'at':b['from']+tf,'event':flag,
                                    'interpretation':'Anomalia estatística, não prova de manipulação'})
         if len(self.anomaly_seen)>2500:self.anomaly_seen=set(list(self.anomaly_seen)[-1000:])
+    def report_error(self,exc):
+        with self.lock:
+            self.errors+=1
+            # Do not leak broker credentials, account information, or error internals.
+            self.last_error=type(exc).__name__
+
+    def export(self):
+        with self.lock:
+            return {'schema_version':'research_v2_future_entry',
+                    'exported_at':__import__('time').time(),
+                    'history':list(self.ledger),
+                    'pending':list(self.pending.values()),
+                    'anomalies':list(self.anomalies),
+                    'note':'Resultados virtuais, não são operações executadas. Arquivo completo do laboratório, sem tokens de sessão.'}
+
     def snapshot(self):
         with self.lock:
             all_rows=list(self.ledger)
@@ -149,8 +177,16 @@ class ResearchLab:
                                     'validation_signals':v_n,'validation_wins':v_win,
                                     'validation_rate':v_rate,'status':status})
             ranking.sort(key=lambda r:(r['status']!='PROMISSORA',-(r['validation_rate'] or 0),-r['signals'],r['name']))
+            valid=[x for x in all_rows if x['result'] in ('WIN','LOSS')]
+            unique={(x['asset'],x['tf'],x['entry_at'],x['direction']) for x in valid}
+            delayed=sum(x.get('issued_at',0)>=x['entry_at'] for x in all_rows)
             return {'enabled':self.enabled,'scans':self.scans,'last_scan':self.last_scan,
+                    'schema_version':'research_v2_future_entry',
                     'ranking':ranking,'pending':len(self.pending),
-                    'settled':len(self.ledger),'anomalies':list(self.anomalies)[-30:][::-1],
+                    'settled':len(self.ledger),'unique_opportunities':len(unique),
+                    'hypothesis_outcomes':len(valid),'duplicate_hypotheses':len(valid)-len(unique),
+                    'invalid_timing':delayed,'rejected_late':self.rejected_late,
+                    'errors':self.errors,'last_error':self.last_error,
+                    'anomalies':list(self.anomalies)[-30:][::-1],
                     'recent':list(self.ledger)[-50:][::-1],
-                    'note':'Pesquisa de hipóteses pré-definidas, somente na memória deste processo. Resultados não são lucros, não atestam manipulação e se perdem no reinício do servidor.'}
+                    'note':'Pesquisa prospectiva de hipóteses, entrada virtual agendada antes da vela-alvo com intervalo de segurança. Uma oportunidade pode contar para mais de uma hipótese. Sem ordens. Dados somente na memória até exportação.'}
