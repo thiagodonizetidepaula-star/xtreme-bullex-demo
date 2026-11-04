@@ -51,7 +51,7 @@ class Scanner:
                 cat=r.call('catalog')
                 with self.lock:
                     if g!=self.generation:r.close();return
-                    self.reader=r;self.catalog_at=time.time();self.research.enabled=True;self.s.update(connected=True,running=False,automatic=True,connecting=False,assets=cat['assets'],message='Conectado. Análise automática ativa.',error=None)
+                    self.reader=r;self.catalog_at=time.time();self.s.update(connected=True,running=False,automatic=True,connecting=False,assets=cat['assets'],message='Conectado. Análise automática ativa.',error=None)
                     self.thread=threading.Thread(target=self.scan,args=(g,r),daemon=True);self.thread.start()
             except Exception as e:
                 r.close()
