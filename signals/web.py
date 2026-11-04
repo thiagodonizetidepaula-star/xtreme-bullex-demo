@@ -161,9 +161,11 @@ class Scanner:
                     research_jobs=research_jobs[:80]
                 # Settle announced signals before scanning more assets, even if paused/filtered.
                 due=[(x['asset'],x['tf']) for x in pending if time.time()>=x['expires_at']+2]
+                research_probe=False
                 if due:job=due[self.cursor%len(due)]
                 elif jobs:job=jobs[0]
                 elif research_jobs:
+                    research_probe=True
                     job=research_jobs[0][:2]
                     self.research_seen[(job[0],job[1])]=research_jobs[0][2]
                 else:
@@ -263,6 +265,11 @@ class Scanner:
                     done=[x for x in self.s['history'] if x['result']!='PENDENTE'][-1500:]
                     self.s['history']=done+[x for x in self.s['history'] if x['result']=='PENDENTE']
             except Exception as e:
+                if research_probe:
+                    self.research.report_error(e)
+                    if r.p.poll() is None:
+                        time.sleep(1)
+                        continue
                 with self.lock:
                     if g!=self.generation:return
                     self.s.update(error=str(e),message='Leitura indisponível')
