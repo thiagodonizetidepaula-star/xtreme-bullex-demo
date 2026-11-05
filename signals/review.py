@@ -77,7 +77,7 @@ def review(bars,signals,other):
 def choose(readings,enabled,now):
     eligible=[]
     for tf,(bars,signals) in readings.items():
-        if not bars or not 0<=now-(bars[-1]['from']+tf)<=12:continue
+        if not bars or not 0<=now-(bars[-1]['from']+tf)<=(34 if tf==60 else 40):continue
         other_tf=300 if tf==60 else 60
         other=readings.get(other_tf,([],[]))[0]
         if other and not 0<=now-(other[-1]['from']+other_tf)<other_tf:other=[]
@@ -86,7 +86,7 @@ def choose(readings,enabled,now):
         # A confirmação deve ser recente: em M1 não anunciar depois de 6 s; em M5 depois de 10 s.
         # O filtro se aplica no servidor, independentemente de atraso do navegador.
         age=now-(bars[-1]['from']+tf)
-        if age>(6 if tf==60 else 10):continue
+        if age>(34 if tf==60 else 40):continue
         if candidate:eligible.append((candidate['score'],tf,candidate,bars))
         if trend:eligible.append((trend['score'],tf,trend,bars))
     if not eligible:return None
