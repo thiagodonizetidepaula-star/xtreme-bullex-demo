@@ -154,12 +154,12 @@ class Scanner:
             first=r.call('signal_quote',asset=asset,tf=tf)
             if first['candle_from']!=entry-tf or first['now']>=entry-min_notice:
                 return None,'Primeira cotação fora da vela atual'
-            target=time.monotonic()+duration
-            while time.monotonic()<target:
+            target=time.time()+duration
+            while time.time()<target:
                 with self.lock:
                     if g!=self.generation or search_id!=self.search_id or not self.s['running']:
                         return None,'Busca cancelada'
-                time.sleep(min(.2,max(.01,target-time.monotonic())))
+                time.sleep(min(.2,max(.01,target-time.time())))
             if entry-time.time()<min_notice+1:
                 return None,'Confirmação não teria antecedência suficiente'
             second=r.call('signal_quote',asset=asset,tf=tf)
