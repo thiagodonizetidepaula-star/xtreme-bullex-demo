@@ -36,7 +36,7 @@ class ReactionTests(unittest.TestCase):
         before=evaluate(bars,60,now)
         bars.append({'from':2400,'open':10.2,'close':20,'high':21,'low':1})
         self.assertEqual(evaluate(bars,60,now),before)
-        self.assertEqual(evaluate(bars,60,2413)[1],[])
+        self.assertEqual(evaluate(bars,60,2435)[1],[])
     def test_price_only_path_and_version_reach_selection(self):
         bars=fixture();now=2402
         result=choose({60:evaluate(bars,60,now)},['reaction'],now)
