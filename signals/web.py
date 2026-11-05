@@ -136,61 +136,57 @@ class Scanner:
             time.sleep(10)
 
     def preflight(self,g,r,search_id,asset,tf,direction,entry,reference):
-        """Confirm roughly seven seconds of short-term movement, ending early
-        enough to deliver a usable signal. Missing/late data fails closed.
-        This remains a read-only broker snapshot; not a guaranteed execution.
+        """Short, live two-quote direction check. No blocking wait for a
+        distant candle boundary. Never announce less than 10s ahead.
+        Two broker observations, ~3s apart, must agree with direction.
         """
-        min_notice=8.0
-        first_window=22.0
-        second_window=15.0
+        min_notice=10.0
+        duration=3.2
         with self.lock:
-            self.s['preflight']={'status':'waiting','asset':asset,'timeframe':tf,
-                'entry_at':entry,'detail':'Aguardando a janela de confirmação antecipada (5–7s de preço)'}
-        if entry-time.time()<first_window-1:
-            return None,'Padrão detectado tarde demais para análise e aviso com antecedência'
-        while True:
+            self.s['preflight']={'status':'observing','asset':asset,'timeframe':tf,
+                'entry_at':entry,'detail':'Confirmando direção ao vivo em duas leituras de preço'}
+        if entry-time.time()<min_notice+duration+1:
+            return None,'Padrão detectado tarde demais para confirmação e aviso'
+        try:
             with self.lock:
                 if g!=self.generation or search_id!=self.search_id or not self.s['running']:
                     return None,'Busca alterada ou interrompida'
-            remaining=entry-time.time()
-            if remaining<=first_window:break
-            time.sleep(min(.5,max(.05,remaining-first_window)))
-        try:
             first=r.call('signal_quote',asset=asset,tf=tf)
-            if first['candle_from']!=entry-tf or first['now']>entry-12 or time.time()>entry-12:
-                return None,'Primeira leitura demorou: sinal descartado'
-            with self.lock:
-                self.s['preflight']={'status':'observing','asset':asset,'timeframe':tf,
-                    'entry_at':entry,'detail':'Comparando preços com antecedência para entrega do sinal'}
-            while entry-time.time()>second_window:
+            if first['candle_from']!=entry-tf or first['now']>=entry-min_notice:
+                return None,'Primeira cotação fora da vela atual'
+            target=time.monotonic()+duration
+            while time.monotonic()<target:
                 with self.lock:
                     if g!=self.generation or search_id!=self.search_id or not self.s['running']:
                         return None,'Busca cancelada'
-                time.sleep(.15)
+                time.sleep(min(.2,max(.01,target-time.monotonic())))
+            if entry-time.time()<min_notice+1:
+                return None,'Confirmação não teria antecedência suficiente'
             second=r.call('signal_quote',asset=asset,tf=tf)
-            left=entry-time.time()
-            if second['candle_from']!=entry-tf or second['now']>=entry-min_notice or left<min_notice:
-                return None,'Confirmação tardia: aviso não teria antecedência suficiente'
-            if second['now']-first['now']<3:
-                return None,'Amostras muito próximas ou cotação desatualizada'
+            remaining=entry-time.time()
+            if second['candle_from']!=entry-tf or second['now']>=entry-min_notice or remaining<min_notice:
+                return None,'Segunda cotação atrasada: não publicar sinal'
+            elapsed=second['now']-first['now']
+            if not 2.5<=elapsed<=12:
+                return None,'Cotação sem intervalo confiável entre leituras'
             sign=1 if direction=='ALTA' else -1
             delta=sign*(second['price']-first['price'])
-            base=abs(reference['high']-reference['low'])
-            minimum=max(base*.015,abs(first['price'])*1e-7)
+            span=abs(reference['high']-reference['low'])
+            minimum=max(span*.015,abs(first['price'])*1e-7)
             if delta<=minimum:
-                return None,'Movimento de curto prazo contrário ou insuficiente para '+direction
-            candle_delta=sign*(second['price']-second['open'])
-            if candle_delta<max(base*.025,abs(second['open'])*1e-7):
+                return None,'Movimento nos últimos segundos contrário ou insuficiente para '+direction
+            candle_move=sign*(second['price']-second['open'])
+            if candle_move<max(span*.025,abs(second['open'])*1e-7):
                 return None,'Vela atual ainda contrária ou sem avanço suficiente para '+direction
-            return {'candle_directional_move':candle_delta,
-                    'window_seconds':round(second['now']-first['now'],2),
+            return {'candle_directional_move':candle_move,
+                    'window_seconds':round(elapsed,2),
                     'first_price':first['price'],'last_price':second['price'],
                     'movement_in_signal_direction':delta,'minimum_movement':minimum,
-                    'notice_seconds':round(left,2),
-                    'source':'partial M1/M5 candle; 2 live broker readings',
+                    'notice_seconds':round(remaining,2),
+                    'source':'partial M1/M5 candle; 2 broker readings',
                     'checked_at':second['now']},None
         except Exception as exc:
-            return None,'Validação de curto prazo indisponível: '+type(exc).__name__
+            return None,'Validação de preço indisponível: '+type(exc).__name__
 
     def scan(self,g,r):
         while True:
