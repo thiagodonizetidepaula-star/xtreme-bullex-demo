@@ -31,8 +31,8 @@ class Reader:
 class Scanner:
     def __init__(self):
         self.lock=threading.RLock();self.reader=None;self.generation=0;self.thread=None
-        self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'research_pilot':True,'error':None}
-        self.seen=set();self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
+        self.s={'connected':False,'running':False,'automatic':False,'connecting':False,'message':'Conecte a Bulex para iniciar a leitura.','assets':[],'history':[],'asset':None,'last_read':None,'scans':0,'market':'both','timeframe':'auto','enabled':['reaction'],'research_pilot':True,'error':None,'diagnostics':{'candidates':0,'rejected':0,'published':0,'last_block':'Nenhuma confirmação até agora'}}
+        self.seen=set();self.attempts={};self.round_robin=0;self.cache={};self.asset_volatility={};self.catalog_at=0;self.cursor=0
         self.research=ResearchLab();self.research_seen={};self.research_cursor=0
         self.store=PulseStore();self._storage_worker=None;self._storage_pid=None
         self.market_frames={}
@@ -70,7 +70,7 @@ class Scanner:
             if self.s['running']:return 'Análise em andamento. Aguarde.'
             if any(x['result']=='PENDENTE' for x in self.s['history']):return 'Aguarde o vencimento e a apuração do sinal atual.'
             if not self.s['enabled'] and not self.s['research_pilot']:return 'Selecione pelo menos uma estratégia.'
-            self.search_id+=1;self.checked=set();self.deadline=time.time()+60
+            self.search_id+=1;self.checked=set();self.round_robin+=1;self.deadline=time.time()+60
             self.s.update(running=True,error=None,message='Analisando para encontrar um único sinal…',preflight={'status':'idle','detail':'Buscando padrão'})
             return None
     def resume_automatic(self):
@@ -206,11 +206,16 @@ class Scanner:
                 with self.lock:
                     assets=[a['asset'] for a in self.s['assets'] if a['open'] and (market=='both' or a['otc']==(market=='otc'))]
                 periods=(60,300) if tfchoice=='auto' else (int(tfchoice),)
-                jobs=[(a,tf) for a in sorted(assets,key=lambda a:self.asset_volatility.get(a,0),reverse=True) for tf in periods if (a,tf) not in self.checked] if running else []
+                prioritized=sorted(assets,key=lambda a:self.asset_volatility.get(a,0),reverse=True)
+                if prioritized:
+                    pool_size=min(len(prioritized),12)
+                    offset=self.round_robin%pool_size
+                    prioritized=prioritized[offset:pool_size]+prioritized[:offset]+prioritized[pool_size:]
+                jobs=[(a,tf) for a in prioritized for tf in periods if (a,tf) not in self.checked] if running else []
                 # Research runs read-only on the existing account connection. While
                 # a public signal is pending, probe fresh *closed* bars independently.
                 research_jobs=[]
-                if self.research.enabled and not running and len(assets)>0:
+                if self.research.enabled and not running and not self.s['automatic'] and len(assets)>0:
                     now_slot=int(time.time()//60)
                     for a in assets:
                         for research_tf in (60,300):
@@ -243,10 +248,16 @@ class Scanner:
                 source_frames={tf:data}
                 if running and tfchoice=='auto':
                     other_tf=300 if tf==60 else 60
-                    other_data=r.call('signal_bars',asset=asset,tf=other_tf)
+                    cached=self.cache.get((asset,other_tf),[])
+                    closed_start=(int(now)//other_tf-1)*other_tf
+                    if len(cached)>=35 and cached[-1]['from']==closed_start:
+                        other_data={'candles':cached,'now':now}
+                    else:
+                        other_data=r.call('signal_bars',asset=asset,tf=other_tf)
                     now=max(now,other_data['now'])
                     source_frames[other_tf]=other_data
                     readings[other_tf]=evaluate(other_data['candles'],other_tf,other_data['now'])
+                    self.cache[(asset,other_tf)]=readings[other_tf][0]
                     if self.research.enabled:
                         try:self.research.observe(asset,other_tf,readings[other_tf][0],other_data['now'])
                         except Exception as exc:self.research.report_error(exc)
@@ -319,10 +330,13 @@ class Scanner:
                             selected=m_selected
                     if not selected:
                         self.s['message']='Sem confirmação suficiente em '+asset+'; verificando outro ativo.'
+                        self.s['diagnostics']['last_block']='Nenhum padrão validado em '+asset
                         continue
                     tf,chosen,bars=selected
                     key=(asset,chosen.get('basis_at_5s',bars[-1]['from']),tf)
                     if key in self.seen:continue
+                    attempts,last_attempt=self.attempts.get(key,(0,0))
+                    if attempts>=2 or time.time()-last_attempt<7:continue
                     if any(x['result']=='PENDENTE' for x in self.s['history']):
                         self.finish_search('Acompanhando o sinal atual');continue
                     if chosen.get('strategy')=='trend_consensus_v1':
@@ -335,7 +349,9 @@ class Scanner:
                             self.s['message']='Trend Consensus: payout abaixo de 80% para '+asset+'; a liquidez real não é medida pela integração.'
                             continue
                     if len(self.seen)>10000:self.seen=set(list(self.seen)[-5000:])
-                    self.seen.add(key)
+                    if len(self.attempts)>10000:self.attempts=dict(list(self.attempts.items())[-5000:])
+                    self.attempts[key]=(attempts+1,time.time())
+                    self.s['diagnostics']['candidates']+=1
                     entry=(int(now)//tf+1)*tf
                     # One reserved candidate: search stays blocked during preflight.
                     self.s['message']='Padrão identificado em '+asset+'. Observando 5 a 7 segundos de preço com antecedência.'
@@ -345,6 +361,8 @@ class Scanner:
                     if not running or not self.s['running'] or search_id!=self.search_id:
                         continue
                     if blocked:
+                        self.s['diagnostics']['rejected']+=1
+                        self.s['diagnostics']['last_block']=str(blocked)
                         self.s['preflight']={'status':'rejected','detail':blocked,'asset':asset,'timeframe':tf}
                         self.s['message']='Sinal descartado: '+blocked
                         continue
@@ -352,11 +370,15 @@ class Scanner:
                         self.finish_search('Acompanhando o sinal atual');continue
                     self.s['preflight']={'status':'approved','detail':'Movimento recente validado; aviso antecipado para a entrada','asset':asset,'timeframe':tf}
                     now=time.time()
-                    if entry-now<8:
+                    if entry-now<10:
+                        self.s['diagnostics']['rejected']+=1
+                        self.s['diagnostics']['last_block']='Aviso atrasado após validação'
                         self.s['preflight']={'status':'rejected','detail':'Aviso ficou atrasado após validação'}
                         self.s['message']='Sinal descartado: antecedência insuficiente'
                         continue
                     rec={**chosen,'pre_entry_check':validation,'id':secrets.token_hex(10),'asset':asset,'display_name':verified['display_name'],'asset_id':verified.get('asset_id'),'tf':tf,'issued_at':now,'entry_at':entry,'expires_at':entry+tf,'result':'PENDENTE','basis_at':chosen.get('basis_at_5s',bars[-1]['from']),'selection':'Comparação de critérios M1/M5 neste ativo; pontuação experimental, não probabilidade' if tfchoice=='auto' else 'Critérios do período selecionado; pontuação experimental, não probabilidade'}
+                    self.seen.add(key)
+                    self.s['diagnostics']['published']+=1
                     self.s['history'].append(rec)
                     self.finish_search('Sinal encontrado. A próxima busca aguarda o vencimento e a apuração deste sinal.')
                     # Never discard unresolved records.
