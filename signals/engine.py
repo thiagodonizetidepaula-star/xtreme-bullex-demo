@@ -106,7 +106,7 @@ def detect(bars):
 
 def evaluate(raw,tf,now):
     bars=clean(raw,tf,now)
-    if not bars or now-(bars[-1]['from']+tf)>12:return bars,[]
+    if not bars or now-(bars[-1]['from']+tf)>(34 if tf==60 else 40):return bars,[]
     return bars,detect(bars)
 
 def settle(record,bars,tf):
