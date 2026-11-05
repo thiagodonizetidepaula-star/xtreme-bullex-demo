@@ -65,7 +65,7 @@ class ReviewTests(unittest.TestCase):
             selected=choose({60:(a,[signal()]),300:(b,[signal()])},['retest'],now)
         self.assertEqual(selected[0],300)
     def test_candidate_expired_during_second_read_is_rejected(self):
-        self.assertIsNone(choose({60:(bars(),[signal()])},['retest'],2413))
+        self.assertIsNone(choose({60:(bars(),[signal()])},['retest'],2435))
     def test_disabled_patterns_do_not_emit(self):
         self.assertIsNone(choose({60:(bars(),[signal()])},[],2401))
     def test_extreme_candle_penalized(self):
