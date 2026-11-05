@@ -46,7 +46,7 @@ def candidate(bars, tf, now, spread=None):
     if tf != 300 or len(bars) < 45:
         return None
     last = bars[-1]
-    if not 0 <= now - (last['from']+300) <= 10:
+    if not 0 <= now - (last['from']+300) <= 40:
         return None
     recent = bars[-25:]
     ranges = [b['high']-b['low'] for b in recent]
