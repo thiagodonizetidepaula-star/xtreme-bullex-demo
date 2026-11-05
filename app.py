@@ -12,6 +12,7 @@ ROOT=pathlib.Path(__file__).resolve().parent
 app=Flask(__name__)
 app.secret_key=os.environ.get('SESSION_SECRET') or secrets.token_hex(32)
 app.config.update(MAX_CONTENT_LENGTH=16384,SESSION_COOKIE_HTTPONLY=True,SESSION_COOKIE_SAMESITE='Strict',SESSION_COOKIE_SECURE=os.environ.get('RENDER')=='true')
+RETIRED_BY_OWNER=os.environ.get('PULSE_RETIRED')=='1'
 ACCESS=os.environ.get('APP_ACCESS_KEY')
 if not ACCESS or len(ACCESS)<16: raise RuntimeError('Defina APP_ACCESS_KEY com pelo menos 16 caracteres.')
 lock=threading.RLock();stop=threading.Event();bot=None;client=None
@@ -535,6 +536,11 @@ def loop(c):
 
 @app.before_request
 def auth():
+    # Dedicated bot retired by its owner. Block all access on its Render service,
+    # including broker authentication, orders, signal endpoints and public pages.
+    # Other Render services sharing this GitHub repository remain unaffected.
+    if RETIRED_BY_OWNER:
+        return make_response('Este aplicativo foi desativado a pedido do proprietario.',410)
     # The only two cross-origin routes use one-time pairing and read-only bearer auth,
     # never cookies or CSRF exceptions for any trading command.
     if request.path in ['/api/office/exchange','/api/office/state']:
@@ -969,5 +975,5 @@ def ensure_research_threads():
 from signals.web import bp as signals_blueprint
 app.register_blueprint(signals_blueprint)
 
-ensure_research_threads()
+if not RETIRED_BY_OWNER:ensure_research_threads()
 if __name__=='__main__':app.run(host='0.0.0.0',port=int(os.environ.get('PORT',10000)),debug=False)
