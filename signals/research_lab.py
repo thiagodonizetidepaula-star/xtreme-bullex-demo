@@ -283,7 +283,7 @@ class ResearchLab:
 
     def promoted_candidates(self,bars,tf,now):
         if tf not in (60,300) or not bars:return []
-        if not 0<=now-(bars[-1]['from']+tf)<=10:return []
+        if not 0<=now-(bars[-1]['from']+tf)<=(34 if tf==60 else 40):return []
         with self.lock:
             if not self.enabled:return []
             approved={x['id']:x for x in self._ranking() if x['tf']==tf and x['active']}
@@ -347,7 +347,7 @@ class ResearchLab:
         """Optional user-requested M1/M5 pilot; NEVER auto-place an order.
         These hypotheses remain in validation, not in the approved registry.
         """
-        if tf not in (60,300) or not bars or not 0<=now-(bars[-1]['from']+tf)<=10:
+        if tf not in (60,300) or not bars or not 0<=now-(bars[-1]['from']+tf)<=(34 if tf==60 else 40):
             return []
         with self.lock:
             if not self.enabled:return []
