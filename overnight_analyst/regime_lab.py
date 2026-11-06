@@ -10,10 +10,10 @@ from statistics import median
 
 RULES={
  "IMPULSO_APOS_PAUSA":"Impulso após pausa",
- "EXAUSTAO_DO_EXTREMO":"Falha no extremo",
  "MUDANCA_DE_RITMO":"Mudança de ritmo"
 }
-VERSION="regime-research-1"
+RETIRED={"EXAUSTAO_DO_EXTREMO":"Falha no extremo (48% no histórico; suspensa)"}
+VERSION="regime-research-2"
 
 def clean(raw,now):
     known={}
@@ -74,19 +74,6 @@ def analyze(asset,snapshot):
             potential.append(("IMPULSO_APOS_PAUSA","CALL"))
         elif last["c"]<boxlo-.1*m and last["o"]>=boxlo:
             potential.append(("IMPULSO_APOS_PAUSA","PUT"))
-    # Candidate 2: failed new extreme, with price turning back through prior
-    # boundary. A candle pattern, NOT evidence of broker manipulation.
-    ten=rows[-11:-1]
-    ceiling=max(x["h"] for x in ten)
-    floor=min(x["l"] for x in ten)
-    upper=last["h"]-max(last["o"],last["c"])
-    lower=min(last["o"],last["c"])-last["l"]
-    up_prev=all(a["c"]<b["c"] for a,b in zip(rows[-5:-2],rows[-4:-1]))
-    down_prev=all(a["c"]>b["c"] for a,b in zip(rows[-5:-2],rows[-4:-1]))
-    if up_prev and last["h"]>ceiling+.05*m and last["c"]<ceiling-.07*m and upper>.48*full and upper>1.8*body:
-        potential.append(("EXAUSTAO_DO_EXTREMO","PUT"))
-    if down_prev and last["l"]<floor-.05*m and last["c"]>floor+.07*m and lower>.48*full and lower>1.8*body:
-        potential.append(("EXAUSTAO_DO_EXTREMO","CALL"))
     # Candidate 3: choppy alternation followed by two decisive consecutive
     # closes with larger bodies; no moving averages, oscillators or Fibonacci.
     earlier=rows[-8:-2]
