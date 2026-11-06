@@ -26,7 +26,7 @@ def frame(direction=1):
 
 class RegimeResearchTests(unittest.TestCase):
  def test_independent_strategy_catalog(self):
-  self.assertEqual(set(RULES),{"IMPULSO_APOS_PAUSA","EXAUSTAO_DO_EXTREMO","MUDANCA_DE_RITMO"})
+  self.assertEqual(set(RULES),{"IMPULSO_APOS_PAUSA","MUDANCA_DE_RITMO"})
   self.assertNotIn("FIB",VERSION.upper())
  def test_closed_candle_breakout_call(self):
   snap=frame(1)
