@@ -36,6 +36,52 @@ function simCard(t){
    +' · saída '+p(t.exit_price)+' · '+esc(date(t.entry_at))
    +' · virtual, não executado</div></div>';
 }
+function drawCandles(s){
+ const host=$("chart30"),metrics=$("regime-metrics");
+ if(!host)return;
+ const raw=[...(s.last_candles||[]),...(s.last_current?[s.last_current]:[])].slice(-28);
+ const candles=raw.map(r=>{
+   try{
+    const t=Number(r.from),o=Number(r.open),h=Number(r.max),l=Number(r.min),c=Number(r.close);
+    if(![t,o,h,l,c].every(Number.isFinite)||o<=0||l>Math.min(o,c)||h<Math.max(o,c))return null;
+    return {t,o,h,l,c};
+   }catch{return null;}
+ }).filter(Boolean);
+ if(candles.length<2){
+  host.innerHTML='<p class="muted">Aguardando pelo menos duas velas reais de 30 segundos.</p>';
+  return;
+ }
+ const yMin=Math.min(...candles.map(c=>c.l)),yMax=Math.max(...candles.map(c=>c.h));
+ const diff=Math.max(1e-9,yMax-yMin), min=yMin-.07*diff,max=yMax+.07*diff;
+ const W=700,H=210,top=8,bot=185,left=8,right=8;
+ const y=v=>top+(max-v)/(max-min)*(bot-top);
+ const step=(W-left-right)/candles.length;
+ const grid=[.25,.5,.75].map(r=>{
+  const yy=top+(bot-top)*r;
+  return '<line x1="8" y1="'+yy+'" x2="692" y2="'+yy+'" stroke="#32415b" stroke-width="1"/>';
+ }).join("");
+ const bars=candles.map((c,i)=>{
+  const x=left+(i+.5)*step,green=c.c>=c.o;
+  const stroke=green?"#59e6ab":"#f58b95";
+  const y1=Math.min(y(c.o),y(c.c)),height=Math.max(1.25,Math.abs(y(c.c)-y(c.o)));
+  const bw=Math.min(15,Math.max(4,step*.62));
+  return '<line x1="'+x.toFixed(2)+'" x2="'+x.toFixed(2)+
+  '" y1="'+y(c.h).toFixed(2)+'" y2="'+y(c.l).toFixed(2)+
+  '" stroke="'+stroke+'" stroke-width="1.65"/><rect x="'+(x-bw/2).toFixed(2)+
+  '" y="'+y1.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+height.toFixed(2)+
+  '" fill="'+stroke+'" opacity="'+(i===candles.length-1?1:.8)+'"/>';
+ }).join("");
+ const last=candles[candles.length-1],yClose=y(last.c);
+ host.innerHTML='<svg viewBox="0 0 700 210" role="img" aria-label="Velas de 30 segundos observadas na corretora" style="width:100%;display:block;background:#0b1423;border-radius:10px">'
+  +grid+bars+'<line x1="8" y1="'+yClose.toFixed(2)+'" x2="692" y2="'+yClose.toFixed(2)+
+   '" stroke="#acc4ff" stroke-dasharray="5 6" opacity=".8"/>'
+   +'<text x="680" y="201" text-anchor="end" fill="#a7bfe6" font-size="12">M30s • '+esc(new Date(last.t*1000).toLocaleTimeString("pt-BR"))+'</text></svg>';
+ const reg=s.last_analysis||{};
+ if(metrics)metrics.textContent='Eficiência de deslocamento: '+(reg.efficiency==null?'—':pct(reg.efficiency*100))+
+   ' · Volatilidade relativa: '+(reg.volatility_ratio==null?'—':Number(reg.volatility_ratio).toFixed(2)+'×')+
+   ' · Gráfico de pesquisa, sem ordens';
+}
+
 function render(s){
  last=s;lastTime=Date.now();
  $("broker").textContent=s.connected && s.account_mode==="PRACTICE"?
@@ -49,6 +95,7 @@ function render(s){
  $("asset").textContent=s.last_asset||"Aguardando";
  $("regime").textContent=s.last_regime||"INDEFINIDO";
  const analysis=s.last_analysis||{};
+ drawCandles(s);
  $("pattern").textContent=analysis.reason||"Aguardando coleta";
  const c=s.last_current;
  $("candle").textContent=c?
