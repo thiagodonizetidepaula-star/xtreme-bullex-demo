@@ -4,10 +4,12 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 from anomaly_probe import AnomalyProbe
 from gap_hypotheses import build_hypotheses, clean_candles
+from named_catalog import discover_named
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 probe=AnomalyProbe()
 studies_by_key={}
-state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING","named_strategies":[],"strategies_saved":0,"storage_error":None}
+new_studies_by_key={}
+state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING","named_strategies":[],"strategies_saved":0,"storage_error":None,"new_strategies_saved":0,"new_named_strategies":[],"radar_storage":"DISCONNECTED"}
 guard=threading.RLock()
 def update(**fields):
     with guard:state.update(fields)
@@ -79,8 +81,48 @@ def persist_research(studies,findings,rows):
            candles_saved=state["candles_saved"]+total)
     return total
 
+def radar_gateway(method,path,payload=None):
+    url=os.getenv("RADAR_GATEWAY_URL","").rstrip("/")
+    secret=os.getenv("RADAR_GATEWAY_SECRET","")
+    if not url or not secret:
+        raise RuntimeError("RADAR_GATEWAY_URL/SECRET not configured")
+    data=json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers={"x-radar-secret":secret}
+    if data is not None:headers["Content-Type"]="application/json"
+    request=urllib.request.Request(url+"/"+path,data=data,headers=headers,method=method)
+    with urllib.request.urlopen(request,timeout=20) as resp:
+        return json.loads(resp.read())
+
+def refresh_new_catalog():
+    try:
+        catalog=radar_gateway("GET","catalog")
+        for item in catalog.get("strategies",[]):
+            new_studies_by_key[item["strategy_id"]]=item
+        update(radar_storage="CONNECTED",new_strategies_saved=len(new_studies_by_key),
+               new_named_strategies=list(new_studies_by_key.values())[-20:])
+    except Exception as exc:
+        update(radar_storage="NOT_CONFIGURED" if "not configured" in str(exc) else "ERROR")
+        print("RADAR_CATALOG_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+
+def persist_new_research(studies):
+    if not studies:
+        return
+    # Private read-only research channel; no broker order API.
+    try:
+        response=radar_gateway("POST","ingest",{"candles":[],"events":[],"strategies":studies})
+        if not response.get("ok"):
+            raise RuntimeError("Research gateway refused catalogue")
+        for study in studies:
+            new_studies_by_key[study["strategy_id"]]=study
+        update(radar_storage="CONNECTED",new_strategies_saved=len(new_studies_by_key),
+               new_named_strategies=list(new_studies_by_key.values())[-20:])
+    except Exception as exc:
+        update(radar_storage="ERROR")
+        print("RADAR_CATALOG_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+
 def worker():
     refresh_catalog()
+    refresh_new_catalog()
     last_prune=0
     while True:
         proc=None
@@ -136,6 +178,10 @@ def worker():
                         studies_by_key[study["strategy_key"]]=study
                     update(named_strategies=list(studies_by_key.values())[-30:],
                            strategies_saved=len(studies_by_key))
+                    # New deterministic, named price-microstructure research.
+                    # Separate datastore and validation from legacy hypotheses.
+                    novel=discover_named(asset,clean,snapshot["now"],payout=a.get("payout",80.))
+                    persist_new_research(novel)
                     saved=persist_research(studies,findings,rows)
                     if saved==len(rows) and state["storage"]=="CONNECTED":
                         for b in rows:
@@ -183,6 +229,17 @@ def status_html(snapshot):
         for x in names[:15]
     ) if names else '<p>Nenhuma hipótese recebeu dados até agora.</p>'
     storage_error=html.escape(str(snapshot.get("storage_error") or ""))
+    novel_names=snapshot.get("new_named_strategies",[])
+    novel_html="".join(
+        '<div class="study"><strong>'+html.escape(str(x.get("name","Pesquisa")))+'</strong>'
+        +'<div class="small">'+html.escape(str(x.get("asset","")))
+        +' · '+html.escape(str(x.get("direction","")))
+        +' · '+html.escape(str(x.get("status","EM_PESQUISA")))
+        +' · histórico fora da amostra '+str(x.get("test_wins",0))
+        +'/'+str(x.get("test_n",0))+'</div></div>'
+        for x in novel_names[:20]
+    ) if novel_names else '<p>Nenhuma nova regra atingiu ainda o mínimo de observações para entrar no catálogo.</p>'
+    radar_storage=html.escape(str(snapshot.get("radar_storage","DISCONNECTED")))
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="30">
@@ -214,6 +271,8 @@ code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-si
 <a href="/status">Ver dados técnicos (JSON)</a></div>
 <div class="card"><strong>Hipóteses nomeadas · {len(names)}</strong>
 <p class="small">Esses nomes identificam pesquisas novas, não operações validadas. Sinais continuam desativados.</p>{catalog_html}</div>
+<div class="card"><strong>Novas estratégias em pesquisa · {len(novel_names)}</strong>
+<p class="small">Registro separado no Supabase: <code>{radar_storage}</code>. Testes em velas M1 já fechadas; sem médias móveis, RSI ou sinais automáticos. Resultado histórico não garante desempenho futuro.</p>{novel_html}</div>
 </main></body></html>"""
 
 class Handler(BaseHTTPRequestHandler):
