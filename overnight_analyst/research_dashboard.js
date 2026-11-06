@@ -107,10 +107,13 @@ function render(s){
    +" · "+(news.message||"Sem horários sincronizados");
  const rules=Object.entries(names).filter(([code])=>code!=="EXAUSTAO_DO_EXTREMO");
  $("strategies").innerHTML=rules.map(([code,name])=>{
-  const active=(analysis.rules||[]).some(x=>x.strategy===code);
+  const observed=(analysis.rules||[]).some(x=>x.strategy===code);
+  const policy=(s.strategy_policy||{})[code];
+  const label=policy && !policy.allowed?"SUSPENSA ABAIXO DE 58%":
+    observed?"PADRÃO OBSERVADO · AVALIAR FILTROS":"COLETANDO EVIDÊNCIAS";
   return '<div class="bar"><div class="row"><strong>'+esc(name)+'</strong><span class="chip">'+
-    (active?"PADRÃO OBSERVADO":"COLETANDO EVIDÊNCIAS")+'</span></div>'
-    +'<p class="muted">Sem ordens automáticas; taxa de acerto calculada somente após entradas virtuais futuras.</p></div>';
+    esc(label)+'</span></div>'
+    +'<p class="muted">Somente simulações com 6/7 verificações; uma estratégia suspensa não gera novas entradas.</p></div>';
  }).join("");
  const score=s.scoreboard||[];
  const phases=s.version_scores||[];
