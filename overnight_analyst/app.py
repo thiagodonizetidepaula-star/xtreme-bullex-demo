@@ -81,8 +81,16 @@ def persist_research(studies,findings,rows):
 
 def worker():
     refresh_catalog()
+    last_prune=0
     while True:
         proc=None
+        if time.time()-last_prune>6*3600:
+            last_prune=time.time()
+            try:
+                gateway("POST","prune",{})
+            except Exception as exc:
+                # Storage maintenance must never prevent market-data observation.
+                print("ANOMALY_RETENTION_DIAGNOSTIC: "+type(exc).__name__,flush=True)
         try:
             email=(os.getenv("BULLEX_EMAIL") or "").strip();password=os.getenv("BULLEX_PASSWORD")
             if not email or not password:raise RuntimeError("BULLEX_EMAIL/BULLEX_PASSWORD not configured for analyst service")
