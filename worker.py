@@ -129,6 +129,124 @@ def dispatch(c):
             items.append({'asset':asset,'candles':closed})
         return {'now':now,'items':items,'ready':len(items),'fresh_closed':fresh,
                 'total':len(wanted),'errors':errors}
+    if op=='fib_demo_preflight':
+        demo()
+        now=broker_now()
+        if not callable(getattr(api.api,'buy_blitz_option',None)):
+            return {'available':False,'reason':'A biblioteca não expõe o método Blitz','mode':'PRACTICE','now':now}
+        with stage('payout de catálogo demo',10):
+            refreshed=market(force=True)
+        asset=c.get('asset')
+        item=refreshed.get(asset,{})
+        supported=bool(item.get('open') and item.get('payout',0)>=80)
+        # The turbo catalog does not independently certify Blitz's payout.
+        return {'available':supported,'asset':asset,'mode':'PRACTICE',
+                'turbo_catalog_payout':item.get('payout'),
+                'blitz_payout_verified':False,
+                'blitz_expiry_30_verified':False,
+                'blitz_method_available':True,'now':now,
+                'reason':None if supported else 'Ativo fechado ou payout do catálogo indisponível'}
+    if op=='fib_demo_order':
+        # Risk-restricted DEMO ONLY. Never infer actual balance type from a UI label.
+        if c.get('strategy')!='fib30-trend-v1' or c.get('expires_in')!=30:
+            return {'sent':False,'reason':'Motor ou duração inválidos'}
+        demo()
+        asset=c.get('asset')
+        direction=c.get('direction')
+        stake=c.get('stake')
+        if direction not in ('CALL','PUT') or type(stake) not in (int,float) or float(stake)!=1.0:
+            return {'sent':False,'reason':'Permitido apenas CALL/PUT e 1 unidade de saldo demo'}
+        received=float(c.get('observed_at',0))
+        now=broker_now()
+        if now-received<0 or now-received>1.5 or now%30>6:
+            return {'sent':False,'reason':'Sinal vencido (mais de 1,5 s) ou fora da vela real de 30 s'}
+        if not market_cache or time.time()-market_at>15:
+            return {'sent':False,'reason':'Catálogo expirado; nada enviado'}
+        info=market_cache.get(asset,{})
+        if not info.get('open') or info.get('payout',0)<80:
+            return {'sent':False,'reason':'Ativo indisponível ou payout abaixo de 80% no catálogo'}
+        stream=quad30_state.get(asset)
+        if not stream or stream.get('fresh_at') is None or now-stream['fresh_at']>1.5:
+            return {'sent':False,'reason':'Fluxo de 30s sem cotação recente'}
+        demo()
+        with stage('saldo confirmado da conta demonstrativa',4):
+            current_balance=api.get_balance()
+        if not isinstance(current_balance,(int,float)) or current_balance<1:
+            return {'sent':False,'reason':'Saldo DEMO insuficiente/indisponível'}
+        # No default 85% payout. Only use a measured turbo catalog rate as a
+        # tentative request; the broker must explicitly accept this Blitz order.
+        payout=info['payout']
+        active_id=api.get_all_ACTIVES_OPCODE().get(asset)
+        if active_id is None:
+            return {'sent':False,'reason':'Ativo não encontrado'}
+        if not callable(getattr(api.api,'buy_blitz_option',None)):
+            return {'sent':False,'reason':'Integração não oferece Blitz'}
+        from bullexapi import global_value
+        from random import randint
+        request_id='fib30-'+str(randint(10000000,99999999))
+        api.api.buy_multi_option={}
+        api.api.result=None
+        ws=api.api.websocket
+        original=ws.send
+        sent_at=None
+        def guard(payload,*args,**kwargs):
+            nonlocal sent_at
+            try:
+                packet=json.loads(payload)
+                msg=packet.get('msg',{})
+                body=msg.get('body',{})
+            except (ValueError,TypeError,AttributeError):
+                raise RuntimeError('Pacote websocket não verificável; bloqueado')
+            if msg.get('name')=='binary-options.open-option':
+                # Verify a PRACTICE balance_id, instrument and 30s expiration
+                demo()
+                expected=int(api.get_balance_id())
+                if (int(body.get('user_balance_id',-1))!=expected
+                    or int(body.get('option_type_id',-1))!=12
+                    or int(body.get('active_id',-1))!=int(active_id)
+                    or int(body.get('expiration_size',-1))!=30
+                    or str(body.get('direction','')).lower()!=direction.lower()
+                    or float(body.get('price',0))!=1.0):
+                    raise RuntimeError('Bloqueado: ordem não corresponde à demo Blitz 30 s')
+                verified=broker_now()
+                if verified-received>1.5 or verified%30>6:
+                    raise RuntimeError('Ordem cancelada: sinal envelheceu antes do envio')
+                sent_at=verified
+            return original(payload,*args,**kwargs)
+        ws.send=guard
+        try:
+            # The non-official integration has no certified support guarantee
+            # for Blitz 30s. Never automatically retry a failed/unknown send.
+            api.api.buy_blitz_option(1.0,int(active_id),direction.lower(),
+                                     30,int(round(payout)),None,request_id)
+        finally:
+            ws.send=original
+        if sent_at is None:
+            return {'sent':False,'reason':'A ordem Blitz não chegou ao envio websocket'}
+        start=time.monotonic()
+        while time.monotonic()-start<4.5:
+            response=api.api.buy_multi_option.get(request_id)
+            if isinstance(response,dict):
+                order_id=response.get('id')
+                if order_id is not None and api.api.result:
+                    return {'sent':True,'id':order_id,'mode':'PRACTICE','duration':30,
+                            'stake':1.0,'catalog_payout':payout,'sent_at':sent_at,
+                            'blitz_payout_final_unverified':True}
+                if response.get('message'):
+                    return {'sent':False,'reason':'Bulex recusou a solicitação Blitz: '+str(response['message'])[:140]}
+            time.sleep(.02)
+        return {'sent':False,'uncertain':True,
+                'reason':'Envio feito, sem confirmação de ID. Não repetir a operação automaticamente.'}
+    if op=='fib_demo_result':
+        demo()
+        order_id=c.get('order_id')
+        if not isinstance(order_id,(str,int)) or not str(order_id).isdigit():
+            raise ValueError('ID da ordem inválido')
+        with stage('resultado do ID confirmado',7):
+            result,profit=api.check_win_v4(int(order_id))
+        if not math.isfinite(float(profit)):
+            raise RuntimeError('Lucro retornado não é finito')
+        return {'result':result,'profit':float(profit),'id':order_id,'mode':'PRACTICE'}
     if op=='quad30_start':
         now=broker_now()
         asset=c['asset']
