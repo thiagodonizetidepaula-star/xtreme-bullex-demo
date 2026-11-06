@@ -88,6 +88,17 @@ def dispatch(c):
     demo()
     if op in ('order','fib_demo_order'):
         return {'sent':False,'reason':'Laboratório de pesquisa: envio de ordens desativado no servidor.'}
+    if op=='research_release':
+        dropped=[]
+        for asset in c.get('assets',[]):
+            if asset not in quad30_state:continue
+            try:
+                api.api.unsubscribe(api.get_all_ACTIVES_OPCODE()[asset],30)
+            except Exception:
+                pass
+            quad30_state.pop(asset,None)
+            dropped.append(asset)
+        return {'released':dropped,'source':'PRACTICE'}
     if op=='research_market':
         items=market(force=True)
         return {'assets':[{'asset':asset,**details} for asset,details in items.items() if details.get('open')],
