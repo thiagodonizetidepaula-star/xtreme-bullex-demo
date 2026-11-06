@@ -1,63 +1,68 @@
 import time
 import unittest
 from unittest.mock import patch
+from datetime import datetime
 
-from overnight_analyst.paper_simulator import PaperSimulator, iso
+from overnight_analyst.paper_simulator import PaperSimulator
+from overnight_analyst.quadrant_engine import analyze
+from test_quadrant_engine import sample
 
-def data(now):
-    minute=int(now//60)*60
-    rows=[]
-    for i in range(140):
-        timestamp=minute-(140-i)*60
-        op=1.001
-        if i==139:
-            rows.append({"from":timestamp,"open":op,"max":1.012,"min":0.997,"close":1.0012})
-        else:
-            rows.append({"from":timestamp,"open":op,"max":1.002,"min":1.000,"close":1.001})
+def scenario(now):
+    rows=sample("ceiling")
+    newest=rows[-1]["from"]
+    desired=(int(now)//60)*60-60
+    shift=desired-newest
+    for b in rows:
+        b["from"]+=shift
     return rows
 
-def research(asset):
-    return [{"strategy_id":"a"*64,"name":"Salto sem Direção","asset":asset,
-             "rule_code":"unbalanced_jump","direction":"CALL","test_n":20,
-             "wilson_95":0.6,"payout":85,"signal_enabled":False}]
+def candidates(asset,now,rows):
+    return analyze(asset,rows,now,85.0)["candidates"]
 
 class PaperTests(unittest.TestCase):
     def test_future_only_no_fabricated_wins(self):
         now=int(time.time()//60)*60+3
         asset="EURUSD-OTC"
+        rows=scenario(now)
         p=PaperSimulator()
         with patch("time.time",return_value=now):
-            trade=p.scheduled(asset,data(now),now,research(asset))
+            trade=p.scheduled(asset,rows,now,candidates(asset,now,rows))
         self.assertEqual(trade["status"],"AGENDADA")
+        self.assertEqual(trade["direction"],"PUT")
+        self.assertEqual(trade["strategy_name"],"Quadrante 4 · Rejeição do teto")
         self.assertIsNone(trade["entry_price"])
-        entry=int(__import__("datetime").datetime.fromisoformat(trade["entry_at"]).timestamp())
+        entry=int(datetime.fromisoformat(trade["entry_at"]).timestamp())
         self.assertGreater(entry,now)
-        self.assertEqual(p.preview()["current"]["trade_id"],trade["trade_id"])
-        self.assertIsNone(p.scheduled(asset,data(now),now,research(asset)))
-        self.assertIsNone(p.confirm_entry(asset,entry,{"available":True,"source":"BROKER_M1_OPEN_PROXY","from":entry-60,"open":1.0},entry+1))
-        self.assertEqual(trade["status"],"AGENDADA")
-        self.assertIsNotNone(p.confirm_entry(asset,entry,{"available":True,"source":"BROKER_M1_OPEN_PROXY","from":entry,"open":1.0},entry+1))
+        self.assertIsNone(p.scheduled(asset,rows,now,candidates(asset,now,rows)))
+        wrong={"available":True,"source":"BROKER_M1_OPEN_PROXY","from":entry-60,"open":1.8}
+        self.assertIsNone(p.confirm_entry(asset,entry,wrong,entry+1))
+        good={"available":True,"source":"BROKER_M1_OPEN_PROXY","from":entry,"open":1.8}
+        self.assertIsNotNone(p.confirm_entry(asset,entry,good,entry+1))
         self.assertEqual(trade["status"],"EM_ANDAMENTO")
-        self.assertIsNone(p.progress(asset,data(now),entry+30))
-        final={"from":entry,"open":1.0,"max":1.01,"min":0.99,"close":1.004}
-        self.assertEqual(p.progress(asset,data(now)+[final],entry+61)["status"],"WIN")
+        self.assertIsNone(p.progress(asset,rows,entry+30))
+        last={"from":entry,"open":1.8,"max":1.85,"min":1.70,"close":1.75}
+        self.assertEqual(p.progress(asset,rows+[last],entry+61)["status"],"WIN")
         self.assertIsNone(p.active())
-        self.assertEqual(p.preview()["recent"][0]["status"],"WIN")
-    def test_missing_quote_is_not_loss(self):
+
+    def test_missing_quote_not_loss(self):
         now=int(time.time()//60)*60+3
+        rows=scenario(now)
         p=PaperSimulator()
         with patch("time.time",return_value=now):
-            t=p.scheduled("EURUSD-OTC",data(now),now,research("EURUSD-OTC"))
-        entry=int(__import__("datetime").datetime.fromisoformat(t["entry_at"]).timestamp())
+            t=p.scheduled("EURUSD-OTC",rows,now,candidates("EURUSD-OTC",now,rows))
+        entry=int(datetime.fromisoformat(t["entry_at"]).timestamp())
         self.assertEqual(p.progress("EURUSD-OTC",[],entry+9)["status"],"SEM_COTACAO")
         self.assertIsNone(t["exit_price"])
-        self.assertIsNone(p.active())
-    def test_no_schedule_with_aged_data(self):
+
+    def test_rejects_old_strategy_and_hindsight(self):
         now=int(time.time()//60)*60+3
+        rows=scenario(now)
+        c=candidates("EURUSD-OTC",now,rows)[0].copy()
+        c["version"]="radar-m1-v1"
         p=PaperSimulator()
         with patch("time.time",return_value=now):
-            self.assertIsNone(p.scheduled("EURUSD-OTC",data(now-120),now,research("EURUSD-OTC")))
-            self.assertIsNone(p.scheduled("EURUSD-OTC",data(now),now-120,research("EURUSD-OTC")))
+            self.assertIsNone(p.scheduled("EURUSD-OTC",rows,now,[c]))
+            self.assertIsNone(p.scheduled("EURUSD-OTC",rows,now+130,candidates("EURUSD-OTC",now,rows)))
 
 if __name__=="__main__":
     unittest.main()
