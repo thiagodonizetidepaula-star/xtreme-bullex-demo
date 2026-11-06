@@ -3,9 +3,11 @@ import os,sys,time,json,threading,subprocess,queue,datetime,urllib.request,pathl
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 from anomaly_probe import AnomalyProbe
+from gap_hypotheses import build_hypotheses, clean_candles
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 probe=AnomalyProbe()
-state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING"}
+studies_by_key={}
+state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING","named_strategies":[],"strategies_saved":0,"storage_error":None}
 guard=threading.RLock()
 def update(**fields):
     with guard:state.update(fields)
@@ -20,18 +22,65 @@ def rpc(proc,q,op,timeout=40,**params):
 def read(proc,q):
     for line in proc.stdout:q.put(line)
     q.put(None)
-def save(candles,payouts):
-    url=os.getenv("MESA_PATTERN_GATEWAY_URL","").rstrip("/")
-    token=os.getenv("MESA_PATTERN_GATEWAY_SECRET","")
+def gateway(method,path,payload=None):
+    url=os.getenv("ANOMALY_STORE_URL","").rstrip("/")
+    token=os.getenv("ANOMALY_STORE_SECRET","")
     if not url or not token:
-        update(storage="NOT_CONFIGURED")
-        return
-    req=urllib.request.Request(url+"/ingest",data=json.dumps({"candles":candles,"payouts":payouts}).encode(),headers={"Content-Type":"application/json","x-mesa-secret":token},method="POST")
-    with urllib.request.urlopen(req,timeout=15) as resp:
-        result=json.loads(resp.read())
-        if not result.get("ok"):raise RuntimeError("Supabase ingestion refused")
-    update(storage="CONNECTED",candles_saved=state["candles_saved"]+len(candles))
+        raise RuntimeError("ANOMALY_STORE_URL or ANOMALY_STORE_SECRET not configured")
+    data=json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers={"x-anomaly-secret":token}
+    if data is not None:headers["Content-Type"]="application/json"
+    req=urllib.request.Request(url+"/"+path,data=data,headers=headers,method=method)
+    with urllib.request.urlopen(req,timeout=20) as resp:
+        value=json.loads(resp.read())
+        if not value.get("ok"):raise RuntimeError("Private Supabase gateway refused the request")
+        return value
+
+def refresh_catalog():
+    try:
+        data=gateway("GET","catalog")
+        studies_by_key.clear()
+        for item in data.get("strategies",[]):
+            studies_by_key[item["strategy_key"]]=item
+        update(storage="CONNECTED",storage_error=None,
+               named_strategies=list(studies_by_key.values())[-30:],
+               strategies_saved=len(studies_by_key))
+    except Exception as exc:
+        update(storage="NOT_CONFIGURED" if "not configured" in str(exc) else "ERROR",
+               storage_error=type(exc).__name__)
+        print("ANOMALY_STORAGE_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+
+def persist_research(studies,findings,rows):
+    """Private gateway only. No broker orders. Retries use idempotent keys."""
+    import hashlib
+    events=[{
+        "event_key":hashlib.sha256((e["asset"]+":"+e["kind"]+":"+str(e["candle_time"])).encode()).hexdigest(),
+        "asset":e["asset"],"anomaly_type":e["kind"],
+        "candle_time":datetime.datetime.fromtimestamp(e["candle_time"],datetime.timezone.utc).isoformat(),
+        "details":{"description":e["detail"],"research_only":True}
+    } for e in findings[:50]]
+    # New candle data must be closed and validated before reaching this function.
+    parts=[rows[k:k+120] for k in range(0,len(rows),120)] or [[]]
+    total=0
+    for index,part in enumerate(parts):
+        payload={
+            "strategies":studies if index==0 else [],
+            "events":events if index==0 else [],
+            "candles":part
+        }
+        try:
+            gateway("POST","ingest",payload)
+            total+=len(part)
+        except Exception as exc:
+            update(storage="ERROR",storage_error=type(exc).__name__)
+            print("ANOMALY_STORAGE_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+            return 0
+    update(storage="CONNECTED",storage_error=None,
+           candles_saved=state["candles_saved"]+total)
+    return total
+
 def worker():
+    refresh_catalog()
     while True:
         proc=None
         try:
@@ -54,21 +103,36 @@ def worker():
                     asset=a["asset"]
                     snapshot=rpc(proc,q,"lab_candles",asset=asset,timeout=35)
                     if snapshot.get("source")!="PRACTICE":continue
+                    clean=clean_candles(snapshot.get("candles",[]),snapshot["now"])
                     rows=[]
-                    for b in snapshot.get("candles",[]):
-                        ts=int(b["from"]);key=(asset,ts)
+                    for b in clean:
+                        ts=int(b["from"])
+                        key=(asset,ts)
                         if key in seen:continue
-                        seen.add(key)
-                        if len(seen)>150000:seen.clear()
-                        rows.append({"asset":asset,"timeframe":1,"candle_time":datetime.datetime.fromtimestamp(ts,datetime.timezone.utc).isoformat(),
-                                     "o":float(b["open"]),"h":float(b["max"]),"l":float(b["min"]),"c":float(b["close"]),"volume":None})
-                    update(last_asset=asset,last_candle=rows[-1]["candle_time"] if rows else state["last_candle"],collecting=True)
-                    findings=probe.observe(asset,snapshot.get("candles",[]),snapshot["now"])
+                        rows.append({
+                            "asset":asset,
+                            "candle_time":datetime.datetime.fromtimestamp(ts,datetime.timezone.utc).isoformat(),
+                            "o":float(b["open"]),"h":float(b["max"]),"l":float(b["min"]),"c":float(b["close"])
+                        })
+                    update(last_asset=asset,
+                           last_candle=rows[-1]["candle_time"] if rows else state["last_candle"],
+                           collecting=True)
+                    findings=probe.observe(asset,clean,snapshot["now"])
                     update(**probe.summary())
                     if findings:
-                        print("QUOTE_ANOMALIES: "+json.dumps([{"asset":e["asset"],"kind":e["kind"],"candle_time":e["candle_time"]} for e in findings]),flush=True)
-                    for j in range(0,len(rows),180):
-                        save(rows[j:j+180],[])
+                        print("QUOTE_ANOMALIES: "+json.dumps([{
+                            "asset":e["asset"],"kind":e["kind"],"candle_time":e["candle_time"]
+                        } for e in findings]),flush=True)
+                    studies=build_hypotheses(asset,clean,snapshot["now"])
+                    for study in studies:
+                        studies_by_key[study["strategy_key"]]=study
+                    update(named_strategies=list(studies_by_key.values())[-30:],
+                           strategies_saved=len(studies_by_key))
+                    saved=persist_research(studies,findings,rows)
+                    if saved==len(rows) and state["storage"]=="CONNECTED":
+                        for b in rows:
+                            seen.add((b["asset"],int(datetime.datetime.fromisoformat(b["candle_time"]).timestamp())))
+                        if len(seen)>150000:seen.clear()
                     time.sleep(1)
                 time.sleep(60)
         except Exception as e:
@@ -101,6 +165,16 @@ def status_html(snapshot):
     saved = int(snapshot.get("candles_saved", 0))
     findings = int(snapshot.get("anomaly_count", 0))
     storage = html.escape(str(snapshot.get("storage", "DISCONNECTED")))
+    names=snapshot.get("named_strategies",[])
+    catalog_html="".join(
+        '<div class="study"><strong>'+html.escape(str(x.get("name","Hipótese")))+'</strong>'
+        +'<div class="small">'+html.escape(str(x.get("asset","")))
+        +' · '+html.escape(str(x.get("status","COLETANDO")))
+        +' · validação histórica: '+str(x.get("oos_wins",0))
+        +'/'+str(x.get("oos_occurrences",0))+'</div></div>'
+        for x in names[:15]
+    ) if names else '<p>Nenhuma hipótese recebeu dados até agora.</p>'
+    storage_error=html.escape(str(snapshot.get("storage_error") or ""))
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="30">
@@ -114,6 +188,7 @@ main{{max-width:660px;margin:0 auto;padding:26px 18px 50px}} h1{{font-size:26px;
 .grid{{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:18px}}
 .metric{{background:#111c2c;border:1px solid #27354b;border-radius:15px;padding:15px}}
 .metric strong{{display:block;font-size:26px;margin:6px 0}} .metric span{{font-size:12px;color:#aebfd7}}
+.study{{border-top:1px solid #27354b;padding:13px 0}} .study strong{{font-size:15px}} .study .small{{margin-top:7px;color:#aebfd7}}
 code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-size:14px}}
 </style></head><body><main>
 <div class="kicker">Laboratório independente · Somente leitura</div>
@@ -127,8 +202,10 @@ code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-si
 <div class="metric"><span>Anomalias em memória</span><strong>{findings}</strong></div>
 </div>
 <div class="card"><strong>Armazenamento</strong><p><code>{storage}</code></p>
-<p class="small">Uma página online não confirma autenticação. Se o acesso for recusado, teste primeiro seu login no site oficial da corretora e revise as variáveis secretas no Render. Não envie senha pelo chat.</p>
+<p class="small">Somente dados históricos reais da conta demonstrativa. {storage_error}</p>
 <a href="/status">Ver dados técnicos (JSON)</a></div>
+<div class="card"><strong>Hipóteses nomeadas · {len(names)}</strong>
+<p class="small">Esses nomes identificam pesquisas novas, não operações validadas. Sinais continuam desativados.</p>{catalog_html}</div>
 </main></body></html>"""
 
 class Handler(BaseHTTPRequestHandler):
