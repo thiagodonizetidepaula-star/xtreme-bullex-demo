@@ -32,7 +32,7 @@ function simCard(t){
  const when=status==="OPEN"?(left>0?"Encerra em "+Math.ceil(left)+" s":"Aguardando preço de encerramento"):esc(status);
  return '<div class="bar"><div class="row"><strong>'+esc(t.asset)+' · '+esc(names[t.strategy]||t.strategy)
    +'</strong><b class="'+color+'">'+esc(t.direction)+' / '+esc(when)+'</b></div>'
-   +'<div class="muted">Regime '+esc(t.regime)+' · preço ref. '+p(t.entry_price)
+   +'<div class="muted">Regime '+esc(t.regime)+' · '+esc(t.evidence?.confluence_version||"BASE_ANTIGA")+' · preço ref. '+p(t.entry_price)
    +' · saída '+p(t.exit_price)+' · '+esc(date(t.entry_at))
    +' · virtual, não executado</div></div>';
 }
@@ -105,7 +105,7 @@ function render(s){
  const news=s.last_news||{};
  $("news").textContent="Filtro de notícias: "+(news.status||"NÃO VERIFICADO")
    +" · "+(news.message||"Sem horários sincronizados");
- const rules=Object.entries(names);
+ const rules=Object.entries(names).filter(([code])=>code!=="EXAUSTAO_DO_EXTREMO");
  $("strategies").innerHTML=rules.map(([code,name])=>{
   const active=(analysis.rules||[]).some(x=>x.strategy===code);
   return '<div class="bar"><div class="row"><strong>'+esc(name)+'</strong><span class="chip">'+
@@ -113,21 +113,69 @@ function render(s){
     +'<p class="muted">Sem ordens automáticas; taxa de acerto calculada somente após entradas virtuais futuras.</p></div>';
  }).join("");
  const score=s.scoreboard||[];
- const allW=score.reduce((n,x)=>n+Number(x.wins||0),0);
- const allL=score.reduce((n,x)=>n+Number(x.losses||0),0);
- $("wins").textContent=allW;$("losses").textContent=allL;
+ const phases=s.version_scores||[];
+ const versionAssets=s.version_assets||[];
+ const after=phases.filter(x=>x.phase==="FILTRADO_V2");
+ const before=phases.filter(x=>x.phase==="BASE_ANTIGA");
+ const allW=after.reduce((n,x)=>n+Number(x.wins||0),0);
+ const allL=after.reduce((n,x)=>n+Number(x.losses||0),0);
+ $("wins").textContent=allW;
+ $("losses").textContent=allL;
  $("rate").textContent=allW+allL?pct(100*allW/(allW+allL)):"—";
- const qualifies=score.filter(x=>{
-   const w=Number(x.wins)||0,n=(Number(x.wins)||0)+(Number(x.losses)||0);
-   const pay=Number(x.last_payout);
-   return n>=80 && w/n>=.70 && pay>0 && wilson(w,n)>1/(1+pay/100)+.02;
- }).sort((a,b)=>Number(b.hit_rate)-Number(a.hit_rate));
- $("qualified-count").textContent=qualifies.length;
- $("qualified").innerHTML=qualifies.length?qualifies.map(scoreCard).join(""):
-    '<p class="muted">Nenhuma estratégia passou pelos critérios. Sem recomendação de entrada.</p>';
- $("scoreboard").innerHTML=score.length?
-   [...score].sort((a,b)=>Number(b.judged)-Number(a.judged)).slice(0,40).map(scoreCard).join(""):
-   '<p class="muted">Sem resultados prospectivos confirmados.</p>';
+ const showPhases=(code)=>{
+   const old=before.find(x=>x.strategy===code)||{};
+   const newer=after.find(x=>x.strategy===code)||{};
+   const n0=Number(old.judged)||0,n1=Number(newer.judged)||0;
+   const pct0=n0?pct(100*Number(old.wins)/n0):"—";
+   const pct1=n1?pct(100*Number(newer.wins)/n1):"—";
+   return "Base: "+pct0+" (n="+n0+") · Com filtros v2: "+pct1+" (n="+n1+")";
+ };
+ const activeCodes=["IMPULSO_APOS_PAUSA","MUDANCA_DE_RITMO"];
+ $("policy").innerHTML=activeCodes.map(code=>{
+   const item=(s.strategy_policy||{})[code]||{};
+   return '<div class="bar"><div class="row"><strong>'+esc(names[code])+'</strong>'+
+     '<span class="chip">'+esc(item.status||"COLETANDO")+'</span></div>'+
+     '<p class="muted">'+esc(showPhases(code))+'</p>'+
+     '<p class="muted">'+esc(item.reason||"Sem dados suficientes")+'</p></div>';
+ }).join("")+'<div class="bar"><strong>'+esc(names.EXAUSTAO_DO_EXTREMO)+
+ '</strong> · <span class="red">SUSPENSA</span>'+
+ '<p class="muted">'+esc(showPhases("EXAUSTAO_DO_EXTREMO"))+
+ ' · Abaixo de 58%; não gera novas simulações.</p></div>';
+ const selected=activeCodes.filter(code=>(s.strategy_policy||{})[code]?.allowed);
+ $("qualified-count").textContent=selected.length;
+ $("qualified").innerHTML=selected.length?selected.map(code=>
+   '<div class="bar"><strong>'+esc(names[code])+'</strong><p class="muted">'+esc(showPhases(code))+
+   '</p><p class="muted">Mantida em pesquisa; resultado não é recomendação de entrada.</p></div>').join(""):
+   '<p class="muted">Nenhuma família habilitada; aguardando dados suficientes.</p>';
+ const c=s.last_confluence;
+ if(c){
+   const failures=(c.reasons||[]).map(esc).join(" · ");
+   const checks=Object.entries(c.checks||{}).map(([key,val])=>
+      (val?"✓ ":"✕ ")+key.replaceAll("_"," ")).join(" · ");
+   $("confluence").innerHTML='<div class="bar"><div class="row"><strong>'+
+      esc(c.asset)+' · '+esc(names[c.strategy]||c.strategy)+'</strong><span class="chip">'+
+      (c.approved?"APROVADA PARA SIMULAÇÃO":"SEM OPERAÇÃO")+
+      '</span></div><p class="muted">Confluência '+Number(c.score)+'/'+Number(c.required)+
+      ' · '+esc(c.direction)+' · '+esc(c.regime)+'</p><p class="muted">'+esc(checks)+
+      '</p>'+(failures?'<p class="muted">Bloqueios: '+failures+'</p>':'')+'</div>';
+ }else $("confluence").innerHTML='<p class="muted">Esperando formação e cotação nova; nenhum sinal aprovado sem confluência.</p>';
+ const audit=s.decisions||[];
+ const latestRejected=audit.filter(x=>x.decision!=="APROVADA_PAPER");
+ $("audit").innerHTML='<p class="muted">No lote recente de decisões persistidas: '+latestRejected.length+
+  ' bloqueada(s) e '+(audit.length-latestRejected.length)+' permitida(s) para pesquisa virtual.</p>'+
+  (latestRejected.length?latestRejected.slice(0,7).map(x=>
+    '<div class="bar"><strong>'+esc(x.asset)+' · '+esc(names[x.strategy]||x.strategy)+
+    '</strong><p class="muted">'+esc(x.decision)+' · '+esc((x.reasons||[]).join(" / "))+
+    '</p></div>').join(""):'<p class="muted">Ainda sem veto registrado no Supabase.</p>');
+ $("scoreboard").innerHTML=versionAssets.length?
+  [...versionAssets].sort((a,b)=>Number(b.judged)-Number(a.judged)).slice(0,45).map(x=>{
+    const w=Number(x.wins)||0,n=Number(x.judged)||0;
+    return '<div class="bar"><div class="row"><strong>'+esc(x.asset)+' · '+esc(names[x.strategy]||x.strategy)+
+      '</strong><span class="chip">'+esc(x.phase)+'</span></div><div class="muted">'+
+      esc(x.regime)+' · WIN '+w+' · LOSS '+(Number(x.losses)||0)+' · '+
+      pct(n?100*w/n:null)+' (n='+n+')</div></div>';
+  }).join(""):
+  '<p class="muted">Aguardando os resultados para cada ativo e regime.</p>';
  $("active").innerHTML=(s.active||[]).length?s.active.map(simCard).join(""):
    '<p class="muted">Nenhuma simulação em andamento.</p>';
  $("recent").innerHTML=(s.recent||[]).length?s.recent.slice(0,8).map(simCard).join(""):
