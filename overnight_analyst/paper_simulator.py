@@ -55,7 +55,7 @@ class PaperSimulator:
         if not isinstance(research,list) or not closed_bars:
             return None
         rows=_validated(closed_bars,broker_now)
-        if len(rows)<120:
+        if len(rows)<37:
             return None
         last=rows[-1]
         closed_at=last["ts"]+60
