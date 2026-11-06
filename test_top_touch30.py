@@ -68,7 +68,7 @@ class TopTouch30Tests(unittest.TestCase):
         engine.inspect(frame(ts+1,198.0))
         self.assertIsNone(engine.inspect(frame(ts+7,199.8,True,True)))
 
-    def test_not_enter_without_quadrant_change(self):
+    def test_new_candle_may_touch_even_when_previous_close_is_in_same_quadrant(self):
         bars=make_previous()
         # Last price remains in Q4, so the new Q4 candle is not a newly entered quadrant.
         bars[-1]["close"]=183.0
@@ -79,7 +79,7 @@ class TopTouch30Tests(unittest.TestCase):
         engine.inspect(snap)
         snap=frame(ts+2,199.8,True,True)
         snap["closed"]=bars
-        self.assertIsNone(engine.inspect(snap))
+        self.assertIsNotNone(engine.inspect(snap))
 
 if __name__=="__main__":
     unittest.main()
