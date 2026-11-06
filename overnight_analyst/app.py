@@ -273,6 +273,11 @@ def main_worker():
     except Exception as exc:
      print("FIB_STREAM_SUBSCRIBE_DIAGNOSTIC "+type(exc).__name__,flush=True)
    if not selected:raise RuntimeError("Nenhum fluxo real de 30s confirmado")
+   try:
+    preflight=rpc(proc,q,"fib_demo_preflight",asset=selected[0],timeout=15)
+    update(preflight=preflight)
+   except Exception as ex:
+    update(preflight={"available":False,"reason":type(ex).__name__})
    update(collecting=True)
    print("FIB_REAL_STREAMS "+json.dumps(selected),flush=True)
    last_catalog=time.time()
@@ -353,6 +358,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere}
  <p id="armed">Operações DEMO não ativadas</p>
  <p class="muted" id="last-error"></p>
  <p class="muted">Aposta: 1 unidade DEMO · máx. 3 entradas/dia · limite de 2 LOSS/dia · sem martingale · conta real bloqueada</p>
+ <p class="muted" id="preflight">Compatibilidade Blitz 30s: verificando na corretora…</p>
 </div>
 <div class="card"><h2>Leitura Fibonacci ao vivo</h2>
  <p>Ativo: <strong id="asset">—</strong> · <span id="freshness">Aguardando preços…</span></p>
