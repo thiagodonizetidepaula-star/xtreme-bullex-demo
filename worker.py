@@ -86,6 +86,12 @@ def dispatch(c):
         # Não aguardar os catálogos de CFD, forex e cripto para conectar M1.
         return {'balance':balance,'currency':currency,'mode':'PRACTICE','assets':sorted(api.get_all_ACTIVES_OPCODE())}
     demo()
+    if op in ('order','fib_demo_order'):
+        return {'sent':False,'reason':'Laboratório de pesquisa: envio de ordens desativado no servidor.'}
+    if op=='research_market':
+        items=market(force=True)
+        return {'assets':[{'asset':asset,**details} for asset,details in items.items() if details.get('open')],
+                'source':'PRACTICE','asof':time.time()}
     if op=='market':
         available=market(force=True)
         return {'assets':[{'asset':a,**v} for a,v in available.items() if v['open'] and (v['payout']>=c['payout'] if c.get('strategy') in ('repetition','resumption','sniper','retest','lab_m1') else v['payout']>max(80,c['payout']))]}
