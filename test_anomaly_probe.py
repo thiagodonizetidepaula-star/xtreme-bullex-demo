@@ -11,10 +11,10 @@ class AnomalyProbeTests(unittest.TestCase):
     def test_closed_candle_revision_and_deduplication(self):
         p = AnomalyProbe()
         p.observe("EURUSD-OTC", [bar(120000)], 120180)
-        found = p.observe("EURUSD-OTC", [bar(120000, c=1.6)], 120240)
+        found = p.observe("EURUSD-OTC", [bar(120000, c=1.6)], 120200)
         self.assertEqual([e["kind"] for e in found], ["CLOSED_CANDLE_REVISED"])
         self.assertFalse(found[0]["trading_signal"])
-        self.assertEqual(p.observe("EURUSD-OTC", [bar(120000, c=1.6)], 120240), [])
+        self.assertEqual(p.observe("EURUSD-OTC", [bar(120000, c=1.6)], 120200), [])
 
     def test_closed_only_and_no_fabricated_market_data(self):
         p = AnomalyProbe()
