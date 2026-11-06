@@ -157,6 +157,8 @@ def open_demo(proc,q,signal,analysis):
  signaled.add(key)
  key_hex=hashlib.sha256(("fib-demo-v1|"+str(key)).encode()).hexdigest()
  oid="fib-"+key_hex
+ if any(t.get("order_id")==oid for t in orders):
+  return  # A previous server instance already recorded this candle.
  record_data={
   "order_id":oid,"asset":signal["asset"],"side":signal["direction"],
   "status":"PREPARED","stake":DEMO_STAKE,"payout":None,
