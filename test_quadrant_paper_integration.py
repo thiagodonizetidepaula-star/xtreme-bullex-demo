@@ -1,44 +1,27 @@
-"""Integration regression: a recorded quadrant paper entry must settle on a broker closed M1 bar."""
-import os
+"""The new 30-second-only analyst must not surface any legacy M1 trading engine."""
 import sys
 import unittest
-from datetime import datetime,timezone
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parent / "overnight_analyst"))
 from overnight_analyst import app
-from overnight_analyst.paper_simulator import PaperSimulator,iso
 
-class QuadrantPaperSettlementIntegration(unittest.TestCase):
-    def test_closes_paper_trade_after_expiry_with_new_candle_normalizer(self):
-        start=120000
-        trade={
-            "trade_id":"a"*64,"strategy_id":"b"*64,
-            "strategy_name":"Quadrante 4 · Rejeição do teto",
-            "asset":"GBPUSD-OTC","direction":"PUT",
-            "source_candle_at":iso(start-120),
-            "decided_at":iso(start-60),
-            "entry_at":iso(start),"expiry_at":iso(start+60),
-            "status":"EM_ANDAMENTO","entry_price":1.8,
-            "exit_price":None,"payout":85,
-            "result_at":None,
-            "entry_basis":"BROKER_M1_OPEN_PROXY","account_type":"PAPER_ONLY",
-            "note":"Simulação."
-        }
-        paper=PaperSimulator()
-        paper.trades[trade["trade_id"]]=trade
-        row={"from":start,"open":1.8,"max":1.85,"min":1.70,"close":1.75}
-        captured=[]
-        with patch.object(app,"paper",paper),\
-             patch.object(app,"rpc",return_value={"now":start+120,"candles":[row],"source":"PRACTICE"}),\
-             patch.object(app,"save_paper",side_effect=lambda t:captured.append(dict(t))),\
-             patch.object(app,"publish_paper"),\
-             patch.object(app.time,"time",return_value=start+120),\
-             patch.object(app.time,"sleep"):
-            self.assertTrue(app.track_paper(None,None))
-        self.assertEqual(captured[0]["status"],"WIN")
-        self.assertEqual(captured[0]["exit_price"],1.75)
+class TopTouch30AppTests(unittest.TestCase):
+    def test_only_30_second_engine_is_active(self):
+        self.assertEqual(app.state["research_mode"],"TOP_TOUCH_30S_ONLY")
+        self.assertEqual(app.state["timeframe_seconds"],30)
+        self.assertEqual(app.state["expiry_seconds"],30)
+        self.assertFalse(app.state["orders_enabled"])
+        self.assertFalse(app.state["legacy_strategies_enabled"])
+        self.assertFalse(hasattr(app,"paper"))
+        self.assertTrue(hasattr(app,"lab"))
+
+    def test_panel_is_clear_about_paper_only_and_exact_30s(self):
+        page=app.page()
+        self.assertIn("Toque no Teto",page)
+        self.assertIn("Expiração 30s",page)
+        self.assertIn("segundos 30–35",page)
+        self.assertIn("sem ordem",page.lower())
 
 if __name__=="__main__":
     unittest.main()
