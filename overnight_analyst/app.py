@@ -254,6 +254,7 @@ small{color:#99b1cb}
 </div>
 <div class="card">
 <h2>Entrada virtual PUT</h2><p class="muted">Janela: segundos 30–35 da vela M1. O toque precisa ser observado de baixo para cima na linha do teto. Não haverá operação na corretora.</p>
+<div class="row"><span class="muted">Próxima janela de entrada</span><strong class="clock" id="entry-window">—</strong></div>
 <div id="active"><p class="muted">Nenhuma entrada virtual ativa.</p></div>
 <p class="muted">Armazenamento: <span id="storage">Carregando…</span></p>
 </div>
