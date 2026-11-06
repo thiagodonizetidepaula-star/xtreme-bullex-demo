@@ -428,16 +428,16 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 </div>
 <div class="card"><h2>Experimentos em avaliação</h2>
 <div id="strategies"></div>
-<p class="muted">A amostra inicial não valida uma regra. Uma taxa acima de 70% somente é destacada com 80+ resultados futuros, limite inferior de confiança acima do ponto de equilíbrio do payout e preço observado na abertura da simulação.</p>
+<p class="muted">Ficam em pesquisa as famílias com pelo menos 20 WIN/LOSS e 58% ou mais na base. Abaixo disso, são suspensas. Resultados com filtros novos (v2) são avaliados separadamente para não inflar a taxa antiga.</p><div id="policy">Avaliando taxas e amostras…</div><p class="muted">O limite de 58% é uma triagem de pesquisa, não uma garantia de lucratividade.</p>
 </div>
 <div class="card">
-<h2>Placar virtual prospectivo</h2>
+<h2>Placar virtual · Confluência v2</h2><p class="muted">Somente simulações após os novos filtros. WIN/LOSS da versão anterior ficam arquivados.</p>
 <div class="grid">
 <div class="metric"><small>WIN</small><strong id="wins">0</strong></div>
 <div class="metric"><small>LOSS</small><strong id="losses">0</strong></div>
 <div class="metric"><small>Assertividade</small><strong id="rate">—</strong></div></div>
-<h3>Hipóteses destacadas · <span id="qualified-count">0</span></h3><div id="qualified">Aguardando amostra suficiente.</div>
-<h3>Por ativo e regime</h3><div id="scoreboard">Ainda sem resultados.</div>
+<h3>Estratégias mantidas (≥58%) · <span id="qualified-count">0</span></h3><div id="qualified">Carregando resultados.</div>
+<h3>Confluência da última oportunidade</h3><div id="confluence">Aguardando padrão de vela.</div><h3>Entradas rejeitadas pelo filtro</h3><div id="audit">Sem rejeições registradas.</div><h3>Comparativo por ativo e regime</h3><div id="scoreboard">Ainda sem resultados.</div>
 <h3>Simulações ativas</h3><div id="active">Nenhuma.</div>
 <h3>Últimas simulações</h3><div id="recent">Nenhuma.</div>
 </div>
