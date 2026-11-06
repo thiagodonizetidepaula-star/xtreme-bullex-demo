@@ -45,6 +45,25 @@ function draw(x){
  $("paper-watch").innerHTML=rest.length?rest.slice(0,25).map(scoreCard).join(""):'<p class="paper-muted">Aguardando resultados prospectivos.</p>';
  const history=[...(x.named_strategies||[]).map(r=>({name:r.name,asset:r.asset,n:Number(r.oos_occurrences)||0,wins:Number(r.oos_wins)||0})),
  ...(x.new_named_strategies||[]).map(r=>({name:r.name,asset:r.asset,direction:r.direction,n:Number(r.test_n)||0,wins:Number(r.test_wins)||0}))];
+ const renderResearch=(r)=>{
+   const n=Number(r.test_n??r.oos_occurrences)||0;
+   const w=Number(r.test_wins??r.oos_wins)||0;
+   const rate=n>0?fmt(100*w/n):"—";
+   const sampleLabel=n>=30?"amostra de pesquisa":"amostra insuficiente";
+   return '<div class="paper-study"><strong>'+esc(r.name)+'</strong><div class="paper-muted">'+esc(r.asset)
+      +' · '+esc(r.direction||"Histórico")+'</div><div class="paper-score"><b>'+rate
+      +'</b><span>WIN teórico '+w+' · LOSS teórico '+(n-w)+'</span></div>'
+      +'<div class="paper-muted">'+n+' observações fora da amostra · '+sampleLabel
+      +' · não são ordens executadas</div></div>';
+ };
+ if($("historical-catalog")){
+   const old=x.named_strategies||[];
+   $("historical-catalog").innerHTML=old.length?old.slice(0,30).map(renderResearch).join(""):'<p class="paper-muted">Aguardando pesquisas históricas.</p>';
+ }
+ if($("historical-novel")){
+   const fresh=x.new_named_strategies||[];
+   $("historical-novel").innerHTML=fresh.length?fresh.slice(0,20).map(renderResearch).join(""):'<p class="paper-muted">Aguardando pesquisas históricas.</p>';
+ }
  const h=history.filter(r=>r.n>=30&&r.wins/r.n>=.70).sort((a,b)=>b.wins/b.n-a.wins/a.n);
  $("historical-total").textContent=h.length;
  $("historical-qualified").innerHTML=h.length?h.slice(0,12).map(historicalCard).join(""):'<p class="paper-muted">Nenhuma pesquisa histórica com 70% e pelo menos 30 testes.</p>';
