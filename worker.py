@@ -33,6 +33,7 @@ api=None
 market_cache={};market_at=0
 stream_assets=set();stream_retry={};stream_seed_at=0
 balance_cache=None;balance_at=0
+quad30_state={}
 
 @contextlib.contextmanager
 def stage(name, seconds):
@@ -74,6 +75,7 @@ def dispatch(c):
     op=c['op']
     if op=='connect':
         stream_assets.clear();stream_retry.clear();stream_seed_at=0
+        quad30_state.clear()
         api=Bullex(c['email'],c['password'])
         with stage('autenticação e abertura da sessão',35):
             ok,reason=api.connect()
@@ -127,6 +129,74 @@ def dispatch(c):
             items.append({'asset':asset,'candles':closed})
         return {'now':now,'items':items,'ready':len(items),'fresh_closed':fresh,
                 'total':len(wanted),'errors':errors}
+    if op=='quad30_start':
+        now=broker_now()
+        asset=c['asset']
+        if asset not in api.get_all_ACTIVES_OPCODE():
+            raise ValueError('Ativo não reconhecido na Bulex DEMO.')
+        if asset in quad30_state:
+            return {'subscribed':True,'asset':asset,'now':now,'source':'PRACTICE'}
+        if 30 not in api.size:
+            return {'subscribed':False,'asset':asset,'reason':'Biblioteca sem candle 30s','now':now}
+        with stage('histórico real de velas 30 segundos',16):
+            bars=api.get_candles(asset,30,110,int(now))
+        if not isinstance(bars,list) or len(bars)<25:
+            return {'subscribed':False,'asset':asset,'reason':'Bulex não forneceu 25 candles reais de 30 segundos','now':now}
+        stream=api.api.real_time_candles[asset][30]
+        api.api.real_time_candles_maxdict_table[asset][30]=150
+        for bar in bars:
+            if isinstance(bar,dict) and bar.get('from') is not None:
+                # Historical bars are reference only; never trusted as a fresh live touch.
+                stream[int(bar['from'])]=dict(bar)
+        api.api.subscribe(api.get_all_ACTIVES_OPCODE()[asset],30)
+        quad30_state[asset]={'signature':None,'fresh_at':None,'fresh_bucket':None,
+                             'subscribed_at':now,'samples':0}
+        return {'subscribed':True,'asset':asset,'now':now,'source':'PRACTICE'}
+    if op=='quad30_snapshot':
+        now=broker_now()
+        asset=c['asset']
+        state=quad30_state.get(asset)
+        if state is None:
+            return {'available':False,'asset':asset,'reason':'STREAM_30_NOT_SUBSCRIBED','now':now}
+        try:
+            items=list(api.api.real_time_candles[asset][30].copy().values())
+        except (TypeError,KeyError,ValueError):
+            items=[]
+        clean={}
+        for item in items:
+            if not isinstance(item,dict):continue
+            try:
+                ts=int(item['from'])
+                if ts%30:continue
+                o,h,l,close=(float(item[k]) for k in ('open','max','min','close'))
+                if any(not math.isfinite(v) or v<=0 for v in (o,h,l,close)):continue
+                if not l<=min(o,close)<=h or not l<=max(o,close)<=h:continue
+                clean[ts]={'from':ts,'open':o,'max':h,'min':l,'close':close}
+            except (TypeError,KeyError,OverflowError,ValueError):
+                continue
+        current_bucket=int(now//30)*30
+        current=clean.get(current_bucket)
+        closed=[clean[x] for x in sorted(clean) if x+30<=now][-90:]
+        changed=False
+        if current is not None:
+            signature=(current_bucket,current['close'],current['max'],current['min'])
+            if state['signature'] is None:
+                # Subscription/read bootstrap is never a tradeable quote.
+                state['signature']=signature
+            elif signature!=state['signature']:
+                state['signature']=signature
+                state['fresh_at']=now
+                state['fresh_bucket']=current_bucket
+                state['samples']+=1
+                changed=True
+        age=(now-state['fresh_at']) if state['fresh_at'] is not None else None
+        fresh=bool(current is not None and age is not None and
+                   0<=age<=2.0 and state['fresh_bucket']==current_bucket)
+        return {'available':True,'asset':asset,'source':'BROKER_STREAM_30S_OBSERVED',
+                'now':now,'current':current,'closed':closed,'fresh':fresh,
+                'changed':changed,'quote_age':age,'samples':state['samples'],
+                'observed_at':state['fresh_at'] if fresh else None,
+                'message':'Cotação recente observada' if fresh else 'Sem atualização recente suficiente para simular'}
     if op=='paper_quote':
         # Broker-observed *current M1* opening quote, read-only. Never sends orders.
         now=broker_now()
