@@ -36,6 +36,20 @@ function show(status){
  $("server-error").textContent=status.last_error||"Somente leitura e simulações.";
  $("asset").textContent=status.last_asset||"Aguardando ativo";
  $("storage").textContent=status.storage||"Não configurado";
+ const candles=status.live_candles||[];
+ const current=status.live_current || (candles.length?candles[candles.length-1]:null);
+ const live=$("live-chart"), label=$("live-label");
+ if(live&&label){
+   if(current){
+     live.textContent="Abertura: "+price(current.open)+" · Máxima: "+price(current.max)
+       +" · Mínima: "+price(current.min)+" · Atual: "+price(current.close);
+     label.textContent=status.live_fresh?"Cotação Bulex 30s recebida recentemente":"Aguardando nova atualização Bulex 30s";
+   }else{
+     live.textContent="Sem candles 30s confirmados.";
+     label.textContent="Aguardando fluxo da Bulex.";
+   }
+ }
+
  const block=status.last_block;
  for(let q=1;q<=4;q++)$("zone-"+q).classList.toggle("on",!!block&&Number(block.quadrant)===q);
  if(block){
