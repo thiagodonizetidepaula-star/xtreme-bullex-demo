@@ -347,7 +347,7 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 <p class="muted" id="batch">Sem mercados no lote.</p></div>
 <div class="card"><h2>Leitura de velas e regime</h2>
 <div class="row"><span>Ativo: <b id="asset">—</b></span><span class="chip" id="regime">—</span></div>
-<p id="pattern">Aguardando uma formação reconhecível...</p><p class="muted" id="candle">Sem cotação nova.</p>
+<p id="pattern">Aguardando uma formação reconhecível...</p><p class="muted" id="candle">Sem cotação nova.</p><div id="chart30" role="img" aria-label="Últimas velas de trinta segundos recebidas da Bulex" style="width:100%;min-height:175px;overflow:hidden"></div><p class="muted" id="regime-metrics"></p>
 <p class="muted" id="news">Notícias ainda não verificadas.</p>
 </div>
 <div class="card"><h2>Experimentos em avaliação</h2>
