@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from math import isfinite
 
-from named_catalog import _condition, _validated
+try:
+    from .named_catalog import _condition, _validated
+except ImportError:  # Running as the standalone Render entrypoint
+    from named_catalog import _condition, _validated
 
 FINAL = frozenset({"WIN", "LOSS", "EMPATE", "SEM_COTACAO"})
 
