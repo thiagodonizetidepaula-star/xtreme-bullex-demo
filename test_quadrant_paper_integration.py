@@ -8,7 +8,7 @@ from overnight_analyst import app
 
 class TopTouch30AppTests(unittest.TestCase):
     def test_only_30_second_engine_is_active(self):
-        self.assertEqual(app.state["research_mode"],"TOP_TOUCH_30S_ONLY")
+        self.assertEqual(app.state["research_mode"],"TOP_TOUCH_30S_INVERSE_ONLY")
         self.assertEqual(app.state["timeframe_seconds"],30)
         self.assertEqual(app.state["expiry_seconds"],30)
         self.assertFalse(app.state["orders_enabled"])
