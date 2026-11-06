@@ -13,7 +13,7 @@ function tradeCard(t,live){
     const remain=(exp-Date.now())/1000;
     text=remain>0?"EXPIRA EM "+seconds(remain):"Aguardando cotação da Bulex…";
   }
-  return '<div class="slab"><div class="row"><strong>'+esc(t.asset)+'</strong><span class="red">PUT · 30s</span></div>'
+  return '<div class="slab"><div class="row"><strong>'+esc(t.asset)+'</strong><span class="green">CALL · 30s</span></div>'
     +'<div class="muted">Quadrante '+esc(t.quadrant)+' · Teto '+price(t.ceiling)+'</div>'
     +'<p class="clock">'+text+'</p>'
     +'<div class="muted">Entrada observada: '+price(t.entry_price)
