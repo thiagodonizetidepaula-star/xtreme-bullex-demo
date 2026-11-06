@@ -1,86 +1,115 @@
 (() => {
 "use strict";
 const $ = id => document.getElementById(id);
-const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const fmt = x => x == null || !Number.isFinite(Number(x)) ? "—" : Number(x).toFixed(1).replace(".", ",")+"%";
-const timer = n => { const s=Math.max(0,Math.ceil(n)); return [Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,"0")).join(":"); };
-let current=null, lastUpdated=0;
-function countdown(t) {
- if(!t) return "Aguardando condições da Bulex.";
- if(t.status==="AGENDADA") { let n=(Date.parse(t.entry_at)-Date.now())/1000; return n>0?"ENTRADA VIRTUAL EM "+timer(n):"Aguardando cotação de abertura…"; }
- if(t.status==="EM_ANDAMENTO") { let n=(Date.parse(t.expiry_at)-Date.now())/1000; return n>0?"VENCIMENTO EM "+timer(n):"Aguardando fechamento da vela…"; }
- return t.status;
+const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
+ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[char]));
+const percent = value => value == null || !Number.isFinite(Number(value)) ? "—" :
+ Number(value).toFixed(1).replace(".",",")+"%";
+const num = value => value == null || !Number.isFinite(Number(value)) ? "—" :
+ Number(value).toLocaleString("pt-BR",{maximumFractionDigits:8});
+const clock = seconds => {
+ const s=Math.max(0,Math.ceil(seconds));
+ return [Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(x=>String(x).padStart(2,"0")).join(":");
+};
+let state=null,lastUpdate=0;
+function countdown(trade){
+ if(!trade) return "Aguardando padrões válidos.";
+ if(trade.status==="AGENDADA"){
+   const remain=(Date.parse(trade.entry_at)-Date.now())/1000;
+   return remain>0?"ENTRADA VIRTUAL EM "+clock(remain):"Aguardando cotação do início da vela…";
+ }
+ if(trade.status==="EM_ANDAMENTO"){
+   const remain=(Date.parse(trade.expiry_at)-Date.now())/1000;
+   return remain>0?"ENCERRAMENTO VIRTUAL EM "+clock(remain):"Aguardando fechamento da vela na Bulex…";
+ }
+ return trade.status;
 }
-function tradeCard(t,active){
- return '<div class="paper-trade"><div class="paper-trade-top"><strong>'+esc(t.strategy_name)+'</strong><span class="paper-direction">'+esc(t.direction)+'</span></div>'
- +'<div class="paper-muted">'+esc(t.asset)+' · M1 virtual'+(t.entry_price!=null?' · entrada ref. '+esc(t.entry_price):'')+'</div>'
- +'<div class="paper-clock">'+esc(active?countdown(t):t.status)+'</div>'
- +'<div class="paper-muted">Vencimento: '+esc(new Date(t.expiry_at).toLocaleTimeString("pt-BR"))+' · nenhuma ordem enviada</div></div>';
+function tradeCard(t,active=false){
+ return '<div class="paper-trade"><div class="paper-trade-top"><strong>'+esc(t.strategy_name)
+   +'</strong><span class="paper-direction">'+esc(t.direction)+'</span></div>'
+   +'<div class="paper-muted">'+esc(t.asset)+' · preço de referência '+num(t.entry_price)+'</div>'
+   +'<div class="paper-clock">'+esc(active?countdown(t):t.status)+'</div>'
+   +'<div class="paper-muted">Vencimento: '+esc(new Date(t.expiry_at).toLocaleTimeString("pt-BR"))
+   +' · registro exclusivamente virtual</div></div>';
 }
 function scoreCard(r){
- const w=Number(r.wins)||0,l=Number(r.losses)||0,n=w+l,rate=n>0?100*w/n:null;
- return '<div class="paper-study"><strong>'+esc(r.strategy_name)+'</strong><div class="paper-muted">'+esc(r.asset)+'</div>'
- +'<div class="paper-score"><b>'+fmt(rate)+'</b><span>WIN '+w+' · LOSS '+l+' · '+n+' resultados</span></div>'
- +'<div class="paper-muted">Empates '+(Number(r.ties)||0)+' · Sem cotação '+(Number(r.no_quote)||0)+' · Pendentes '+(Number(r.pending)||0)+'</div></div>';
+ const w=Number(r.wins)||0,l=Number(r.losses)||0,n=w+l;
+ return '<div class="paper-study"><strong>'+esc(r.strategy_name)
+  +'</strong><div class="paper-muted">'+esc(r.asset)
+  +'</div><div class="paper-score"><b>'+percent(n?100*w/n:null)
+  +'</b><span>WIN '+w+' · LOSS '+l+' · '+n+' operações</span></div>'
+  +'<div class="paper-muted">Empates: '+(Number(r.ties)||0)
+  +' · Sem cotação: '+(Number(r.no_quote)||0)
+  +' · Pendentes: '+(Number(r.pending)||0)+'</div></div>';
 }
-function historicalCard(r) {
- return '<div class="paper-study"><strong>'+esc(r.name)+'</strong><div class="paper-muted">'+esc(r.asset)+' · '+esc(r.direction||"Histórico")+'</div>'
- +'<div class="paper-score"><b>'+fmt(100*r.wins/r.n)+'</b><span>WIN teórico '+r.wins+' · LOSS teórico '+(r.n-r.wins)+' · '+r.n+' testes</span></div>'
- +'<div class="paper-muted">Retrospectivo, não é resultado de uma ordem.</div></div>';
-}
-function draw(x){
- current=x;lastUpdated=Date.now();
- const board=x.paper_scoreboard||[], recent=x.paper_recent||[];
- const w=board.reduce((s,r)=>s+(Number(r.wins)||0),0), l=board.reduce((s,r)=>s+(Number(r.losses)||0),0);
- $("paper-wins").textContent=w; $("paper-losses").textContent=l;
- $("paper-rate").textContent=w+l?fmt(100*w/(w+l)):"—";
- $("paper-storage").textContent=x.paper_storage||"DESCONHECIDO";
- $("paper-current").innerHTML=x.paper_current?tradeCard(x.paper_current,true):'<p class="paper-muted">Nenhuma entrada agendada. Aguardando gatilho fresco da corretora, sem inventar operações.</p>';
- $("paper-recent").innerHTML=recent.length?recent.slice(0,8).map(t=>tradeCard(t,false)).join(""):'<p class="paper-muted">Sem operações virtuais liquidadas.</p>';
- const sorted=[...board].sort((a,b)=>(Number(b.hit_rate)||0)-(Number(a.hit_rate)||0));
- const high=sorted.filter(r=>Number(r.judged)>=30&&Number(r.hit_rate)>=70);
- const rest=sorted.filter(r=>!high.includes(r));
+function render(value){
+ state=value;lastUpdate=Date.now();
+ const block=value.latest_block;
+ if(block){
+   $("block-asset").textContent=block.asset||value.last_asset||"—";
+   $("block-max").textContent=num(block.maximum);
+   $("block-min").textContent=num(block.minimum);
+   const idx=Number(block.quadrant)||0;
+   for(let n=1;n<=4;n++)$("zone-"+n).classList.toggle("active",n===idx);
+   $("block-comment").textContent="Preço observado no Q"+idx+" (Q1 = faixa inferior, Q4 = faixa superior). Os limites usam as 36 velas anteriores.";
+ }else{
+   $("block-asset").textContent=value.last_asset||"Aguardando leitura";
+   for(let n=1;n<=4;n++)$("zone-"+n).classList.remove("active");
+ }
+ const last=value.last_pattern;
+ $("last-pattern").textContent=last?
+  "Último padrão: "+last.name+" · "+last.asset+" · direção virtual "+last.direction:
+  "Nenhum padrão confirmado em vela fechada até agora.";
+ const news=value.news_gate||{status:"NAO_VERIFICADO",message:"Notícias sem confirmação."};
+ $("news-status").textContent="Situação do filtro: "+(news.blocked?"BLOQUEADO · ":"")+String(news.status||"NAO_VERIFICADO");
+ $("news-message").textContent=String(news.message||"");
+ $("paper-storage").textContent=value.paper_storage||"DESCONHECIDO";
+ $("quadrant-storage").textContent="Estado: "+(value.quadrant_storage||"DESCONHECIDO");
+ const patterns=value.quadrant_catalog||[];
+ $("quadrant-catalog").innerHTML=patterns.length?patterns.slice(0,20).map(p=>
+   '<div class="paper-study"><strong>'+esc(p.name)+'</strong><div class="paper-muted">'
+   +esc(p.asset)+' · '+esc(p.direction)+' · '+(Number(p.observations)||0)
+   +' ocorrência(s) reconhecida(s) · só pesquisa</div></div>').join(""):
+   '<p class="paper-muted">Aguardando a primeira rejeição válida no teto ou no piso do bloco.</p>';
+ const recent=value.paper_recent||[], board=value.paper_scoreboard||[];
+ const wins=board.reduce((sum,r)=>sum+(Number(r.wins)||0),0);
+ const losses=board.reduce((sum,r)=>sum+(Number(r.losses)||0),0);
+ $("paper-wins").textContent=wins;
+ $("paper-losses").textContent=losses;
+ $("paper-rate").textContent=wins+losses?percent(100*wins/(wins+losses)):"—";
+ $("paper-current").innerHTML=value.paper_current?tradeCard(value.paper_current,true):
+   '<p class="paper-muted">Nenhuma operação virtual em andamento. Aguardando um padrão de quadrante com vela fechada.</p>';
+ $("paper-recent").innerHTML=recent.length?recent.slice(0,9).map(t=>tradeCard(t)).join(""):
+   '<p class="paper-muted">Ainda não foram concluídas entradas virtuais desta estratégia.</p>';
+ const ranked=[...board].sort((a,b)=>(Number(b.hit_rate)||0)-(Number(a.hit_rate)||0));
+ const high=ranked.filter(r=>Number(r.judged)>=30 && Number(r.hit_rate)>=70);
+ const other=ranked.filter(r=>!high.includes(r));
  $("paper-elite-count").textContent=high.length;
- $("paper-qualified").innerHTML=high.length?high.map(scoreCard).join(""):'<p class="paper-muted">Nenhuma estratégia atingiu 70% em pelo menos 30 WIN/LOSS virtuais.</p>';
- $("paper-watch").innerHTML=rest.length?rest.slice(0,25).map(scoreCard).join(""):'<p class="paper-muted">Aguardando resultados prospectivos.</p>';
- const history=[...(x.named_strategies||[]).map(r=>({name:r.name,asset:r.asset,n:Number(r.oos_occurrences)||0,wins:Number(r.oos_wins)||0})),
- ...(x.new_named_strategies||[]).map(r=>({name:r.name,asset:r.asset,direction:r.direction,n:Number(r.test_n)||0,wins:Number(r.test_wins)||0}))];
- const renderResearch=(r)=>{
-   const n=Number(r.test_n??r.oos_occurrences)||0;
-   const w=Number(r.test_wins??r.oos_wins)||0;
-   const rate=n>0?fmt(100*w/n):"—";
-   const sampleLabel=n>=30?"amostra de pesquisa":"amostra insuficiente";
-   return '<div class="paper-study"><strong>'+esc(r.name)+'</strong><div class="paper-muted">'+esc(r.asset)
-      +' · '+esc(r.direction||"Histórico")+'</div><div class="paper-score"><b>'+rate
-      +'</b><span>WIN teórico '+w+' · LOSS teórico '+(n-w)+'</span></div>'
-      +'<div class="paper-muted">'+n+' observações fora da amostra · '+sampleLabel
-      +' · não são ordens executadas</div></div>';
- };
- if($("historical-catalog")){
-   const old=x.named_strategies||[];
-   $("historical-catalog").innerHTML=old.length?old.slice(0,30).map(renderResearch).join(""):'<p class="paper-muted">Aguardando pesquisas históricas.</p>';
- }
- if($("historical-novel")){
-   const fresh=x.new_named_strategies||[];
-   $("historical-novel").innerHTML=fresh.length?fresh.slice(0,20).map(renderResearch).join(""):'<p class="paper-muted">Aguardando pesquisas históricas.</p>';
- }
- const h=history.filter(r=>r.n>=30&&r.wins/r.n>=.70).sort((a,b)=>b.wins/b.n-a.wins/a.n);
- $("historical-total").textContent=h.length;
- $("historical-qualified").innerHTML=h.length?h.slice(0,12).map(historicalCard).join(""):'<p class="paper-muted">Nenhuma pesquisa histórica com 70% e pelo menos 30 testes.</p>';
+ $("paper-qualified").innerHTML=high.length?high.map(scoreCard).join(""):
+  '<p class="paper-muted">Nenhuma estratégia atingiu 70% em pelo menos 30 operações virtuais.</p>';
+ $("paper-watch").innerHTML=other.length?other.slice(0,35).map(scoreCard).join(""):
+  '<p class="paper-muted">Aguardando as primeiras entradas virtuais.</p>';
+ $("broker-connection").textContent=value.connected?"● Conectado à Bulex DEMO":"○ Bulex desconectada";
 }
 function tick(){
- if(current&&current.paper_current){
-  const element=$("paper-current").querySelector(".paper-clock");
-  if(element)element.textContent=countdown(current.paper_current);
+ if(state&&state.paper_current){
+   const node=$("paper-current").querySelector(".paper-clock");
+   if(node)node.textContent=countdown(state.paper_current);
  }
- if($("paper-updated"))$("paper-updated").textContent=lastUpdated?"Atualizado há "+Math.floor((Date.now()-lastUpdated)/1000)+"s":"Carregando";
+ if($("paper-updated"))$("paper-updated").textContent=lastUpdate?
+   "Atualizado há "+Math.floor((Date.now()-lastUpdate)/1000)+"s":"Iniciando";
 }
 async function refresh(){
  try{
-  const r=await fetch("/status",{cache:"no-store"});
-  if(!r.ok)throw Error("offline");
-  draw(await r.json());
- }catch(e){$("paper-updated").textContent="Atualização temporariamente indisponível";}
+   const response=await fetch("/status",{cache:"no-store"});
+   if(!response.ok)throw Error("unavailable");
+   render(await response.json());
+ }catch(e){
+   $("paper-updated").textContent="Conexão com painel temporariamente indisponível";
+ }
 }
-document.addEventListener("DOMContentLoaded",()=>{refresh();setInterval(refresh,4000);setInterval(tick,1000);});
+document.addEventListener("DOMContentLoaded",()=>{
+ refresh();setInterval(refresh,4000);setInterval(tick,1000);
+});
 })();
