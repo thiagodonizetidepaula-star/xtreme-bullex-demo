@@ -31,6 +31,11 @@ function render(state){
  el("armed").textContent=state.demo_armed?
     "Motor DEMO armado no servidor; ordens somente após todos os filtros":"DEMO PAUSADO: aguardando habilitação segura";
  el("last-error").textContent=state.blocked_reason||state.last_error||"Conta real bloqueada por verificação de saldo e modo.";
+ const pf=state.preflight||{};
+ el("preflight").textContent=pf.available?
+   "Blitz 30s: função de envio presente; 30s e payout definitivo dependem da aceitação da corretora. Catálogo: "+price(pf.turbo_catalog_payout)+"%":
+   "Blitz 30s: ainda sem confirmação de compatibilidade. "+String(pf.reason||"Aguardando preflight");
+
  el("asset").textContent=state.last_asset||"Aguardando mercado";
  el("storage").textContent=state.storage||"Indisponível";
  const fib=state.fib||{};
