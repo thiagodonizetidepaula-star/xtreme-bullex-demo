@@ -15,7 +15,7 @@ class FibonacciAppTests(unittest.TestCase):
         self.assertEqual(app.DEMO_STAKE,1.0)
         self.assertEqual(app.MAX_DAILY,3)
         self.assertEqual(app.MAX_DAILY_LOSS,2)
-        self.assertFalse(app.ARMED or "FIB_DEMO_ARMED" in app.state)
+        self.assertEqual(app.state["demo_armed"],app.ARMED)
     def test_dashboard_labels_demo_and_fibonacci(self):
         page=app.page()
         self.assertIn("Fibonacci Trend 30s",page)
