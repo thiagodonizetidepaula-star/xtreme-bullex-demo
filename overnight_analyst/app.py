@@ -1,336 +1,411 @@
-"""Standalone 30s ceiling-touch research dashboard for broker PRACTICE data.
+"""Fibonacci M30s, broker-native streams, demo-only broker execution.
 
-No broker order functions. Native 30-second candles are monitored for a
-newly observed fresh price touch near the beginning of M1's final 30 secs.
-No legacy strategy runs, and neither historic M1 wins nor expired
-retroactive quotes are counted in this independent paper scoreboard.
+Demo orders require a server-side arming flag plus a verified PRACTICE
+balance and strict websocket checks. This dashboard cannot send orders.
+No martingale; max 3 confirmed attempts per day, 1 unit each.
 """
-import json
-import os
-import sys
-import time
-import queue
-import html
-import pathlib
-import threading
-import subprocess
 import datetime
+import hashlib
+import json
+import math
+import os
+import pathlib
+import queue
+import subprocess
+import sys
+import threading
+import time
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from top_touch30 import TopTouch30, fromiso
+from fib30 import analyze,VERSION
 from investing_news_guard import check as news_guard
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-lab=TopTouch30()
-_lock=threading.RLock()
+GUARD=threading.RLock()
+ARMED=os.getenv("FIB_DEMO_ARMED","0")=="1"
+DEMO_STAKE=1.0
+MAX_DAILY=3
+MAX_DAILY_LOSS=2
+orders=[]
+current=None
+signaled=set()
 state={
-    "connected":False,"collecting":False,"auth_status":"STARTING",
-    "orders_enabled":False,"legacy_strategies_enabled":False,
-    "research_mode":"TOP_TOUCH_30S_INVERSE_ONLY","timeframe_seconds":30,
-    "expiry_seconds":30,"last_error":None,
-    "storage":"MEMORIA_TEMPORARIA","storage_error":None,
-    "active":None,"recent":[],"scoreboard":[],
-    "last_asset":None,"last_block":None,"last_observation":None,
-    "last_news":{"status":"NAO_VERIFICADO","blocked":False,
-                 "message":"Calendário não sincronizado automaticamente."},
-    "sample_assets":[],"last_poll":None,"live_candles":[],"live_current":None,"live_quote_age":None,"live_fresh":False
+ "connected":False,"collecting":False,"auth_status":"STARTING",
+ "account_mode":"NOT_CONNECTED","demo_armed":ARMED,
+ "orders_enabled":ARMED,"real_account_orders_enabled":False,
+ "stake":DEMO_STAKE,"max_demo_orders_per_day":MAX_DAILY,
+ "expiration_seconds":30,"timeframe_seconds":30,
+ "research_mode":"FIBONACCI_TREND_30S_ONLY","last_error":None,
+ "storage":"STARTING","last_asset":None,
+ "fib":None,"reason":"Aguardando as velas Bulex",
+ "live_candles":[],"live_current":None,"live_fresh":False,
+ "live_quote_age":None,"last_poll":None,"news":None,
+ "active":None,"recent":[],"wins":0,"losses":0,
+ "ties":0,"unknown":0,"daily_orders":0,"balance_demo":None,
+ "last_attempt":None,"preflight":None,"blocked_reason":None
 }
 
-def update(**values):
-    with _lock:
-        state.update(values)
+def update(**changes):
+ with GUARD:state.update(changes)
 
-def gateway(method,path,payload=None):
-    base=os.getenv("ANOMALY_STORE_URL","").rstrip("/")
-    secret=os.getenv("ANOMALY_STORE_SECRET","")
-    if not base or not secret:
-        raise RuntimeError("Private Supabase gateway not configured")
-    data=json.dumps(payload).encode("utf-8") if payload is not None else None
-    headers={"x-anomaly-secret":secret}
-    if data is not None:
-        headers["Content-Type"]="application/json"
-    req=urllib.request.Request(base+"/"+path,method=method,
-                               data=data,headers=headers)
-    with urllib.request.urlopen(req,timeout=12) as response:
-        result=json.loads(response.read())
-        if not result.get("ok"):
-            raise RuntimeError("Supabase gateway rejected request")
-        return result
+def storage(method,path,payload=None):
+ base=os.getenv("ANOMALY_STORE_URL","").rstrip("/")
+ secret=os.getenv("ANOMALY_STORE_SECRET","")
+ if not base or not secret:raise RuntimeError("Supabase privado indisponível")
+ data=json.dumps(payload).encode() if payload is not None else None
+ headers={"x-anomaly-secret":secret}
+ if data is not None:headers["Content-Type"]="application/json"
+ req=urllib.request.Request(base+"/"+path,method=method,data=data,headers=headers)
+ with urllib.request.urlopen(req,timeout=12) as res:
+  result=json.loads(res.read())
+ if not result.get("ok"):raise RuntimeError("Supabase não aceitou a gravação")
+ return result
 
-def update_ui():
-    update(active=dict(lab.current) if lab.current else None,
-           recent=list(lab.recent)[:12],
-           last_block=dict(lab.last_block) if lab.last_block else None,
-           last_observation=dict(lab.last_observation) if lab.last_observation else None)
+def score():
+ global current
+ with GUARD:
+  today=datetime.datetime.now(datetime.timezone.utc).date()
+  today_rows=[t for t in orders if str(t.get("placed_at",""))[:10]==str(today)]
+  win=sum(t["status"]=="WIN" for t in orders)
+  loss=sum(t["status"]=="LOSS" for t in orders)
+  ties=sum(t["status"]=="EMPATE" for t in orders)
+  unknown=sum(t["status"] in ("UNKNOWN","PREPARED") for t in orders)
+  daily=sum(t["status"] in ("PREPARED","OPEN","WIN","LOSS","EMPATE","UNKNOWN") for t in today_rows)
+  unresolved=next((t for t in orders if t["status"] in ("UNKNOWN","PREPARED","OPEN")),None)
+  if current is None and unresolved:current=unresolved
+  state.update(wins=win,losses=loss,ties=ties,unknown=unknown,
+               daily_orders=daily,active=current.copy() if current else None,
+               recent=[dict(t) for t in orders[:12]])
+  losses_today=sum(t["status"]=="LOSS" for t in today_rows)
+  if unresolved and unresolved["status"]!="OPEN":
+   state["blocked_reason"]="Ordem com resultado incerto; verificar histórico da conta DEMO"
+  elif daily>=MAX_DAILY:
+   state["blocked_reason"]="Limite de 3 operações DEMO no dia"
+  elif losses_today>=MAX_DAILY_LOSS:
+   state["blocked_reason"]="Limite de 2 LOSS DEMO no dia"
+  else:
+   state["blocked_reason"]=None
 
-def update_scoreboard():
-    # V2 is isolated from the archived PUT trades. This counter is temporary
-    # until a dedicated secured Supabase CALL ledger is available.
-    groups={}
-    for trade in lab.history:
-        asset=trade["asset"]
-        if asset not in groups:
-            groups[asset]={"asset":asset,"wins":0,"losses":0,"ties":0,
-                           "no_quote":0,"active":0,"judged":0,"hit_rate":None}
-        target={"WIN":"wins","LOSS":"losses","EMPATE":"ties",
-                "SEM_COTACAO":"no_quote"}.get(trade.get("status"))
-        if target:
-            groups[asset][target]+=1
-    if lab.current:
-        asset=lab.current["asset"]
-        if asset not in groups:
-            groups[asset]={"asset":asset,"wins":0,"losses":0,"ties":0,
-                           "no_quote":0,"active":0,"judged":0,"hit_rate":None}
-        groups[asset]["active"]+=1
-    for group in groups.values():
-        group["judged"]=group["wins"]+group["losses"]
-        if group["judged"]:
-            group["hit_rate"]=round(100*group["wins"]/group["judged"],2)
-    update(scoreboard=list(groups.values()))
-    update_ui()
+def refresh_records():
+ global orders,current
+ try:
+  data=storage("GET","fib-demo")
+  with GUARD:
+   orders=data.get("orders",[])[:100]
+   if current is None:
+    current=next((t for t in orders if t["status"] in ("OPEN","PREPARED","UNKNOWN")),None)
+  update(storage="CONNECTED")
+  score()
+  return True
+ except Exception as e:
+  update(storage="ERROR",blocked_reason="Histórico Supabase indisponível",last_error="Falha de histórico: "+type(e).__name__)
+  return False
 
-def refresh_store():
-    update(storage="MEMORIA_TEMPORARIA",
-           storage_error="Resultados CALL v2 ainda não são persistidos no Supabase.")
-    update_scoreboard()
-    return True
+def record(item):
+ global orders,current
+ try:
+  storage("POST","fib-demo",{"record":item})
+  entry=dict(item)
+  entry.setdefault("placed_at",datetime.datetime.now(datetime.timezone.utc).isoformat())
+  with GUARD:
+   orders=[t for t in orders if t["order_id"]!=entry["order_id"]]
+   orders.insert(0,entry)
+   if current and current["order_id"]==entry["order_id"]:
+    current=entry if entry["status"]=="OPEN" else None
+  update(storage="CONNECTED")
+  score()
+  return True
+ except Exception as e:
+  update(storage="ERROR",blocked_reason="Falha de gravação; nenhuma nova ordem",
+         last_error="Erro de armazenamento: "+type(e).__name__)
+  return False
 
-def persist(trade):
-    # Never claim a durable save for this experimental version. Result is
-    # already maintained in runtime history by the simulator.
-    update_scoreboard()
-    print("TOP30_V2_PAPER "+str(trade.get("status"))+" "+
-          str(trade.get("asset"))+" CALL",flush=True)
-    return True
+def rpc(proc,q,op,timeout=25,**params):
+ if not proc or proc.poll() is not None:raise RuntimeError("Conexão broker encerrada")
+ proc.stdin.write(json.dumps({"op":op,**params})+"\n")
+ proc.stdin.flush()
+ try: line=q.get(timeout=timeout)
+ except queue.Empty:raise RuntimeError("Tempo excedido na API da Bulex")
+ if not line:raise RuntimeError("Processo de dados Bulex finalizado")
+ response=json.loads(line)
+ if not response.get("ok"):raise RuntimeError(str(response.get("error","Falha Bulex"))[:175])
+ return response.get("data",{})
 
-def send(proc,q,op,timeout=25,**params):
-    proc.stdin.write(json.dumps({"op":op,**params})+"\n")
-    proc.stdin.flush()
+def reader(proc,q):
+ for line in proc.stdout:q.put(line)
+ q.put(None)
+
+def can_attempt():
+ score()
+ if not ARMED:return False,"Envio automático DEMO desativado no servidor"
+ if state["storage"]!="CONNECTED":return False,"Supabase não confirmou armazenamento"
+ if state["account_mode"]!="PRACTICE":return False,"Saldo não é demonstrativo"
+ if current:return False,"Uma operação DEMO já está ativa"
+ if state.get("blocked_reason"):return False,state["blocked_reason"]
+ return True,"OK"
+
+def open_demo(proc,q,signal,analysis):
+ global current
+ allowed,why=can_attempt()
+ if not allowed:
+  update(last_attempt={"asset":signal["asset"],"direction":signal["direction"],"sent":False,"reason":why})
+  return
+ key=(signal["asset"],int(signal["bucket"]),signal["direction"])
+ if key in signaled:return
+ signaled.add(key)
+ key_hex=hashlib.sha256(("fib-demo-v1|"+str(key)).encode()).hexdigest()
+ oid="fib-"+key_hex
+ record_data={
+  "order_id":oid,"asset":signal["asset"],"side":signal["direction"],
+  "status":"PREPARED","stake":DEMO_STAKE,"payout":None,
+  "profit":None,"settled_at":None,
+  "details":{"strategy":VERSION,"expiry_seconds":30,"account_mode":"PRACTICE",
+             "trigger":signal,"swing":analysis.get("swing"),
+             "fib_levels":analysis.get("levels"),"broker_id":None,
+             "order_accepted":False}
+ }
+ if not record(record_data):
+  update(last_attempt={"sent":False,"reason":"Não foi possível reservar registro seguro"})
+  return
+ try:
+  outcome=rpc(proc,q,"fib_demo_order",timeout=15,
+              strategy=VERSION,expires_in=30,stake=DEMO_STAKE,
+              asset=signal["asset"],direction=signal["direction"],
+              observed_at=float(signal["when"]))
+  record_data["payout"]=outcome.get("catalog_payout")
+  details=record_data["details"]
+  details["broker_id"]=str(outcome.get("id")) if outcome.get("id") is not None else None
+  details["request_result"]=str(outcome.get("reason",""))[:160]
+  details["order_accepted"]=bool(outcome.get("sent"))
+  details["payout_type"]="TURBO_CATALOG_INDICATIVE_NOT_BLITZ_VERIFIED"
+  if outcome.get("sent") and outcome.get("mode")=="PRACTICE" and outcome.get("duration")==30:
+   sent=float(outcome.get("sent_at",time.time()))
+   details["expected_expiry"]=datetime.datetime.fromtimestamp(sent+30,datetime.timezone.utc).isoformat()
+   record_data["status"]="OPEN"
+   if record(record_data):
+    with GUARD: current=dict(record_data)
+    score()
+    update(last_attempt={"sent":True,"asset":signal["asset"],
+                         "direction":signal["direction"],
+                         "broker_id":details["broker_id"]})
+    print("FIB_DEMO_ORDER_CONFIRMED "+signal["asset"]+" "+signal["direction"]+
+          " id="+details["broker_id"],flush=True)
+   return
+  record_data["status"]="UNKNOWN" if outcome.get("uncertain") else "REJECTED"
+  record(record_data)
+  update(last_attempt={"sent":False,"asset":signal["asset"],
+                       "reason":str(outcome.get("reason","A Bulex não confirmou a ordem"))[:180]})
+ except Exception as exc:
+  record_data["status"]="UNKNOWN"
+  record_data["details"]["request_result"]=type(exc).__name__
+  record(record_data)
+  update(last_attempt={"sent":False,"reason":"Envio incerto: "+type(exc).__name__})
+  print("FIB_DEMO_ORDER_UNCERTAIN "+type(exc).__name__,flush=True)
+
+def settle_demo(proc,q):
+ global current
+ if not current or current["status"]!="OPEN":return False
+ item=dict(current)
+ details=dict(item["details"])
+ expiry=details.get("expected_expiry")
+ if not expiry:return True
+ exp_ts=datetime.datetime.fromisoformat(expiry).timestamp()
+ if time.time()<exp_ts+3:return True
+ broker_id=details.get("broker_id")
+ if not broker_id:
+  update(blocked_reason="Sem ID confirmado; revisar operação")
+  return True
+ try:
+  outcome=rpc(proc,q,"fib_demo_result",timeout=11,order_id=broker_id)
+  if outcome.get("mode")!="PRACTICE":raise RuntimeError("Resultado fora da conta demo")
+  mapping={"win":"WIN","loose":"LOSS","equal":"EMPATE","loss":"LOSS","tie":"EMPATE"}
+  status=mapping.get(str(outcome.get("result","")).lower())
+  if status is None:
+   raise RuntimeError("Resultado do broker desconhecido")
+  item["status"]=status
+  item["profit"]=float(outcome["profit"])
+  item["settled_at"]=datetime.datetime.now(datetime.timezone.utc).isoformat()
+  details["broker_result"]=str(outcome["result"])
+  item["details"]=details
+  if record(item):
+   with GUARD:current=None
+   score()
+   print("FIB_DEMO_SETTLED "+item["asset"]+" "+status+" broker="+broker_id,flush=True)
+ except Exception as exc:
+  update(last_error="Aguardando resultado DEMO: "+type(exc).__name__)
+  # Do not treat a missing result as LOSS. Unknown orders block new entries.
+  if time.time()>exp_ts+100:
+   item["status"]="UNKNOWN"
+   item["details"]["request_result"]="Confirmação do resultado indisponível"
+   record(item)
+ return True
+
+def main_worker():
+ global current
+ refresh_records()
+ while True:
+  proc=None
+  try:
+   email=(os.getenv("BULLEX_EMAIL") or "").strip()
+   password=os.getenv("BULLEX_PASSWORD")
+   if not email or not password:raise RuntimeError("Credenciais não configuradas")
+   if not (ROOT/"vendor/bullexapi/stable_api.py").exists():
+    subprocess.run([sys.executable,str(ROOT/"bootstrap.py")],check=True,timeout=150,
+                   stdout=subprocess.DEVNULL)
+   proc=subprocess.Popen([sys.executable,"-u",str(ROOT/"worker.py")],
+                         cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL,text=True,bufsize=1)
+   q=queue.Queue()
+   threading.Thread(target=reader,args=(proc,q),daemon=True).start()
+   session=rpc(proc,q,"connect",timeout=55,email=email,password=password)
+   if session.get("mode")!="PRACTICE":raise RuntimeError("Conta não é PRACTICE")
+   update(connected=True,account_mode="PRACTICE",auth_status="CONNECTED",
+          balance_demo=session.get("balance"),last_error=None)
+   catalog=rpc(proc,q,"market",timeout=20,payout=80.01)
+   assets=[a["asset"] for a in catalog.get("assets",[]) if a.get("open")]
+   selected=[]
+   for asset in assets[:5]:
     try:
-        line=q.get(timeout=timeout)
-    except queue.Empty:
-        raise RuntimeError("Broker 30s RPC timed out")
-    if not line:
-        raise RuntimeError("Broker worker stopped")
-    result=json.loads(line)
-    if not result.get("ok"):
-        raise RuntimeError(str(result.get("error","Broker call failed"))[:120])
-    return result.get("data",{})
-
-def read_worker(proc,q):
-    for line in proc.stdout:
-        q.put(line)
-    q.put(None)
-
-def worker():
-    refresh_store()
-    while True:
-        proc=None
-        try:
-            email=(os.getenv("BULLEX_EMAIL") or "").strip()
-            password=os.getenv("BULLEX_PASSWORD")
-            if not email or not password:
-                raise RuntimeError("Credenciais ausentes")
-            if not (ROOT/"vendor/bullexapi/stable_api.py").exists():
-                subprocess.run([sys.executable,str(ROOT/"bootstrap.py")],
-                               check=True,timeout=150,stdout=subprocess.DEVNULL)
-            proc=subprocess.Popen([sys.executable,"-u",str(ROOT/"worker.py")],
-                                  cwd=ROOT,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                                  stderr=subprocess.DEVNULL,text=True,bufsize=1)
-            q=queue.Queue()
-            threading.Thread(target=read_worker,args=(proc,q),daemon=True).start()
-            result=send(proc,q,"connect",timeout=55,email=email,password=password)
-            if result.get("mode")!="PRACTICE":
-                raise RuntimeError("Apenas conta demonstrativa")
-            update(connected=True,auth_status="CONNECTED",last_error=None)
-            data=send(proc,q,"market",payout=80.01,timeout=20)
-            preferred=[a["asset"] for a in data.get("assets",[])
-                       if a.get("open") and a.get("payout",0)>80]
-            if not preferred:
-                update(collecting=False,last_error="Nenhum mercado aberto com payout verificado.")
-                time.sleep(20)
-                continue
-            # Follow only a small set of native 30-second streams; each must
-            # prove it actually produces changing broker observations.
-            assets=[]
-            errors=[]
-            for asset in preferred[:5]:
-                try:
-                    started=send(proc,q,"quad30_start",asset=asset,timeout=23)
-                    if started.get("subscribed"):
-                        assets.append(asset)
-                    else:
-                        errors.append(asset+": "+str(started.get("reason","sem streaming")))
-                except Exception as exc:
-                    errors.append(asset+": "+type(exc).__name__)
-            update(sample_assets=assets,collecting=bool(assets),
-                   last_error="; ".join(errors[:3]) if errors and not assets else None)
-            print("TOP30_SUBSCRIPTIONS "+json.dumps({"assets":assets,"errors":errors[:3]}),flush=True)
-            if not assets:
-                raise RuntimeError("A corretora não confirmou fluxo nativo de 30s")
-            iteration=0
-            seen_fresh=set()
-            while True:
-                focus=lab.current["asset"] if lab.current else None
-                scanning=[focus] if focus else assets
-                for asset in scanning:
-                    try:
-                        snapshot=send(proc,q,"quad30_snapshot",asset=asset,timeout=8)
-                        if not snapshot.get("available"):
-                            continue
-                        if snapshot.get("changed") and asset not in seen_fresh:
-                            seen_fresh.add(asset)
-                            print("TOP30_LIVE_UPDATES_CONFIRMED "+asset,flush=True)
-                        update(last_asset=asset,last_poll=time.time(),
-                               live_candles=list(snapshot.get("closed",[]))[-24:],
-                               live_current=snapshot.get("current"),
-                               live_quote_age=snapshot.get("quote_age"),
-                               live_fresh=bool(snapshot.get("fresh")))
-                        if lab.current:
-                            done=lab.settle(snapshot)
-                            if done:
-                                persist(done)
-                        if lab.current:
-                            update_ui()
-                            continue
-                        current=snapshot.get("current")
-                        if not current:
-                            continue
-                        planned=float(snapshot.get("now",0))
-                        news=news_guard(asset,planned)
-                        update(last_news=news)
-                        proposed=lab.inspect(snapshot,news_blocked=bool(news["blocked"]))
-                        update_ui()
-                        if proposed:
-                            persist(proposed)
-                    except Exception as exc:
-                        update(last_error="Leitura 30s: "+type(exc).__name__)
-                        print("TOP30_STREAM_DIAG "+type(exc).__name__,flush=True)
-                iteration+=1
-                if iteration%240==0:
-                    refresh_store()
-                time.sleep(.35 if focus else .4)
-        except Exception as exc:
-            category=type(exc).__name__
-            message=str(exc)
-            print("TOP30_CONNECT_DIAG "+category+": "+message[:140],flush=True)
-            update(connected=False,collecting=False,auth_status="DATA_OR_CONNECTION_ERROR",
-                   last_error="Fluxo 30s indisponível: "+message[:110])
-            if "Login recusado" in message or "2FA" in message:
-                update(auth_status="AUTHENTICATION_REQUIRED")
-                return
-            time.sleep(60)
-        finally:
-            if proc and proc.poll() is None:
-                proc.terminate()
+     started=rpc(proc,q,"quad30_start",timeout=23,asset=asset)
+     if started.get("subscribed"):selected.append(asset)
+    except Exception as exc:
+     print("FIB_STREAM_SUBSCRIBE_DIAGNOSTIC "+type(exc).__name__,flush=True)
+   if not selected:raise RuntimeError("Nenhum fluxo real de 30s confirmado")
+   update(collecting=True)
+   print("FIB_REAL_STREAMS "+json.dumps(selected),flush=True)
+   last_catalog=time.time()
+   cycle=0
+   while True:
+    if current and current["status"]=="OPEN":
+     settle_demo(proc,q)
+     time.sleep(.6)
+     continue
+    # An unresolved order is not retried; manual review required.
+    if current and current["status"] in ("UNKNOWN","PREPARED"):
+     update(blocked_reason="Ordem em estado incerto; verificar histórico DEMO")
+    if time.time()-last_catalog>12:
+     try:
+      catalog=rpc(proc,q,"market",timeout=16,payout=80.01)
+      last_catalog=time.time()
+     except Exception as e:
+      update(last_error="Payout não atualizado: "+type(e).__name__)
+    for asset in selected:
+     snapshot=rpc(proc,q,"quad30_snapshot",asset=asset,timeout=8)
+     if not snapshot.get("available"):continue
+     analysis=analyze(asset,snapshot)
+     update(last_asset=asset,fib=analysis,reason=analysis["reason"],
+            live_candles=(snapshot.get("closed") or [])[-28:],
+            live_current=snapshot.get("current"),
+            live_fresh=bool(snapshot.get("fresh")),
+            live_quote_age=snapshot.get("quote_age"),
+            last_poll=time.time())
+     proposed=analysis.get("signal")
+     if not proposed:continue
+     news=news_guard(asset,float(snapshot["now"]))
+     update(news=news)
+     if news.get("blocked"):continue
+     if current:continue
+     open_demo(proc,q,proposed,analysis)
+     if current:break
+    cycle+=1
+    if cycle%80==0:score()
+    time.sleep(.30)
+  except Exception as e:
+   update(connected=False,collecting=False,
+          auth_status="DATA_OR_CONNECTION_ERROR",
+          last_error="Integração Bulex: "+type(e).__name__+" "+str(e)[:125])
+   print("FIB_CONNECT_DIAGNOSTIC "+type(e).__name__+" "+str(e)[:145],flush=True)
+   if "Login recusado" in str(e) or "2FA" in str(e):return
+   time.sleep(45)
+  finally:
+   if proc and proc.poll() is None:proc.terminate()
 
 def page():
-    return """<!doctype html>
-<html lang="pt-BR"><head>
+ return """<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Toque Invertido · CALL 30 Segundos | Bulex Radar</title>
+<title>Fibonacci 30s · Bulex DEMO</title>
 <style>
-*{box-sizing:border-box} :root{color-scheme:dark}
-body{margin:0;background:#0a101b;color:#eff6ff;font-family:system-ui,-apple-system,sans-serif}
-main{max-width:750px;margin:auto;padding:22px 15px 55px}
-h1{font-size:26px;margin:5px 0}h2{font-size:19px;margin:0 0 12px}
-p{color:#aabdce;line-height:1.5}a{color:#92bfff}
-header p{font-size:14px}.kicker{font-size:12px;color:#9bb8ff;letter-spacing:1.3px;font-weight:800}
-.card{background:#131f2f;border:1px solid #30435a;border-radius:17px;padding:17px;margin-top:16px}
-.status{font-weight:750;color:#91ebbe}.muted{color:#aabdce;font-size:13px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.metric{padding:15px;background:#1a2a40;border:1px solid #2c4363;border-radius:12px}
-.metric strong{display:block;font-size:26px;margin-top:7px}
-.interval{display:inline-block;border:1px solid #4c6ca0;border-radius:10px;padding:5px 9px;color:#c5dfff}
-.zones{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:14px 0}
-.zone{background:#26354b;border:1px solid #3b5273;border-radius:10px;padding:12px 4px;text-align:center;font-size:13px}
-.zone.on{background:#295740;color:#e9ffef;border-color:#50dea0;font-weight:800}
-.line{display:flex;justify-content:space-between;gap:10px;color:#aebfd7;font-size:13px}
-.slab{padding:13px 0;border-top:1px solid #30435a}
-.clock{font-size:23px;font-weight:800;color:#b4c7ff}
-.score{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.score b{font-size:21px}
-.green{color:#7ae9b6}.red{color:#ffacac}
-small{color:#99b1cb}
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#090f1b;color:#ebf3ff;font-family:system-ui,-apple-system,sans-serif}
+main{max-width:760px;margin:auto;padding:22px 16px 55px}
+h1{font-size:28px;margin:6px 0}h2{font-size:19px;margin:2px 0 12px}
+h3{font-size:16px;margin:14px 0}
+p{line-height:1.5;color:#afc2d9}a{color:#a3c5ff}
+.card{background:#121e30;border:1px solid #2b405e;border-radius:16px;padding:17px;margin-top:15px}
+.header{font-size:12px;letter-spacing:1.2px;color:#a2befe;font-weight:800}
+.pill{border-radius:9px;border:1px solid #3b6086;padding:5px 9px;font-size:12px}
+.row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:11px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.metric{background:#1a2b42;border:1px solid #304868;border-radius:12px;padding:12px}
+.metric strong{display:block;font-size:26px;margin-top:5px}
+.muted{font-size:13px;color:#aebfd5}
+.green{color:#62e0a2}.red{color:#ff939e}.gold{color:#ffd48e}
+.divider{border-top:1px solid #293b54;margin:12px 0}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style></head><body><main>
-<header><div class="kicker">LABORATÓRIO · SOMENTE SIMULAÇÃO</div>
-<h1>Toque no Teto Invertido · CALL 30s</h1>
-<p>Teste invertido: quando a vela real de 30s tocar de baixo para cima o teto do quadrante, simular CALL com expiração de 30 segundos. O objetivo é verificar se a continuação supera a reversão anterior.</p>
-</header>
-<div class="card"><div class="row"><strong id="connected">Verificando Bulex…</strong>
-<span class="interval">Gráfico 30s · Expiração 30s</span></div>
-<p class="muted" id="server-error"></p>
-<p class="muted">Ativo: <strong id="asset">—</strong> · <span id="updated">Aguardando dados</span></p>
-<p class="muted">Dados de ticks/candles devem ser observados da corretora, não reconstruídos por suposição.</p>
-</div>
-<div class="card"><h2>Velas reais Bulex · 30s</h2>
-<p class="muted" id="live-label">Aguardando fluxo nativo da corretora…</p>
-<div id="live-chart" style="width:100%;min-height:190px;overflow:hidden"></div>
-</div>
-<div class="card"><h2>Quadrante do bloco</h2>
-<div class="line"><span>Máxima: <strong id="maximum">—</strong></span><span>Mínima: <strong id="minimum">—</strong></span></div>
-<div class="zones"><div class="zone" id="zone-1">Q1</div><div class="zone" id="zone-2">Q2</div>
-<div class="zone" id="zone-3">Q3</div><div class="zone" id="zone-4">Q4</div></div>
-<p>Linha superior do quadrante: <strong id="ceiling">—</strong></p>
-<p class="muted" id="block-status">Esperando sequência de velas de 30 segundos.</p>
-</div>
+<div class="header">BULEX · FIBONACCI · CONTA DEMONSTRATIVA</div>
+<h1>Fibonacci Trend 30s</h1>
+<p>Retratação de 38,2%, 50% e 61,8% a favor do impulso principal. CALL na alta, PUT na baixa. O sinal usa velas de 30s concluídas e cotação nova da Bulex.</p>
 <div class="card">
-<h2>Entrada virtual CALL</h2><p class="muted">Janela: segundos 30–35 da vela M1. O toque precisa ser observado de baixo para cima na linha do teto. Não haverá operação na corretora.</p>
-<div class="row"><span class="muted">Próxima janela de entrada</span><strong class="clock" id="entry-window">—</strong></div>
-<div id="active"><p class="muted">Nenhuma entrada virtual ativa.</p></div>
-<p class="muted">Placar: <span id="storage">Memória temporária (não salvo no Supabase)</span></p>
+ <div class="row"><strong id="connection">Consultando corretora…</strong><span class="pill">DEMO · 30s</span></div>
+ <p id="armed">Operações DEMO não ativadas</p>
+ <p class="muted" id="last-error"></p>
+ <p class="muted">Aposta: 1 unidade DEMO · máx. 3 entradas/dia · limite de 2 LOSS/dia · sem martingale · conta real bloqueada</p>
 </div>
-<div class="card">
-<h2>Placar WIN / LOSS · apenas CALL invertido v2</h2>
-<div class="two">
-<div class="metric"><small>WIN virtual</small><strong class="green" id="wins">0</strong></div>
-<div class="metric"><small>LOSS virtual</small><strong class="red" id="losses">0</strong></div>
+<div class="card"><h2>Leitura Fibonacci ao vivo</h2>
+ <p>Ativo: <strong id="asset">—</strong> · <span id="freshness">Aguardando preços…</span></p>
+ <div class="row"><span>Tendência: <b id="trend">—</b></span><span>Filtro: <b id="reason">—</b></span></div>
+ <div class="divider"></div>
+ <div class="row"><span>Máxima da perna: <b id="high">—</b></span><span>Mínima: <b id="low">—</b></span></div>
+ <div class="row"><span>38,2%: <b id="fib38">—</b></span><span>50%: <b id="fib50">—</b></span><span>61,8%: <b id="fib61">—</b></span></div>
+ <p class="muted" id="quote">Aguardando velas reais de 30 segundos.</p>
 </div>
-<div class="metric" style="margin-top:10px"><small>Assertividade observada</small><strong id="rate">—</strong></div>
-<h2 style="margin-top:24px">Ativos com 70%+ e pelo menos 30 resultados</h2>
-<div id="elite"><p class="muted">Ainda sem amostra suficiente.</p></div>
-<h2 style="margin-top:24px">Resultados por ativo</h2>
-<div id="per-asset"></div>
-<h2 style="margin-top:24px">Últimas simulações</h2>
-<div id="recent"></div>
+<div class="card"><h2>Operação na Bulex DEMO</h2>
+ <div id="active"><p class="muted">Nenhuma ordem DEMO confirmada.</p></div>
+ <p class="muted" id="attempt">Sem tentativas recentes.</p>
+ <p class="muted">Banco de dados: <strong id="storage">—</strong></p>
 </div>
-<div class="card"><h2>Filtro de notícias</h2>
-<a href="https://br.investing.com/economic-calendar/" target="_blank" rel="noopener noreferrer">Calendário Investing.com</a>
-<p class="muted" id="news">Filtro automático requer horários informados manualmente. Não verificado não significa ausência de notícias.</p></div>
-<script src="/paper.js" defer></script></main></body></html>"""
+<div class="card"><h2>Placar confirmado pela corretora</h2>
+ <div class="grid">
+ <div class="metric"><small>WIN</small><strong class="green" id="wins">0</strong></div>
+ <div class="metric"><small>LOSS</small><strong class="red" id="losses">0</strong></div>
+ <div class="metric"><small>Assertividade</small><strong id="rate">—</strong></div></div>
+ <p class="muted">Somente ordens confirmadas pela Bulex contam. Operações sem resultado permanecem pendentes.</p>
+ <h3>Histórico de ordens DEMO</h3><div id="recent">Aguardando a primeira operação.</div>
+</div>
+<div class="card"><h2>Notícias</h2>
+ <p class="muted" id="news">O calendário externo não é automaticamente sincronizado.</p>
+ <a href="https://br.investing.com/economic-calendar/" target="_blank" rel="noopener noreferrer">Consultar calendário Investing.com</a>
+</div>
+<script src="/paper.js" defer></script>
+</main></body></html>"""
 
 class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        p=urlparse(self.path).path
-        if p not in ("/","/health","/status","/paper.js"):
-            self.send_error(404);return
-        if p=="/":
-            body=page().encode("utf-8")
-            typ="text/html; charset=utf-8"
-        elif p=="/paper.js":
-            body=pathlib.Path(__file__).with_name("paper_dashboard.js").read_bytes()
-            typ="text/javascript; charset=utf-8"
-        else:
-            with _lock:
-                snapshot=dict(state)
-            body=json.dumps(dict(snapshot,timestamp=time.time())).encode("utf-8")
-            typ="application/json"
-        self.send_response(200)
-        self.send_header("Content-Type",typ)
-        self.send_header("Cache-Control","no-store")
-        self.send_header("Content-Length",str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-    def do_HEAD(self):
-        if urlparse(self.path).path not in ("/","/health","/status","/paper.js"):
-            self.send_error(404);return
-        self.send_response(200);self.end_headers()
-    def do_POST(self):
-        self.send_error(403,"Broker orders disabled - 30s paper research only")
+ def do_GET(self):
+  p=urlparse(self.path).path
+  if p not in ("/","/health","/status","/paper.js"):
+   self.send_error(404);return
+  if p=="/":
+   body=page().encode()
+   mime="text/html; charset=utf-8"
+  elif p=="/paper.js":
+   body=pathlib.Path(__file__).with_name("paper_dashboard.js").read_bytes()
+   mime="text/javascript; charset=utf-8"
+  else:
+   with GUARD: snapshot=dict(state)
+   body=json.dumps(dict(snapshot,timestamp=time.time())).encode()
+   mime="application/json"
+  self.send_response(200)
+  self.send_header("Content-Type",mime)
+  self.send_header("Cache-Control","no-store")
+  self.send_header("Content-Length",str(len(body)))
+  self.end_headers()
+  self.wfile.write(body)
+ def do_POST(self):
+  self.send_error(403,"Public endpoint cannot send financial orders")
 
 if __name__=="__main__":
-    threading.Thread(target=worker,daemon=True).start()
-    ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT",10000))),Handler).serve_forever()
+ threading.Thread(target=main_worker,daemon=True).start()
+ ThreadingHTTPServer(("0.0.0.0",int(os.getenv("PORT",10000))),Handler).serve_forever()
