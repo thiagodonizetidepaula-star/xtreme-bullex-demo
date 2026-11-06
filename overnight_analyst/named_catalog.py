@@ -55,7 +55,7 @@ def _condition(code, rows, index):
     history = rows[index-20:index]
     if len(history) != 20 or any(
         rows[j]["ts"] - rows[j-1]["ts"] != 60
-        for j in range(index-20, index+1)
+        for j in range(index-19, index+1)
     ):
         return False
     scale = median(b["h"]-b["l"] for b in history)
