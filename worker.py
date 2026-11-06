@@ -127,6 +127,27 @@ def dispatch(c):
             items.append({'asset':asset,'candles':closed})
         return {'now':now,'items':items,'ready':len(items),'fresh_closed':fresh,
                 'total':len(wanted),'errors':errors}
+    if op=='paper_quote':
+        # Broker-observed *current M1* opening quote, read-only. Never sends orders.
+        now=broker_now()
+        target=int(c['entry_at'])
+        if not 0<=now-target<=8:
+            return {'available':False,'reason':'Fora da janela de cotação prospectiva','now':now}
+        asset=c['asset']
+        if asset not in api.get_all_ACTIVES_OPCODE():
+            return {'available':False,'reason':'Ativo indisponível','now':now}
+        with stage('observação do preço de abertura M1',6):
+            bars=api.get_candles(asset,60,4,int(now))
+        if not isinstance(bars,list):
+            return {'available':False,'reason':'Cotação M1 indisponível','now':now}
+        for b in bars:
+            try:
+                if int(b['from'])==target and float(b['open'])>0:
+                    return {'available':True,'source':'BROKER_M1_OPEN_PROXY',
+                            'from':target,'open':float(b['open']),'now':now}
+            except (KeyError,TypeError,ValueError):
+                continue
+        return {'available':False,'reason':'Vela M1 atual ainda não entregue pela corretora','now':now}
     if op=='lab_candles':
         # Historical study is read-only. App blocks this while the trading
         # thread is active to avoid delaying real-time PRACTICE execution.
