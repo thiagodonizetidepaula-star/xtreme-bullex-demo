@@ -5,11 +5,14 @@ from urllib.parse import urlparse
 from anomaly_probe import AnomalyProbe
 from gap_hypotheses import build_hypotheses, clean_candles
 from named_catalog import discover_named
+from paper_simulator import PaperSimulator, timestamp
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 probe=AnomalyProbe()
 studies_by_key={}
 new_studies_by_key={}
-state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING","named_strategies":[],"strategies_saved":0,"storage_error":None,"new_strategies_saved":0,"new_named_strategies":[],"radar_storage":"DISCONNECTED"}
+paper=PaperSimulator()
+paper_scoreboard=[]
+state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[],"auth_status":"INITIALIZING","named_strategies":[],"strategies_saved":0,"storage_error":None,"new_strategies_saved":0,"new_named_strategies":[],"radar_storage":"DISCONNECTED","paper_storage":"INICIALIZANDO","paper_current":None,"paper_recent":[],"paper_scoreboard":[],"paper_error":None}
 guard=threading.RLock()
 def update(**fields):
     with guard:state.update(fields)
@@ -120,10 +123,95 @@ def persist_new_research(studies):
         update(radar_storage="ERROR")
         print("RADAR_CATALOG_DIAGNOSTIC: "+type(exc).__name__,flush=True)
 
+def publish_paper():
+    summary=paper.preview()
+    update(paper_current=summary["current"],paper_recent=summary["recent"],
+           paper_scoreboard=list(paper_scoreboard))
+
+def refresh_paper():
+    try:
+        report=gateway("GET","paper")
+        paper.restore(report.get("trades",[]))
+        paper_scoreboard[:]=report.get("scoreboard",[])
+        update(paper_storage="CONNECTED",paper_error=None)
+        publish_paper()
+        return True
+    except Exception as exc:
+        update(paper_storage="ERROR",paper_error=type(exc).__name__)
+        print("PAPER_STORAGE_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+        publish_paper()
+        return False
+
+def save_paper(trade):
+    if not trade:
+        return False
+    try:
+        result=gateway("POST","paper-upsert",{"trades":[dict(trade)]})
+        if not result.get("ok"):
+            raise RuntimeError("Virtual ledger write refused")
+        update(paper_storage="CONNECTED",paper_error=None)
+        publish_paper()
+        refresh_paper()
+        return True
+    except Exception as exc:
+        update(paper_storage="ERROR",paper_error=type(exc).__name__)
+        print("PAPER_STORAGE_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+        publish_paper()
+        return False
+
+def track_paper(proc,q):
+    """Focused paper lifecycle, with prospective entry and real broker M1 close."""
+    trade=paper.active()
+    if not trade:
+        return False
+    now=time.time()
+    asset=trade["asset"]
+    entry=timestamp(trade["entry_at"])
+    expiry=timestamp(trade["expiry_at"])
+    if trade["status"]=="AGENDADA":
+        if now<entry:
+            time.sleep(min(1.0,max(0.05,entry-now)))
+            return True
+        if now<=entry+8:
+            try:
+                quote=rpc(proc,q,"paper_quote",timeout=9,asset=asset,entry_at=int(entry))
+                if quote.get("available"):
+                    registered=paper.confirm_entry(asset,int(entry),quote,float(quote["now"]))
+                    if registered:
+                        save_paper(registered)
+            except Exception as exc:
+                print("PAPER_QUOTE_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+            publish_paper()
+            time.sleep(0.3)
+            return True
+        invalid=paper.progress(asset,[],now)
+        if invalid:
+            save_paper(invalid)
+        return True
+    if trade["status"]=="EM_ANDAMENTO":
+        if now<expiry:
+            time.sleep(min(1.5,max(0.05,expiry-now)))
+            return True
+        try:
+            data=rpc(proc,q,"lab_candles",asset=asset,timeout=35)
+            closed=clean_candles(data.get("candles",[]),data["now"])
+            finished=paper.progress(asset,closed,float(data["now"]))
+        except Exception as exc:
+            print("PAPER_SETTLEMENT_DIAGNOSTIC: "+type(exc).__name__,flush=True)
+            finished=paper.progress(asset,[],time.time())
+        if finished:
+            save_paper(finished)
+        publish_paper()
+        time.sleep(0.5)
+        return True
+    return False
+
 def worker():
     refresh_catalog()
     refresh_new_catalog()
+    refresh_paper()
     last_prune=0
+    rotation=0
     while True:
         proc=None
         if time.time()-last_prune>6*3600:
@@ -146,10 +234,18 @@ def worker():
             update(connected=True,last_error=None,auth_status="CONNECTED")
             seen=set()
             while True:
+                if paper.active():
+                    track_paper(proc,q)
+                    continue
                 data=rpc(proc,q,"market",payout=80.01,timeout=25)
                 assets=[a for a in data.get("assets",[]) if a.get("open") and a.get("payout",0)>80]
-                # Rotate through available markets in batches, no order execution.
-                for a in assets[:30]:
+                # Rotate research assets to preserve a fresh next-minute paper-entry window.
+                if assets:
+                    selected=[assets[(rotation+i)%len(assets)] for i in range(min(10,len(assets)))]
+                    rotation=(rotation+len(selected))%len(assets)
+                else:
+                    selected=[]
+                for a in selected:
                     asset=a["asset"]
                     snapshot=rpc(proc,q,"lab_candles",asset=asset,timeout=35)
                     if snapshot.get("source")!="PRACTICE":continue
@@ -181,14 +277,22 @@ def worker():
                     # New deterministic, named price-microstructure research.
                     # Separate datastore and validation from legacy hypotheses.
                     novel=discover_named(asset,clean,snapshot["now"],payout=a.get("payout",80.))
+                    # This prepares a *future* entry only, never retroactively fabricates fills.
+                    if state["paper_storage"]=="CONNECTED":
+                        scheduled=paper.scheduled(asset,clean,snapshot["now"],novel)
+                        if scheduled:
+                            save_paper(scheduled)
                     persist_new_research(novel)
                     saved=persist_research(studies,findings,rows)
                     if saved==len(rows) and state["storage"]=="CONNECTED":
                         for b in rows:
                             seen.add((b["asset"],int(datetime.datetime.fromisoformat(b["candle_time"]).timestamp())))
                         if len(seen)>150000:seen.clear()
+                    if paper.active():
+                        break
                     time.sleep(1)
-                time.sleep(60)
+                if not paper.active():
+                    time.sleep(4)
         except Exception as e:
             if not (os.getenv("BULLEX_EMAIL") or "").strip() or not os.getenv("BULLEX_PASSWORD"):
                 category="CREDENTIALS_MISSING"
@@ -242,7 +346,7 @@ def status_html(snapshot):
     radar_storage=html.escape(str(snapshot.get("radar_storage","DISCONNECTED")))
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="30">
+
 <title>Radar de Anomalias | Bulex Demo</title>
 <style>
 :root{{color-scheme:dark}} *{{box-sizing:border-box}} body{{margin:0;background:#090f1a;color:#edf3ff;font-family:system-ui,-apple-system,Arial,sans-serif}}
@@ -254,6 +358,14 @@ main{{max-width:660px;margin:0 auto;padding:26px 18px 50px}} h1{{font-size:26px;
 .metric{{background:#111c2c;border:1px solid #27354b;border-radius:15px;padding:15px}}
 .metric strong{{display:block;font-size:26px;margin:6px 0}} .metric span{{font-size:12px;color:#aebfd7}}
 .study{{border-top:1px solid #27354b;padding:13px 0}} .study strong{{font-size:15px}} .study .small{{margin-top:7px;color:#aebfd7}}
+.paper-trade,.paper-study{{padding:12px 0;border-top:1px solid #27354b}} .paper-trade-top{{display:flex;justify-content:space-between;gap:10px;align-items:center}}
+.paper-muted{{color:#aebfd7;font-size:12px;margin-top:6px;line-height:1.55}} .paper-clock{{font-size:17px;font-weight:800;color:#a6c1ff;margin:12px 0}}
+.paper-direction{{border:1px solid #446894;color:#b8d4ff;border-radius:10px;padding:4px 8px;font-size:12px}}
+.paper-score{{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:10px 0}}
+.paper-score b{{font-size:21px}} .paper-score span{{color:#aebfd7;font-size:12px}}
+.paper-top{{display:flex;justify-content:space-between;align-items:center;gap:10px}} h2{{font-size:20px}} h3{{font-size:16px;margin-top:22px}}
+.paper-label{{font-size:11px;color:#91b7ff;letter-spacing:1px;font-weight:800}}
+.paper-num{{font-size:26px;color:#fff}}
 code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-size:14px}}
 </style></head><body><main>
 <div class="kicker">Laboratório independente · Somente leitura</div>
@@ -273,12 +385,34 @@ code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-si
 <p class="small">Esses nomes identificam pesquisas novas, não operações validadas. Sinais continuam desativados.</p>{catalog_html}</div>
 <div class="card"><strong>Novas estratégias em pesquisa · {len(novel_names)}</strong>
 <p class="small">Registro separado no Supabase: <code>{radar_storage}</code>. Testes em velas M1 já fechadas; sem médias móveis, RSI ou sinais automáticos. Resultado histórico não garante desempenho futuro.</p>{novel_html}</div>
+<div class="card">
+<div class="paper-top"><h2>Simulador de entradas M1</h2><span class="paper-label">PAPER ONLY</span></div>
+<p class="small">Entradas virtuais prospectivas. O preço de abertura da vela é uma referência, não uma execução real. A contagem e o placar são atualizados automaticamente.</p>
+<div class="paper-muted">Banco de dados: <strong id="paper-storage">INICIALIZANDO</strong> · <span id="paper-updated">Carregando</span></div>
+<div id="paper-current" class="paper-trade"><p class="paper-muted">Procurando oportunidade de simulação…</p></div>
+<div class="grid">
+<div class="metric"><span>WIN (simulado)</span><strong class="paper-num" id="paper-wins">0</strong></div>
+<div class="metric"><span>LOSS (simulado)</span><strong class="paper-num" id="paper-losses">0</strong></div>
+</div>
+<div class="metric" style="margin-top:10px"><span>Assertividade prospectiva</span><strong class="paper-num" id="paper-rate">—</strong></div>
+<h3>Estratégias com pelo menos 70% · <span id="paper-elite-count">0</span></h3>
+<p class="paper-muted">Apenas WIN/LOSS de entradas virtuais realizadas após o sinal, com 30 ou mais resultados. Sem cotação e empates ficam fora da porcentagem.</p>
+<div id="paper-qualified"><p class="paper-muted">Aguardando amostra suficiente.</p></div>
+<h3>Demais estratégias</h3>
+<div id="paper-watch"><p class="paper-muted">Aguardando dados.</p></div>
+<h3>Operações virtuais recentes</h3><div id="paper-recent"></div>
+</div>
+<div class="card"><h2>Pesquisas históricas com 70%+ · <span id="historical-total">0</span></h2>
+<p class="paper-muted">Critério separado: pelo menos 30 observações fora da amostra. Isso não é desempenho ao vivo.</p>
+<div id="historical-qualified"></div>
+</div>
+<script src="/paper.js" defer></script>
 </main></body></html>"""
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
-        if path not in ("/","/health","/status"):
+        if path not in ("/","/health","/status","/paper.js"):
             self.send_error(404)
             return
         with guard:
@@ -286,6 +420,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             body=status_html(snap).encode("utf-8")
             mime="text/html; charset=utf-8"
+        elif path=="/paper.js":
+            body=pathlib.Path(__file__).with_name("paper_dashboard.js").read_bytes()
+            mime="text/javascript; charset=utf-8"
         else:
             body=json.dumps(dict(snap,timestamp=time.time())).encode("utf-8")
             mime="application/json"
@@ -296,7 +433,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
     def do_HEAD(self):
-        if urlparse(self.path).path not in ("/","/health","/status"):
+        if urlparse(self.path).path not in ("/","/health","/status","/paper.js"):
             self.send_error(404)
             return
         self.send_response(200)
