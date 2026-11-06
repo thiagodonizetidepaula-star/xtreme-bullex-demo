@@ -150,9 +150,11 @@ def worker():
                     errors.append(asset+": "+type(exc).__name__)
             update(sample_assets=assets,collecting=bool(assets),
                    last_error="; ".join(errors[:3]) if errors and not assets else None)
+            print("TOP30_SUBSCRIPTIONS "+json.dumps({"assets":assets,"errors":errors[:3]}),flush=True)
             if not assets:
                 raise RuntimeError("A corretora não confirmou fluxo nativo de 30s")
             iteration=0
+            seen_fresh=set()
             while True:
                 focus=lab.current["asset"] if lab.current else None
                 scanning=[focus] if focus else assets
@@ -161,6 +163,9 @@ def worker():
                         snapshot=send(proc,q,"quad30_snapshot",asset=asset,timeout=8)
                         if not snapshot.get("available"):
                             continue
+                        if snapshot.get("changed") and asset not in seen_fresh:
+                            seen_fresh.add(asset)
+                            print("TOP30_LIVE_UPDATES_CONFIRMED "+asset,flush=True)
                         update(last_asset=asset,last_poll=time.time())
                         if lab.current:
                             done=lab.settle(snapshot)
@@ -232,7 +237,7 @@ small{color:#99b1cb}
 </style></head><body><main>
 <header><div class="kicker">LABORATÓRIO · SOMENTE SIMULAÇÃO</div>
 <h1>Toque no Teto · 30s</h1>
-<p>Única hipótese: quando a vela entra em outro quadrante e toca sua linha superior na segunda metade do M1, testar PUT virtual com expiração de 30 segundos.</p>
+<p>Única hipótese: a vela nova de 30s testa o teto do quadrante na segunda metade do M1. Quando o preço tocar essa linha vindo de baixo, registrar PUT virtual com expiração de 30 segundos.</p>
 </header>
 <div class="card"><div class="row"><strong id="connected">Verificando Bulex…</strong>
 <span class="interval">Gráfico 30s · Expiração 30s</span></div>
