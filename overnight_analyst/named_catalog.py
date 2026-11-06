@@ -34,13 +34,13 @@ def lower_wilson(wins, n, z=1.96):
     return (p + z*z/(2*n) - z*sqrt((p*(1-p)+z*z/(4*n))/n))/(1+z*z/n)
 
 
-def _validated(bars):
+def _validated(bars, broker_time):
     rows = {}
     for b in bars:
         try:
             t = int(b["from"])
             o, h, low, c = (float(b[k]) for k in ("open", "max", "min", "close"))
-            if t % 60 or any(not isfinite(x) or x <= 0 for x in (o,h,low,c)):
+            if t % 60 or t+60>broker_time or any(not isfinite(x) or x <= 0 for x in (o,h,low,c)):
                 continue
             if low > min(o, c) or h < max(o,c):
                 continue
@@ -73,7 +73,7 @@ def _condition(code, rows, index):
     return False
 
 
-def discover_named(asset, candles, payout=80., min_train=8):
+def discover_named(asset, candles, broker_time, payout=80., min_train=8):
     """Detect on the prior closed bar; measure next closed bar independently.
 
     Splits chronologically, chooses direction *only* in the train partition.
@@ -81,7 +81,7 @@ def discover_named(asset, candles, payout=80., min_train=8):
     """
     if not isinstance(asset, str) or not (3 <= len(asset) <= 64):
         return []
-    rows = _validated(candles)
+    rows = _validated(candles, broker_time)
     if len(rows) < 120:
         return []
     payout = float(payout)
