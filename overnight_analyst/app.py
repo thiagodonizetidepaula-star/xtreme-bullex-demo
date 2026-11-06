@@ -113,7 +113,7 @@ def track_paper(proc,q):
             return True
         try:
             data=rpc(proc,q,"lab_candles",asset=asset,timeout=35)
-            closed=clean_candles(data.get("candles",[]),data["now"])
+            closed=closed_bars(data.get("candles",[]),data["now"])
             finished=paper.progress(asset,closed,float(data["now"]))
         except Exception as exc:
             print("PAPER_SETTLEMENT_DIAGNOSTIC: "+type(exc).__name__,flush=True)
