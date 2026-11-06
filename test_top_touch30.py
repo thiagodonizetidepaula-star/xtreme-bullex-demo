@@ -22,7 +22,7 @@ def frame(now, close=198.0, fresh=False, changed=False, active_from=None):
     }
 
 class TopTouch30Tests(unittest.TestCase):
-    def test_only_new_quadrant_ceiling_put_at_30_to_35_secs(self):
+    def test_only_new_quadrant_ceiling_call_at_30_to_35_secs(self):
         ts=BASE+24*30
         self.assertEqual(ts%60,30)
         self.assertEqual(block(make_previous(),frame(ts+2)["current"])["quadrant"],4)
@@ -30,7 +30,7 @@ class TopTouch30Tests(unittest.TestCase):
         self.assertIsNone(engine.inspect(frame(ts+1,198.0)))
         signal=engine.inspect(frame(ts+2,199.8,True,True))
         self.assertIsNotNone(signal)
-        self.assertEqual(signal["direction"],"PUT")
+        self.assertEqual(signal["direction"],"CALL")
         self.assertEqual(signal["timeframe_seconds"],30)
         self.assertEqual(signal["expiry_seconds"],30)
         self.assertEqual(fromiso(signal["expiry_at"])-fromiso(signal["entry_at"]),30)
@@ -38,7 +38,7 @@ class TopTouch30Tests(unittest.TestCase):
         self.assertIsNone(engine.inspect(frame(ts+3,199.9,True,True)))
         future=frame(ts+33,195.0,True,True,active_from=ts+30)
         result=engine.settle(future)
-        self.assertEqual(result["status"],"WIN")
+        self.assertEqual(result["status"],"LOSS")
         self.assertEqual(result["exit_price"],195.0)
         self.assertIsNone(engine.current)
 
@@ -48,7 +48,7 @@ class TopTouch30Tests(unittest.TestCase):
         engine.inspect(frame(ts+1,198.0))
         engine.inspect(frame(ts+2,199.8,True,True))
         result=engine.settle(frame(ts+33,201.0,True,True,active_from=ts+30))
-        self.assertEqual(result["status"],"LOSS")
+        self.assertEqual(result["status"],"WIN")
 
     def test_missing_quote_never_fabricates_result(self):
         ts=BASE+24*30
