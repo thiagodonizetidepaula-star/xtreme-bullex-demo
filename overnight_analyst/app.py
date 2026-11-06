@@ -28,9 +28,9 @@ _lock=threading.RLock()
 state={
     "connected":False,"collecting":False,"auth_status":"STARTING",
     "orders_enabled":False,"legacy_strategies_enabled":False,
-    "research_mode":"TOP_TOUCH_30S_ONLY","timeframe_seconds":30,
+    "research_mode":"TOP_TOUCH_30S_INVERSE_ONLY","timeframe_seconds":30,
     "expiry_seconds":30,"last_error":None,
-    "storage":"INITIALIZING","storage_error":None,
+    "storage":"MEMORIA_TEMPORARIA","storage_error":None,
     "active":None,"recent":[],"scoreboard":[],
     "last_asset":None,"last_block":None,"last_observation":None,
     "last_news":{"status":"NAO_VERIFICADO","blocked":False,
@@ -65,28 +65,45 @@ def update_ui():
            last_block=dict(lab.last_block) if lab.last_block else None,
            last_observation=dict(lab.last_observation) if lab.last_observation else None)
 
+def update_scoreboard():
+    # V2 is isolated from the archived PUT trades. This counter is temporary
+    # until a dedicated secured Supabase CALL ledger is available.
+    groups={}
+    for trade in lab.history:
+        asset=trade["asset"]
+        if asset not in groups:
+            groups[asset]={"asset":asset,"wins":0,"losses":0,"ties":0,
+                           "no_quote":0,"active":0,"judged":0,"hit_rate":None}
+        target={"WIN":"wins","LOSS":"losses","EMPATE":"ties",
+                "SEM_COTACAO":"no_quote"}.get(trade.get("status"))
+        if target:
+            groups[asset][target]+=1
+    if lab.current:
+        asset=lab.current["asset"]
+        if asset not in groups:
+            groups[asset]={"asset":asset,"wins":0,"losses":0,"ties":0,
+                           "no_quote":0,"active":0,"judged":0,"hit_rate":None}
+        groups[asset]["active"]+=1
+    for group in groups.values():
+        group["judged"]=group["wins"]+group["losses"]
+        if group["judged"]:
+            group["hit_rate"]=round(100*group["wins"]/group["judged"],2)
+    update(scoreboard=list(groups.values()))
+    update_ui()
+
 def refresh_store():
-    try:
-        info=gateway("GET","top30")
-        lab.restore(info.get("trades",[]))
-        update(scoreboard=list(info.get("scoreboard",[])),
-               storage="CONNECTED",storage_error=None)
-        update_ui()
-        return True
-    except Exception as exc:
-        update(storage="ERROR",storage_error=type(exc).__name__)
-        print("TOP30_DATABASE_DIAG: "+type(exc).__name__,flush=True)
-        update_ui()
-        return False
+    update(storage="MEMORIA_TEMPORARIA",
+           storage_error="Resultados CALL v2 ainda não são persistidos no Supabase.")
+    update_scoreboard()
+    return True
 
 def persist(trade):
-    try:
-        gateway("POST","top30-upsert",{"trades":[dict(trade)]})
-        refresh_store()
-    except Exception as exc:
-        update(storage="ERROR",storage_error=type(exc).__name__)
-        print("TOP30_SAVE_DIAG: "+type(exc).__name__,flush=True)
-        update_ui()
+    # Never claim a durable save for this experimental version. Result is
+    # already maintained in runtime history by the simulator.
+    update_scoreboard()
+    print("TOP30_V2_PAPER "+str(trade.get("status"))+" "+
+          str(trade.get("asset"))+" CALL",flush=True)
+    return True
 
 def send(proc,q,op,timeout=25,**params):
     proc.stdin.write(json.dumps({"op":op,**params})+"\n")
@@ -209,7 +226,7 @@ def page():
     return """<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Toque no Teto · 30 Segundos | Bulex Radar</title>
+<title>Toque Invertido · CALL 30 Segundos | Bulex Radar</title>
 <style>
 *{box-sizing:border-box} :root{color-scheme:dark}
 body{margin:0;background:#0a101b;color:#eff6ff;font-family:system-ui,-apple-system,sans-serif}
@@ -236,8 +253,8 @@ header p{font-size:14px}.kicker{font-size:12px;color:#9bb8ff;letter-spacing:1.3p
 small{color:#99b1cb}
 </style></head><body><main>
 <header><div class="kicker">LABORATÓRIO · SOMENTE SIMULAÇÃO</div>
-<h1>Toque no Teto · 30s</h1>
-<p>Única hipótese: a vela nova de 30s testa o teto do quadrante na segunda metade do M1. Quando o preço tocar essa linha vindo de baixo, registrar PUT virtual com expiração de 30 segundos.</p>
+<h1>Toque no Teto Invertido · CALL 30s</h1>
+<p>Teste invertido: quando a vela real de 30s tocar de baixo para cima o teto do quadrante, simular CALL com expiração de 30 segundos. O objetivo é verificar se a continuação supera a reversão anterior.</p>
 </header>
 <div class="card"><div class="row"><strong id="connected">Verificando Bulex…</strong>
 <span class="interval">Gráfico 30s · Expiração 30s</span></div>
@@ -253,13 +270,13 @@ small{color:#99b1cb}
 <p class="muted" id="block-status">Esperando sequência de velas de 30 segundos.</p>
 </div>
 <div class="card">
-<h2>Entrada virtual PUT</h2><p class="muted">Janela: segundos 30–35 da vela M1. O toque precisa ser observado de baixo para cima na linha do teto. Não haverá operação na corretora.</p>
+<h2>Entrada virtual CALL</h2><p class="muted">Janela: segundos 30–35 da vela M1. O toque precisa ser observado de baixo para cima na linha do teto. Não haverá operação na corretora.</p>
 <div class="row"><span class="muted">Próxima janela de entrada</span><strong class="clock" id="entry-window">—</strong></div>
 <div id="active"><p class="muted">Nenhuma entrada virtual ativa.</p></div>
-<p class="muted">Armazenamento: <span id="storage">Carregando…</span></p>
+<p class="muted">Placar: <span id="storage">Memória temporária (não salvo no Supabase)</span></p>
 </div>
 <div class="card">
-<h2>Placar WIN / LOSS · somente esta estratégia</h2>
+<h2>Placar WIN / LOSS · apenas CALL invertido v2</h2>
 <div class="two">
 <div class="metric"><small>WIN virtual</small><strong class="green" id="wins">0</strong></div>
 <div class="metric"><small>LOSS virtual</small><strong class="red" id="losses">0</strong></div>
