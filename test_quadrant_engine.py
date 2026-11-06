@@ -57,6 +57,9 @@ class QuadrantEngineTests(unittest.TestCase):
         self.assertTrue(check("EURUSD-OTC",ts,raw=x)["blocked"])
         self.assertFalse(check("EURJPY-OTC",ts,raw=x)["blocked"])
         self.assertTrue(check("EURUSD-OTC",ts,raw="bad json")["blocked"])
+        jpy='[{"utc":"2026-11-06T13:30:00Z","currency":"JPY","impact":"high","title":"BoJ"}]'
+        self.assertTrue(check("Yen_Index",ts,raw=jpy)["blocked"])
+        self.assertTrue(check("US2000-OTC",ts,raw=x)["blocked"])
 
 if __name__=="__main__":
     unittest.main()
