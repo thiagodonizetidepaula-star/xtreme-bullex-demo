@@ -101,6 +101,10 @@ class TopTouch30:
             return None
         if not level["changed_quadrant"] or key in self.last_entry:
             return None
+        # User's timing: second half of the M1 candle, when ~30 seconds remain.
+        # Only the first five seconds of that window may trigger a 30s PUT.
+        if int(current["from"])%60!=30 or not 30<=now%60<=35:
+            return None
         if previous is None or previous[0]!=int(current["from"]):
             return None
         top=level["ceiling"]
