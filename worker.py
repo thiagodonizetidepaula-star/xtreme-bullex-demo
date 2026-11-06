@@ -136,8 +136,6 @@ def dispatch(c):
             raise ValueError('Ativo não reconhecido na Bulex DEMO.')
         if asset in quad30_state:
             return {'subscribed':True,'asset':asset,'now':now,'source':'PRACTICE'}
-        if 30 not in api.size:
-            return {'subscribed':False,'asset':asset,'reason':'Biblioteca sem candle 30s','now':now}
         with stage('histórico real de velas 30 segundos',16):
             bars=api.get_candles(asset,30,110,int(now))
         if not isinstance(bars,list) or len(bars)<25:
