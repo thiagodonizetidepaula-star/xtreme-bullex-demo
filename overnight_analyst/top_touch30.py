@@ -11,8 +11,8 @@ import math
 from datetime import datetime,timezone
 from statistics import median
 
-NAME="Toque no Teto do Quadrante 30s"
-VERSION="top-touch-30s-v1"
+NAME="Toque no Teto Invertido 30s"
+VERSION="top-touch-30s-inverse-v2"
 
 def iso(ts):
     return datetime.fromtimestamp(ts,timezone.utc).isoformat()
@@ -74,7 +74,7 @@ class TopTouch30:
         self.recent=list(rows)[:12]
 
     def inspect(self, snapshot, news_blocked=False):
-        """Offer a paper PUT only on a measured, fresh ascending touch from below."""
+        """Offer a paper CALL on a measured, fresh ceiling touch from below."""
         asset=snapshot.get("asset")
         current=snapshot.get("current")
         try:
@@ -126,7 +126,7 @@ class TopTouch30:
         trade_id=hashlib.sha256(f"{VERSION}|{asset}|{int(current['from'])}|{round(entry,3)}".encode()).hexdigest()
         trade={
             "trade_id":trade_id,"asset":asset,"strategy_name":NAME,
-            "direction":"PUT","timeframe_seconds":30,"expiry_seconds":30,
+            "direction":"CALL","timeframe_seconds":30,"expiry_seconds":30,
             "candle_start":iso(int(current["from"])),"decided_at":iso(entry),
             "entry_at":iso(entry),"expiry_at":iso(entry+30),
             "entry_price":price,"exit_price":None,
@@ -134,7 +134,7 @@ class TopTouch30:
             "block_low":level["minimum"],"block_high":level["maximum"],
             "status":"EM_ANDAMENTO","result_at":None,
             "source":"BROKER_STREAM_30S_OBSERVED",
-            "note":"Entrada PUT virtual no toque da linha superior. Cotação observada, não execução."
+            "note":"Versão invertida v2: CALL virtual no mesmo toque do teto. Sem execução na corretora."
         }
         self.last_entry[key]=trade_id
         self.current=trade
@@ -161,8 +161,8 @@ class TopTouch30:
             if math.isfinite(price) and price>0:
                 trade["exit_price"]=price
                 trade["result_at"]=iso(now)
-                trade["status"]="WIN" if price<trade["entry_price"] else (
-                    "LOSS" if price>trade["entry_price"] else "EMPATE")
+                trade["status"]="WIN" if price>trade["entry_price"] else (
+                    "LOSS" if price<trade["entry_price"] else "EMPATE")
                 self.current=None
                 self.recent.insert(0,dict(trade))
                 self.recent=self.recent[:12]
