@@ -8,7 +8,6 @@ import hashlib
 import math
 from statistics import median
 
-from .anomaly_probe import AnomalyProbe  # importable from package root in unit tests
 
 FAMILIES = {
     "GAP_REVERSE": {
