@@ -382,9 +382,9 @@ code{{overflow-wrap:anywhere;color:#aac8ff}} a{{color:#9cc0ff}} .advice{{font-si
 <p class="small">Somente dados históricos reais da conta demonstrativa. {storage_error}</p>
 <a href="/status">Ver dados técnicos (JSON)</a></div>
 <div class="card"><strong>Hipóteses nomeadas · {len(names)}</strong>
-<p class="small">Esses nomes identificam pesquisas novas, não operações validadas. Sinais continuam desativados.</p>{catalog_html}</div>
+<p class="small">Esses nomes identificam pesquisas novas, não operações validadas. Sinais continuam desativados.</p><div id="historical-catalog">{catalog_html}</div></div>
 <div class="card"><strong>Novas estratégias em pesquisa · {len(novel_names)}</strong>
-<p class="small">Registro separado no Supabase: <code>{radar_storage}</code>. Testes em velas M1 já fechadas; sem médias móveis, RSI ou sinais automáticos. Resultado histórico não garante desempenho futuro.</p>{novel_html}</div>
+<p class="small">Registro separado no Supabase: <code>{radar_storage}</code>. Testes em velas M1 já fechadas; sem médias móveis, RSI ou sinais automáticos. Resultado histórico não garante desempenho futuro.</p><div id="historical-novel">{novel_html}</div></div>
 <div class="card">
 <div class="paper-top"><h2>Simulador de entradas M1</h2><span class="paper-label">PAPER ONLY</span></div>
 <p class="small">Entradas virtuais prospectivas. O preço de abertura da vela é uma referência, não uma execução real. A contagem e o placar são atualizados automaticamente.</p>
