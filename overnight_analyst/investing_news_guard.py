@@ -51,7 +51,15 @@ def check(asset,planned_unix,raw=None):
     except (TypeError,ValueError,json.JSONDecodeError):
         return {"blocked":True,"status":"CONFIGURACAO_INVALIDA",
                 "message":"Filtro de notícias inválido; novas simulações suspensas."}
-    related={asset[:3],asset[3:6]} if isinstance(asset,str) else set()
+    market=str(asset or "").upper()
+    symbol=market.replace("-OTC","")
+    related={code for code in CURRENCIES if code in symbol}
+    if symbol.startswith("US") or symbol.endswith("USD"):
+        related.add("USD")
+    if "YEN" in symbol or symbol.endswith("JPY"):
+        related.add("JPY")
+    if "GOLD" in symbol or "XAU" in symbol:
+        related.add("USD")
     for item in windows:
         if item["currency"] in related and abs(planned_unix-item["ts"])<=15*60:
             return {"blocked":True,"status":"JANELA_NOTICIA",
