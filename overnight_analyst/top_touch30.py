@@ -99,7 +99,10 @@ class TopTouch30:
         self.previous[asset]=(int(current["from"]),price)
         if self.current or news_blocked or not snapshot.get("fresh") or not snapshot.get("changed"):
             return None
-        if not level["changed_quadrant"] or key in self.last_entry:
+        # The new half-minute candle is enough: adjacent candles often open at
+        # the exact previous close, so demanding a gap across quadrants would
+        # hide genuine touches. The observed upward crossing remains mandatory.
+        if key in self.last_entry:
             return None
         # User's timing: second half of the M1 candle, when ~30 seconds remain.
         # Only the first five seconds of that window may trigger a 30s PUT.
