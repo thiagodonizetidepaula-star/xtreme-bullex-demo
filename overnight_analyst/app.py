@@ -336,7 +336,7 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 </style></head><body><main>
 <div class="kicker">BULEX · ANÁLISE DE VELAS · 100% SOMENTE LEITURA</div>
 <h1>Radar de Regimes</h1>
-<p>Pesquisa independente de movimento de preços. A aplicação não envia ordens nem liga qualquer estratégia anterior. Procura resultados prospectivos de 30 segundos.</p>
+<p>Pesquisa independente de movimento de preços. A aplicação não envia ordens nem liga qualquer estratégia anterior. Procura resultados prospectivos de 30 segundos. Quando não existir evidência suficiente, o diagnóstico será <strong>SEM OPERAÇÃO</strong>.</p>
 <div class="card"><div class="row"><strong class="status" id="broker">Verificando conexão...</strong><span class="chip">Nenhuma ordem na corretora</span></div>
 <p class="muted" id="error">Carregando dados.</p><p class="muted">Supabase: <b id="storage">Aguardando</b> · Dados: <span id="updated">—</span></p>
 <div class="grid">
