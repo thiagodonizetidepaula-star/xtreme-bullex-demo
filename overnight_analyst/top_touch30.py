@@ -61,6 +61,7 @@ class TopTouch30:
         self.last_entry={}
         self.current=None
         self.recent=[]
+        self.history=[]
         self.last_block=None
         self.last_observation=None
 
@@ -165,6 +166,7 @@ class TopTouch30:
                     "LOSS" if price<trade["entry_price"] else "EMPATE")
                 self.current=None
                 self.recent.insert(0,dict(trade))
+                self.history.append(dict(trade))
                 self.recent=self.recent[:12]
                 return trade
         if now>expiry+4.0:
@@ -173,6 +175,7 @@ class TopTouch30:
             trade["note"]="Sem preço recente de encerramento em até quatro segundos; não é WIN/LOSS."
             self.current=None
             self.recent.insert(0,dict(trade))
+            self.history.append(dict(trade))
             self.recent=self.recent[:12]
             return trade
         return None
