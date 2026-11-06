@@ -229,6 +229,8 @@ def open_paper(asset,snapshot,analysis,payout):
         reasons=[]
         if not policy["allowed"]:reasons.append(policy["reason"])
         if news["blocked"]:reasons.append("CALENDARIO: "+str(news["status"]))
+        if float(sig.get("payout") or 0)<80:
+            reasons.append("PAYOUT INDICATIVO INFERIOR A 80%")
         if not gate["allowed"]:reasons+=gate["reasons"]
         approved=(not reasons)
         update(last_confluence={
@@ -238,6 +240,11 @@ def open_paper(asset,snapshot,analysis,payout):
           "required":gate["required"],"checks":gate["checks"],
           "reasons":reasons,"policy":policy["status"],
           "approved":approved,"news_status":news["status"]})
+        # Observe the first seconds rather than rejecting a still-forming
+        # live confirmation immediately. Never move the close-time pattern.
+        if (not approved and reasons==["PRECO_ATUAL_CONFIRMA"] and
+                float(snapshot["now"])%30<3.6):
+            continue
         if not record_decision(asset,sig,analysis,
                ("APROVADA_PAPER" if approved else
                 "SUSPENSA_ASSERTIVIDADE" if not policy["allowed"] else
