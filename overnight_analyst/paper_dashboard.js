@@ -5,7 +5,7 @@ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const price=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("pt-BR",{maximumFractionDigits:8});
 const rate=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toFixed(1).replace(".",",")+"%";
 const seconds=v=>{const x=Math.max(0,Math.ceil(v));return "00:"+String(x).padStart(2,"0");};
-let latest=null,lastUpdate=null;
+let latest=null,lastUpdate=null,clockOffset=0;
 function tradeCard(t,live){
   const exp=Date.parse(t.expiry_at);
   let text=esc(t.status);
@@ -31,6 +31,7 @@ function scoreCard(x){
 }
 function show(status){
  latest=status;lastUpdate=Date.now();
+ if(Number.isFinite(Number(status.timestamp)))clockOffset=Number(status.timestamp)-Date.now()/1000;
  $("connected").textContent=status.connected?"● Conectado à Bulex DEMO":"○ Sem conexão com a Bulex";
  $("server-error").textContent=status.last_error||"Somente leitura e simulações.";
  $("asset").textContent=status.last_asset||"Aguardando ativo";
@@ -71,6 +72,20 @@ function show(status){
    " · "+String(news.message||"Sem atualização automática.");
 }
 function tick(){
+ const window=$("entry-window");
+ if(window&&latest){
+   if(latest.active)window.textContent="EM OPERAÇÃO";
+   else if(!latest.connected)window.textContent="SEM CONEXÃO";
+   else{
+     const now=Date.now()/1000+clockOffset;
+     const sec=((now%60)+60)%60;
+     if(sec>=30&&sec<=35)window.textContent="JANELA ABERTA";
+     else{
+       const left=sec<30?30-sec:90-sec;
+       window.textContent=seconds(left);
+     }
+   }
+ }
  if(latest&&latest.active){
   const el=$("active").querySelector(".clock");
   if(el){
