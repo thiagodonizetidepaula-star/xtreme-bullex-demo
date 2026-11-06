@@ -35,7 +35,7 @@ state={
     "last_asset":None,"last_block":None,"last_observation":None,
     "last_news":{"status":"NAO_VERIFICADO","blocked":False,
                  "message":"Calendário não sincronizado automaticamente."},
-    "sample_assets":[],"last_poll":None
+    "sample_assets":[],"last_poll":None,"live_candles":[],"live_current":None,"live_quote_age":None,"live_fresh":False
 }
 
 def update(**values):
@@ -183,7 +183,11 @@ def worker():
                         if snapshot.get("changed") and asset not in seen_fresh:
                             seen_fresh.add(asset)
                             print("TOP30_LIVE_UPDATES_CONFIRMED "+asset,flush=True)
-                        update(last_asset=asset,last_poll=time.time())
+                        update(last_asset=asset,last_poll=time.time(),
+                               live_candles=list(snapshot.get("closed",[]))[-24:],
+                               live_current=snapshot.get("current"),
+                               live_quote_age=snapshot.get("quote_age"),
+                               live_fresh=bool(snapshot.get("fresh")))
                         if lab.current:
                             done=lab.settle(snapshot)
                             if done:
@@ -261,6 +265,10 @@ small{color:#99b1cb}
 <p class="muted" id="server-error"></p>
 <p class="muted">Ativo: <strong id="asset">—</strong> · <span id="updated">Aguardando dados</span></p>
 <p class="muted">Dados de ticks/candles devem ser observados da corretora, não reconstruídos por suposição.</p>
+</div>
+<div class="card"><h2>Velas reais Bulex · 30s</h2>
+<p class="muted" id="live-label">Aguardando fluxo nativo da corretora…</p>
+<div id="live-chart" style="width:100%;min-height:190px;overflow:hidden"></div>
 </div>
 <div class="card"><h2>Quadrante do bloco</h2>
 <div class="line"><span>Máxima: <strong id="maximum">—</strong></span><span>Mínima: <strong id="minimum">—</strong></span></div>
