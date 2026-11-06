@@ -11,9 +11,9 @@ from hashlib import sha256
 from math import isfinite
 
 try:
-    from .named_catalog import _condition, _validated
+    from .quadrant_engine import pattern as _condition, validated as _validated
 except ImportError:  # Running as the standalone Render entrypoint
-    from named_catalog import _condition, _validated
+    from quadrant_engine import pattern as _condition, validated as _validated
 
 FINAL = frozenset({"WIN", "LOSS", "EMPATE", "SEM_COTACAO"})
 
@@ -68,9 +68,11 @@ class PaperSimulator:
         next_open=closed_at+60
         if next_open-now<20:
             return None
-        considered=sorted(research,key=lambda x:(int(x.get("test_n",0)),float(x.get("wilson_95",0))),reverse=True)
+        considered=sorted(research,key=lambda x:x.get("rule_code",""))
         for candidate in considered:
             if candidate.get("asset")!=asset or candidate.get("direction") not in ("CALL","PUT"):
+                continue
+            if candidate.get("version")!="quadrant-v1":
                 continue
             if not _condition(candidate.get("rule_code"),rows,len(rows)-1):
                 continue
