@@ -2,11 +2,10 @@
 import os,sys,time,json,threading,subprocess,queue,datetime,urllib.request,pathlib
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
-from importlib.util import spec_from_file_location,module_from_spec
+from anomaly_probe import AnomalyProbe
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-spec=spec_from_file_location("research",pathlib.Path(__file__).with_name("research.py"))
-research=module_from_spec(spec);spec.loader.exec_module(research)
-state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False}
+probe=AnomalyProbe()
+state={"connected":False,"collecting":False,"candles_saved":0,"patterns_observed":0,"last_asset":None,"last_candle":None,"last_error":None,"storage":"DISCONNECTED","orders_enabled":False,"research_mode":"QUOTE_ANOMALIES_ONLY","legacy_strategies_enabled":False,"anomaly_count":0,"recent_anomalies":[]}
 guard=threading.RLock()
 def update(**fields):
     with guard:state.update(fields)
@@ -64,13 +63,17 @@ def worker():
                         rows.append({"asset":asset,"timeframe":1,"candle_time":datetime.datetime.fromtimestamp(ts,datetime.timezone.utc).isoformat(),
                                      "o":float(b["open"]),"h":float(b["max"]),"l":float(b["min"]),"c":float(b["close"]),"volume":None})
                     update(last_asset=asset,last_candle=rows[-1]["candle_time"] if rows else state["last_candle"],collecting=True)
-                    oos=research.discover([{"timestamp":b["from"],"open":b["open"],"close":b["close"],"high":b["max"],"low":b["min"]} for b in snapshot.get("candles",[])])
-                    update(patterns_observed=state["patterns_observed"]+len(oos))
+                    findings=probe.observe(asset,snapshot.get("candles",[]),snapshot["now"])
+                    update(**probe.summary())
+                    if findings:
+                        print("QUOTE_ANOMALIES: "+json.dumps([{"asset":e["asset"],"kind":e["kind"],"candle_time":e["candle_time"]} for e in findings]),flush=True)
                     for j in range(0,len(rows),180):
                         save(rows[j:j+180],[])
                     time.sleep(1)
                 time.sleep(60)
         except Exception as e:
+            category="BROKER_CREDENTIALS_MISSING" if not os.getenv("BULLEX_EMAIL") or not os.getenv("BULLEX_PASSWORD") else "BROKER_WORKER_OR_DATA_ERROR"
+            print("ANALYST_CONNECT_DIAGNOSTIC: "+category+" "+type(e).__name__,flush=True)
             update(connected=False,collecting=False,last_error=str(e)[:170])
             time.sleep(90)
         finally:
