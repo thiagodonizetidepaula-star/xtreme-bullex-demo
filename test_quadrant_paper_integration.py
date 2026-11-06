@@ -21,7 +21,7 @@ class TopTouch30AppTests(unittest.TestCase):
         self.assertIn("Toque no Teto",page)
         self.assertIn("Expiração 30s",page)
         self.assertIn("segundos 30–35",page)
-        self.assertIn("sem ordem",page.lower())
+        self.assertIn("Não haverá operação na corretora.",page)
 
 if __name__=="__main__":
     unittest.main()
