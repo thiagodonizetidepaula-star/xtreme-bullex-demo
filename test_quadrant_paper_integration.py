@@ -13,7 +13,9 @@ class RegimeAppTests(unittest.TestCase):
   self.assertIs(app.state["demo_orders_enabled"],False)
   self.assertFalse(hasattr(app,"open_demo"))
   self.assertFalse(hasattr(app,"fib_demo_order"))
-  self.assertEqual(len(app.state["strategies"]),3)
+  self.assertEqual(len(app.state["strategies"]),2)
+  self.assertEqual(app.state["min_accuracy"],58)
+  self.assertFalse(app.state["demo_orders_enabled"])
  def test_panel_accurately_labels_prospective_research(self):
   markup=app.page()
   self.assertIn("Radar de Regimes",markup)
