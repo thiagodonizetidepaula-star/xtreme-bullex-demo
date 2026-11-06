@@ -1,115 +1,91 @@
 (() => {
 "use strict";
-const $ = id => document.getElementById(id);
-const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
- "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-}[char]));
-const percent = value => value == null || !Number.isFinite(Number(value)) ? "—" :
- Number(value).toFixed(1).replace(".",",")+"%";
-const num = value => value == null || !Number.isFinite(Number(value)) ? "—" :
- Number(value).toLocaleString("pt-BR",{maximumFractionDigits:8});
-const clock = seconds => {
- const s=Math.max(0,Math.ceil(seconds));
- return [Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(x=>String(x).padStart(2,"0")).join(":");
-};
-let state=null,lastUpdate=0;
-function countdown(trade){
- if(!trade) return "Aguardando padrões válidos.";
- if(trade.status==="AGENDADA"){
-   const remain=(Date.parse(trade.entry_at)-Date.now())/1000;
-   return remain>0?"ENTRADA VIRTUAL EM "+clock(remain):"Aguardando cotação do início da vela…";
- }
- if(trade.status==="EM_ANDAMENTO"){
-   const remain=(Date.parse(trade.expiry_at)-Date.now())/1000;
-   return remain>0?"ENCERRAMENTO VIRTUAL EM "+clock(remain):"Aguardando fechamento da vela na Bulex…";
- }
- return trade.status;
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const price=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("pt-BR",{maximumFractionDigits:8});
+const rate=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toFixed(1).replace(".",",")+"%";
+const seconds=v=>{const x=Math.max(0,Math.ceil(v));return "00:"+String(x).padStart(2,"0");};
+let latest=null,lastUpdate=null;
+function tradeCard(t,live){
+  const exp=Date.parse(t.expiry_at);
+  let text=esc(t.status);
+  if(live){
+    const remain=(exp-Date.now())/1000;
+    text=remain>0?"EXPIRA EM "+seconds(remain):"Aguardando cotação da Bulex…";
+  }
+  return '<div class="slab"><div class="row"><strong>'+esc(t.asset)+'</strong><span class="red">PUT · 30s</span></div>'
+    +'<div class="muted">Quadrante '+esc(t.quadrant)+' · Teto '+price(t.ceiling)+'</div>'
+    +'<p class="clock">'+text+'</p>'
+    +'<div class="muted">Entrada observada: '+price(t.entry_price)
+    +' · Saída: '+price(t.exit_price)
+    +' · '+esc(new Date(t.entry_at).toLocaleTimeString("pt-BR"))
+    +' · sem ordem na corretora</div></div>';
 }
-function tradeCard(t,active=false){
- return '<div class="paper-trade"><div class="paper-trade-top"><strong>'+esc(t.strategy_name)
-   +'</strong><span class="paper-direction">'+esc(t.direction)+'</span></div>'
-   +'<div class="paper-muted">'+esc(t.asset)+' · preço de referência '+num(t.entry_price)+'</div>'
-   +'<div class="paper-clock">'+esc(active?countdown(t):t.status)+'</div>'
-   +'<div class="paper-muted">Vencimento: '+esc(new Date(t.expiry_at).toLocaleTimeString("pt-BR"))
-   +' · registro exclusivamente virtual</div></div>';
+function scoreCard(x){
+ const w=Number(x.wins)||0,l=Number(x.losses)||0,n=w+l;
+ return '<div class="slab"><div class="score"><strong>'+esc(x.asset)
+ +'</strong><b>'+rate(n?100*w/n:null)+'</b></div>'
+ +'<div class="muted">WIN '+w+' · LOSS '+l+' · Empate '+(Number(x.ties)||0)
+ +' · Sem cotação '+(Number(x.no_quote)||0)
+ +' · Ativas '+(Number(x.active)||0)+'</div></div>';
 }
-function scoreCard(r){
- const w=Number(r.wins)||0,l=Number(r.losses)||0,n=w+l;
- return '<div class="paper-study"><strong>'+esc(r.strategy_name)
-  +'</strong><div class="paper-muted">'+esc(r.asset)
-  +'</div><div class="paper-score"><b>'+percent(n?100*w/n:null)
-  +'</b><span>WIN '+w+' · LOSS '+l+' · '+n+' operações</span></div>'
-  +'<div class="paper-muted">Empates: '+(Number(r.ties)||0)
-  +' · Sem cotação: '+(Number(r.no_quote)||0)
-  +' · Pendentes: '+(Number(r.pending)||0)+'</div></div>';
-}
-function render(value){
- state=value;lastUpdate=Date.now();
- const block=value.latest_block;
+function show(status){
+ latest=status;lastUpdate=Date.now();
+ $("connected").textContent=status.connected?"● Conectado à Bulex DEMO":"○ Sem conexão com a Bulex";
+ $("server-error").textContent=status.last_error||"Somente leitura e simulações.";
+ $("asset").textContent=status.last_asset||"Aguardando ativo";
+ $("storage").textContent=status.storage||"Não configurado";
+ const block=status.last_block;
+ for(let q=1;q<=4;q++)$("zone-"+q).classList.toggle("on",!!block&&Number(block.quadrant)===q);
  if(block){
-   $("block-asset").textContent=block.asset||value.last_asset||"—";
-   $("block-max").textContent=num(block.maximum);
-   $("block-min").textContent=num(block.minimum);
-   const idx=Number(block.quadrant)||0;
-   for(let n=1;n<=4;n++)$("zone-"+n).classList.toggle("active",n===idx);
-   $("block-comment").textContent="Preço observado no Q"+idx+" (Q1 = faixa inferior, Q4 = faixa superior). Os limites usam as 36 velas anteriores.";
+  $("maximum").textContent=price(block.maximum);
+  $("minimum").textContent=price(block.minimum);
+  $("ceiling").textContent=price(block.ceiling);
+  $("block-status").textContent="Quadrante atual: Q"+block.quadrant+
+    " · Quadrante anterior: Q"+block.previous_quadrant+
+    " · Nova região: "+(block.changed_quadrant?"SIM":"NÃO")+
+    ". Níveis calculados a partir de 24 velas completas de 30s.";
  }else{
-   $("block-asset").textContent=value.last_asset||"Aguardando leitura";
-   for(let n=1;n<=4;n++)$("zone-"+n).classList.remove("active");
+  $("block-status").textContent="Aguardando 24 velas consecutivas de 30s e preço atualizado.";
  }
- const last=value.last_pattern;
- $("last-pattern").textContent=last?
-  "Último padrão: "+last.name+" · "+last.asset+" · direção virtual "+last.direction:
-  "Nenhum padrão confirmado em vela fechada até agora.";
- const news=value.news_gate||{status:"NAO_VERIFICADO",message:"Notícias sem confirmação."};
- $("news-status").textContent="Situação do filtro: "+(news.blocked?"BLOQUEADO · ":"")+String(news.status||"NAO_VERIFICADO");
- $("news-message").textContent=String(news.message||"");
- $("paper-storage").textContent=value.paper_storage||"DESCONHECIDO";
- $("quadrant-storage").textContent="Estado: "+(value.quadrant_storage||"DESCONHECIDO");
- const patterns=value.quadrant_catalog||[];
- $("quadrant-catalog").innerHTML=patterns.length?patterns.slice(0,20).map(p=>
-   '<div class="paper-study"><strong>'+esc(p.name)+'</strong><div class="paper-muted">'
-   +esc(p.asset)+' · '+esc(p.direction)+' · '+(Number(p.observations)||0)
-   +' ocorrência(s) reconhecida(s) · só pesquisa</div></div>').join(""):
-   '<p class="paper-muted">Aguardando a primeira rejeição válida no teto ou no piso do bloco.</p>';
- const recent=value.paper_recent||[], board=value.paper_scoreboard||[];
- const wins=board.reduce((sum,r)=>sum+(Number(r.wins)||0),0);
- const losses=board.reduce((sum,r)=>sum+(Number(r.losses)||0),0);
- $("paper-wins").textContent=wins;
- $("paper-losses").textContent=losses;
- $("paper-rate").textContent=wins+losses?percent(100*wins/(wins+losses)):"—";
- $("paper-current").innerHTML=value.paper_current?tradeCard(value.paper_current,true):
-   '<p class="paper-muted">Nenhuma operação virtual em andamento. Aguardando um padrão de quadrante com vela fechada.</p>';
- $("paper-recent").innerHTML=recent.length?recent.slice(0,9).map(t=>tradeCard(t)).join(""):
-   '<p class="paper-muted">Ainda não foram concluídas entradas virtuais desta estratégia.</p>';
- const ranked=[...board].sort((a,b)=>(Number(b.hit_rate)||0)-(Number(a.hit_rate)||0));
- const high=ranked.filter(r=>Number(r.judged)>=30 && Number(r.hit_rate)>=70);
- const other=ranked.filter(r=>!high.includes(r));
- $("paper-elite-count").textContent=high.length;
- $("paper-qualified").innerHTML=high.length?high.map(scoreCard).join(""):
-  '<p class="paper-muted">Nenhuma estratégia atingiu 70% em pelo menos 30 operações virtuais.</p>';
- $("paper-watch").innerHTML=other.length?other.slice(0,35).map(scoreCard).join(""):
-  '<p class="paper-muted">Aguardando as primeiras entradas virtuais.</p>';
- $("broker-connection").textContent=value.connected?"● Conectado à Bulex DEMO":"○ Bulex desconectada";
+ const current=status.active;
+ $("active").innerHTML=current?tradeCard(current,true):
+  '<p class="muted">Aguardando novo quadrante, toque na linha superior e preço recente nos segundos 30–35.</p>';
+ const items=status.scoreboard||[];
+ const wins=items.reduce((n,x)=>n+(Number(x.wins)||0),0);
+ const losses=items.reduce((n,x)=>n+(Number(x.losses)||0),0);
+ $("wins").textContent=wins;
+ $("losses").textContent=losses;
+ $("rate").textContent=wins+losses?rate(wins/(wins+losses)*100):"—";
+ const qualifying=items.filter(x=>Number(x.judged)>=30&&Number(x.hit_rate)>=70)
+   .sort((a,b)=>(Number(b.hit_rate)||0)-(Number(a.hit_rate)||0));
+ $("elite").innerHTML=qualifying.length?qualifying.map(scoreCard).join(""):
+  '<p class="muted">Nenhum ativo atingiu 70% com pelo menos 30 simulações WIN/LOSS.</p>';
+ $("per-asset").innerHTML=items.length?items.map(scoreCard).join(""):
+  '<p class="muted">Ainda não há resultados confirmados do motor 30s.</p>';
+ const recent=status.recent||[];
+ $("recent").innerHTML=recent.length?recent.slice(0,12).map(x=>tradeCard(x,false)).join(""):
+  '<p class="muted">Nenhuma simulação concluída.</p>';
+ const news=status.last_news||{};
+ $("news").textContent="Filtro: "+String(news.status||"NAO_VERIFICADO")+
+   " · "+String(news.message||"Sem atualização automática.");
 }
 function tick(){
- if(state&&state.paper_current){
-   const node=$("paper-current").querySelector(".paper-clock");
-   if(node)node.textContent=countdown(state.paper_current);
+ if(latest&&latest.active){
+  const el=$("active").querySelector(".clock");
+  if(el){
+    const until=(Date.parse(latest.active.expiry_at)-Date.now())/1000;
+    el.textContent=until>0?"EXPIRA EM "+seconds(until):"Aguardando cotação da Bulex…";
+  }
  }
- if($("paper-updated"))$("paper-updated").textContent=lastUpdate?
-   "Atualizado há "+Math.floor((Date.now()-lastUpdate)/1000)+"s":"Iniciando";
+ $("updated").textContent=lastUpdate?"Atualizado há "+Math.floor((Date.now()-lastUpdate)/1000)+"s":"Aguardando";
 }
 async function refresh(){
  try{
-   const response=await fetch("/status",{cache:"no-store"});
-   if(!response.ok)throw Error("unavailable");
-   render(await response.json());
- }catch(e){
-   $("paper-updated").textContent="Conexão com painel temporariamente indisponível";
- }
+  const response=await fetch("/status",{cache:"no-store"});
+  if(!response.ok)throw Error("offline");
+  show(await response.json());
+ }catch(e){$("updated").textContent="Atualização temporariamente indisponível";}
 }
-document.addEventListener("DOMContentLoaded",()=>{
- refresh();setInterval(refresh,4000);setInterval(tick,1000);
-});
+document.addEventListener("DOMContentLoaded",()=>{refresh();setInterval(refresh,2000);setInterval(tick,250);});
 })();
