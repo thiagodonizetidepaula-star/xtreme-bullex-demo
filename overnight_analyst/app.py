@@ -246,8 +246,8 @@ def open_paper(asset,snapshot,analysis,payout):
         # counters from the same candle; no fabricated virtual entry.
         bucket=int(float(snapshot["now"])//30)*30
         audit_key=("video_v1",asset,bucket)
-        if audit_key not in decision_ids and
-           (float(snapshot["now"])-bucket)>3.5:
+        if (audit_key not in decision_ids and
+            (float(snapshot["now"])-bucket)>3.5):
             decision_ids.add(audit_key)
             counters=dict(state.get("skip_reasons",{}))
             for reason in reasons:
