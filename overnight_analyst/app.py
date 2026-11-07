@@ -20,8 +20,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.parse import urlparse
 
-from regime_lab import analyze, clean, prospectively_enter, RULES, RETIRED, VERSION
-from confluence58 import selection, confluence, VERSION as CONFLUENCE_VERSION, ACTIVE
+from regime_lab import clean
+from video_breakout30 import analyze, prospective_entry, RULES, NAME, STRATEGY, VERSION
 from investing_news_guard import check as check_news
 
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -35,10 +35,10 @@ state={
  "last_connected_at":None,"last_live_quote_at":None,"last_loss_at":None,
  "reconnect_attempts":0,"stream_age_seconds":None,
  "service_plan_note":"Render Free pode suspender após 15 minutos sem acessos.",
- "account_mode":"UNAVAILABLE","research_mode":"REGIMES_ONLY",
+ "account_mode":"UNAVAILABLE","research_mode":"VIDEO_BEARISH_BREAKOUT_30S_ONLY",
  "broker_orders_enabled":False,"demo_orders_enabled":False,
- "strategies":RULES,"retired_strategies":RETIRED,"version":VERSION,
- "min_accuracy":58,"min_history":20,"confluence_version":CONFLUENCE_VERSION,
+ "strategies":RULES,"retired_strategies":{},"version":VERSION,
+ "min_accuracy":None,"min_history":30,"confluence_version":VERSION,
  "version_scores":[],"version_assets":[],"decisions":[],"strategy_policy":{},
  "last_confluence":None,"audit_approvals":0,"audit_blocks":0,
  "last_error":None,"storage":"INICIALIZANDO","storage_error":None,
@@ -82,9 +82,7 @@ def api(method,path,payload=None):
 def score_refresh():
  try:
   output=api("GET","regime-research")
-  entries=output.get("trades",[])
-  # A Render Free cold start can outlive a virtual 30s expiry. Mark such
-  # records SEM_COTACAO, never fabricate a WIN/LOSS or stall the scanner.
+  entries=[x for x in output.get("trades",[]) if x.get("strategy")==STRATEGY]
   expired=[]
   for original in entries:
    if original.get("status")!="OPEN":continue
@@ -92,38 +90,35 @@ def score_refresh():
     expiry=datetime.datetime.fromisoformat(original["expiry_at"]).timestamp()
     if time.time()>expiry+6:
      t=dict(original)
-     t["status"]="SEM_COTACAO"
-     t["completed_at"]=now_iso(time.time())
+     t["status"]="SEM_COTACAO";t["completed_at"]=now_iso(time.time())
      t["exit_price"]=None
      expired.append(t)
    except (ValueError,TypeError,KeyError):continue
   if expired and ingest(trades=expired[:15]):
-   expired_ids={t["id"] for t in expired[:15]}
-   for trade in entries:
-    if trade.get("id") in expired_ids:
-     trade.update(status="SEM_COTACAO",completed_at=now_iso(time.time()),exit_price=None)
-     open_trades.pop(trade["id"],None)
-   print("REGIME_RECOVER_MISSING_QUOTE "+str(len(expired_ids)),flush=True)
+   completed={t["id"] for t in expired[:15]}
+   for item in entries:
+    if item["id"] in completed:
+     item.update(status="SEM_COTACAO",completed_at=now_iso(time.time()),exit_price=None)
+     open_trades.pop(item["id"],None)
   for trade in entries:
    if trade.get("status")=="OPEN":
     open_trades.setdefault(trade["id"],dict(trade))
    recent_ids.add(trade["id"])
-  phases=output.get("version_scores",[])
-  assets=output.get("version_assets",[])
-  audit=output.get("decisions",[])
-  policy={code:selection(code,None,None,phases,assets) for code in ACTIVE}
+  old_ids=[k for k,v in open_trades.items() if v.get("strategy")!=STRATEGY]
+  for key in old_ids:open_trades.pop(key,None)
+  # Old strategies remain archived in Supabase but never affect this score.
+  scoreboard=[x for x in output.get("scoreboard",[])
+       if x.get("strategy")==STRATEGY]
   update(storage="CONNECTED",storage_error=None,
-         scoreboard=output.get("scoreboard",[]),
-         version_scores=phases,version_assets=assets,decisions=audit,
-         strategy_policy=policy,
-         audit_approvals=sum(d.get("decision")=="APROVADA_PAPER" for d in audit),
-         audit_blocks=sum(d.get("decision")!="APROVADA_PAPER" for d in audit),
+         scoreboard=scoreboard,version_scores=[],version_assets=[],
+         strategy_policy={},decisions=[],audit_approvals=0,audit_blocks=0,
          recent=entries[:15],paper_count=len(entries),
-         revisions=output.get("revisions",[]))
+         revisions=output.get("revisions",[]),
+         active=list(open_trades.values())[:1])
   return True
- except Exception as ex:
-  update(storage="ERROR",storage_error=type(ex).__name__)
-  print("REGIME_DB_ERROR "+type(ex).__name__,flush=True)
+ except Exception as exc:
+  update(storage="ERROR",storage_error=type(exc).__name__)
+  print("VIDEO_DB_ERROR "+type(exc).__name__,flush=True)
   return False
 
 def ingest(trades=None,bars=None,revisions=None):
@@ -214,136 +209,78 @@ def live_settle(asset,snapshot):
   if ingest(trades=[trade]):
    open_trades.pop(key,None)
    finished.append(trade)
-   print("REGIME_PAPER_RESULT "+asset+" "+trade["strategy"]+" "+trade["status"],flush=True)
+   print("VIDEO_PAPER_RESULT "+asset+" "+trade["strategy"]+" "+trade["status"],flush=True)
  if finished:
   if any(t["status"]=="LOSS" for t in finished):
    update(last_loss_at=now_iso(now))
   score_refresh()
 
 
-def record_decision(asset,signal,analysis,decision,reasons,checks,policy):
-    candle_time=int(signal["entry_at"]//30)*30-30
-    stamp=int(signal["entry_at"]//30)*30
-    identity=hashlib.sha256((CONFLUENCE_VERSION+"|"+asset+"|"+
-        signal["strategy"]+"|"+str(stamp)).encode()).hexdigest()
-    if identity in decision_ids:
-        return False  # Exactly one audit/decision per strategy and 30s candle.
-    document={
-      "id":identity,"asset":asset,"strategy":signal["strategy"],
-      "regime":analysis["regime"],"candle_time":now_iso(candle_time),
-      "decision":decision,"reasons":reasons[:12],"version":CONFLUENCE_VERSION,
-      "signals":{"checks":checks,"score":sum(bool(v) for v in checks.values()),
-                 "policy_status":policy["status"],"policy_sample":policy.get("sample"),
-                 "policy_rate":policy.get("rate"),"quote_source":"BROKER_NATIVE_30S"}
-    }
-    try:
-        result=api("POST","regime-decisions",{"decisions":[document]})
-        if not result.get("ok"):return False
-        decision_ids.add(identity)
-        return True
-    except Exception as exc:
-        update(last_error="Auditoria de filtros indisponível: "+type(exc).__name__)
-        print("CONFLUENCE_AUDIT_ERROR "+type(exc).__name__,flush=True)
-        return False
-
 def open_paper(asset,snapshot,analysis,payout):
-    if state["storage"]!="CONNECTED":return
-    if open_trades:return  # One paper simulation at a time across ALL assets.
-    signals=prospectively_enter(analysis,snapshot,payout)
-    if not signals:return
+    """Video-inspired sell-only paper experiment. Never place broker orders."""
+    if state["storage"]!="CONNECTED" or open_trades:return
+    if not analysis.get("rules"):
+        return
     news=check_news(asset,float(snapshot["now"]))
     update(last_news=news)
-    for sig in signals[:2]:
-        policy=selection(sig["strategy"],asset,analysis["regime"],
-                         state["version_scores"],state["version_assets"])
-        gate=confluence(next((r for r in analysis["rules"]
-                     if r["strategy"]==sig["strategy"]),{}),snapshot,analysis)
-        reasons=[]
-        if not policy["allowed"]:reasons.append(policy["reason"])
-        if news["blocked"]:reasons.append("CALENDARIO: "+str(news["status"]))
-        # Price confirmation requires two different broker updates inside the
-        # same live candle, pointing in the intended direction.
-        samples=recent_prices.get(asset,[])
-        signed=1 if sig["direction"]=="CALL" else -1
-        confirmed=(len(samples)>=2 and
-                   samples[-1][0]==samples[-2][0] and
-                   samples[-1][0]==int(float(snapshot["now"])//30)*30 and
-                   (samples[-1][2]-samples[-2][2])*signed>0 and
-                   0<samples[-1][1]-samples[-2][1]<=2.5)
-        if not confirmed:reasons.append("AGUARDANDO_DUAS_COTACOES_CONSECUTIVAS")
-        if time.time()-recent_revisions.get(asset,0)<240:
-            reasons.append("VELA_FECHADA_REVISADA_RECENTEMENTE")
-        try:
-            loss_time=datetime.datetime.fromisoformat(state["last_loss_at"]).timestamp()
-        except (TypeError,ValueError):
-            loss_time=0
-        if time.time()-loss_time<120:
-            reasons.append("PAUSA_DE_120S_APOS_LOSS")
-        if float(sig.get("payout") or 0)<80:
-            reasons.append("PAYOUT INDICATIVO INFERIOR A 80%")
-        if not gate["allowed"]:reasons+=gate["reasons"]
-        approved=(not reasons)
-        update(last_confluence={
-          "asset":asset,"strategy":sig["strategy"],
-          "regime":analysis["regime"],
-          "direction":sig["direction"],"score":gate["score"],
-          "required":gate["required"],"checks":gate["checks"],
-          "reasons":reasons,"policy":policy["status"],
-          "approved":approved,"news_status":news["status"]})
-        # Observe the first seconds rather than rejecting a still-forming
-        # live confirmation immediately. Never move the close-time pattern.
-        if (not approved and
-                all(r in ("PRECO_ATUAL_CONFIRMA",
-                          "AGUARDANDO_DUAS_COTACOES_CONSECUTIVAS")
-                    for r in reasons) and
-                float(snapshot["now"])%30<3.6):
-            continue
-        # A fresh-but-uncorroborated price must not be counted as a trade.
-        # Only later observations can pass both the candle and live gates.
-        if not record_decision(asset,sig,analysis,
-               ("APROVADA_PAPER" if approved else
-                "SUSPENSA_ASSERTIVIDADE" if not policy["allowed"] else
-                "BLOQUEADA_CONFLUENCIA"),
-                reasons,gate["checks"],policy):
-            continue
-        if not approved:
-            with LOCK:
-                counters=dict(state.get("skip_reasons",{}))
-                for why in reasons:
-                    counters[why]=counters.get(why,0)+1
-                state["skip_reasons"]=counters
-            continue
-        stamp=int(float(sig["entry_at"])//30)*30
-        identity=hashlib.sha256((VERSION+"|"+CONFLUENCE_VERSION+"|"+asset+"|"+
-                sig["strategy"]+"|"+sig["direction"]+"|"+str(stamp)).encode()).hexdigest()
-        if identity in recent_ids or identity in open_trades:continue
-        record={
-          "id":identity,"asset":asset,"strategy":sig["strategy"],
-          "regime":sig["regime"],"direction":sig["direction"],
-          "entry_at":now_iso(sig["entry_at"]),"expiry_at":now_iso(sig["expiry_at"]),
-          "entry_price":sig["entry_price"],"exit_price":None,"payout":sig["payout"],
-          "status":"OPEN","completed_at":None,
-          "evidence":dict(sig["evidence"],source="BROKER_NATIVE_30S",
-              source_mode="PRACTICE",strategy_version=VERSION,
-              confluence_version=CONFLUENCE_VERSION,
-              confluence_score=gate["score"],
-              confluence_checks=gate["checks"],
-              confluence_details=gate.get("evidence",{}),
-              selection_phase=policy.get("source"),
-              data_latency="Observed quote, not an executable broker fill",
-              news_status=news["status"])
-        }
-        if ingest(trades=[record]):
-            open_trades[identity]=record
-            recent_ids.add(identity)
-            update(last_signal={"asset":asset,"name":RULES[sig["strategy"]],
-                "direction":sig["direction"],"regime":sig["regime"],
-                "entry_at":record["entry_at"],"expiry_at":record["expiry_at"],
-                "paper_only":True,"confluence_score":gate["score"]})
-            print("REGIME_V2_PAPER_ENTRY "+asset+" "+sig["strategy"]+
-                  " "+sig["direction"]+" score="+str(gate["score"]),flush=True)
-    if open_trades:
-        update(active=list(open_trades.values())[:12])
+    reasons=[]
+    if news.get("blocked"):reasons.append("NOTÍCIA DE IMPACTO NO HORÁRIO CADASTRADO")
+    if time.time()-recent_revisions.get(asset,0)<240:
+        reasons.append("VELA HISTÓRICA REVISADA RECENTEMENTE")
+    try:
+        loss_time=datetime.datetime.fromisoformat(state.get("last_loss_at")).timestamp()
+    except (TypeError,ValueError):
+        loss_time=0
+    if time.time()-loss_time<120:reasons.append("PAUSA APÓS LOSS VIRTUAL")
+    signal,why=prospective_entry(analysis,snapshot,payout,recent_prices.get(asset,[]))
+    if signal is None:reasons.append(why or "SEM COTAÇÃO DE ENTRADA")
+    update(last_confluence={
+       "asset":asset,"strategy":STRATEGY,"regime":analysis.get("regime"),
+       "direction":"PUT","score":analysis.get("score",0),"required":7,
+       "checks":analysis.get("checks",{}),"reasons":reasons,
+       "policy":"VIDEO_V1","approved":not reasons,
+       "news_status":news.get("status","NÃO VERIFICADO")
+    })
+    if reasons:
+        # Only record one failure per second per asset, to avoid unbounded
+        # counters from the same candle; no fabricated virtual entry.
+        bucket=int(float(snapshot["now"])//30)*30
+        audit_key=("video_v1",asset,bucket)
+        if audit_key not in decision_ids and
+           (float(snapshot["now"])-bucket)>3.5:
+            decision_ids.add(audit_key)
+            counters=dict(state.get("skip_reasons",{}))
+            for reason in reasons:
+                counters[reason]=counters.get(reason,0)+1
+            update(skip_reasons=counters)
+        return
+    if signal is None:return
+    bucket=int(float(signal["entry_at"])//30)*30
+    identity=hashlib.sha256((VERSION+"|"+asset+"|PUT|"+str(bucket)).encode()).hexdigest()
+    if identity in recent_ids or identity in open_trades:return
+    record={
+        "id":identity,"asset":asset,"strategy":STRATEGY,
+        "regime":"TENDENCIA","direction":"PUT",
+        "entry_at":now_iso(signal["entry_at"]),
+        "expiry_at":now_iso(signal["expiry_at"]),
+        "entry_price":signal["entry_price"],"exit_price":None,
+        "payout":signal["payout"],"status":"OPEN","completed_at":None,
+        "evidence":dict(signal["evidence"],source="BROKER_NATIVE_30S",
+           source_mode="PRACTICE",strategy_version=VERSION,
+           confluence_version=VERSION,
+           video_reference="visual reference only; overlays not replicated",
+           news_status=news.get("status","NÃO VERIFICADO"),
+           execution="PAPER_ONLY; no Bulex order")
+    }
+    if ingest(trades=[record]):
+        open_trades[identity]=record
+        recent_ids.add(identity)
+        update(last_signal={
+           "asset":asset,"name":NAME,"direction":"PUT",
+           "regime":"TENDENCIA","entry_at":record["entry_at"],
+           "expiry_at":record["expiry_at"],"paper_only":True,
+           "confluence_score":7},active=[dict(record)])
+        print("VIDEO_PAPER_ENTRY "+asset+" PUT",flush=True)
 
 def worker():
  global last_refresh,last_prune
