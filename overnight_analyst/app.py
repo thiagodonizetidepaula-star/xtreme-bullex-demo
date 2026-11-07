@@ -319,6 +319,10 @@ def worker():
     update(connection_phase="CONSULTANDO_MERCADOS")
     catalog=rpc(proc,q,"research_market",timeout=20)
     markets=[m for m in catalog["assets"] if m.get("open") is True]
+    # The video demonstrates EUR/USD. Inspect that broker market first if
+    # available, then rotate through every other open instrument as before.
+    markets.sort(key=lambda m:(0 if str(m.get("asset","")).upper().startswith("EURUSD")
+                               else 1,str(m.get("asset",""))))
     if not markets:
      update(collecting=False,market_count=0,last_error="Nenhum mercado aberto.")
      time.sleep(20)
