@@ -343,12 +343,7 @@ def open_paper(asset,snapshot,analysis,payout):
             print("REGIME_V2_PAPER_ENTRY "+asset+" "+sig["strategy"]+
                   " "+sig["direction"]+" score="+str(gate["score"]),flush=True)
     if open_trades:
-        if time.monotonic()-last_quote_monotonic>40:
-      update(connection_phase="SEM_TICKS_RECENTES",collecting=False,
-             last_quote_fresh=False)
-     if time.monotonic()-last_quote_monotonic>90:
-      raise RuntimeError("Fluxo de preços ficou 90s sem atualização; reconexão necessária")
-     update(active=list(open_trades.values())[:12])
+        update(active=list(open_trades.values())[:12])
 
 def worker():
  global last_refresh,last_prune
@@ -461,6 +456,11 @@ def worker():
        print("REGIME_MARKET_READ_ERROR "+asset+" "+type(ex).__name__,flush=True)
        update(last_error="Fluxo "+asset+": "+type(ex).__name__)
      update(active=list(open_trades.values())[:12])
+     if time.monotonic()-last_quote_monotonic>40:
+      update(connection_phase="SEM_TICKS_RECENTES",collecting=False,
+             last_quote_fresh=False)
+     if time.monotonic()-last_quote_monotonic>90:
+      raise RuntimeError("Fluxo de preços ficou 90s sem atualização; reconexão necessária")
      if time.monotonic()-last_refresh>22:
       last_refresh=time.monotonic()
       score_refresh()
