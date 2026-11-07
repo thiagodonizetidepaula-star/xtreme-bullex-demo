@@ -8,20 +8,20 @@ from overnight_analyst import app
 
 class RegimeAppTests(unittest.TestCase):
  def test_old_strategies_and_broker_orders_disabled(self):
-  self.assertEqual(app.state["research_mode"],"REGIMES_ONLY")
+  self.assertEqual(app.state["research_mode"],"VIDEO_BEARISH_BREAKOUT_30S_ONLY")
   self.assertIs(app.state["broker_orders_enabled"],False)
   self.assertIs(app.state["demo_orders_enabled"],False)
   self.assertFalse(hasattr(app,"open_demo"))
   self.assertFalse(hasattr(app,"fib_demo_order"))
-  self.assertEqual(len(app.state["strategies"]),2)
-  self.assertEqual(app.state["min_accuracy"],58)
+  self.assertEqual(len(app.state["strategies"]),1)
+  self.assertIsNone(app.state["min_accuracy"])
   self.assertFalse(app.state["demo_orders_enabled"])
  def test_panel_accurately_labels_prospective_research(self):
   markup=app.page()
-  self.assertIn("Radar de Regimes",markup)
+  self.assertIn("Rompimento Vendedor",markup)
   self.assertIn("SEM OPERAÇÃO",markup)
-  self.assertIn("100% SOMENTE LEITURA",markup)
-  self.assertIn("Sem cotação",markup)
+  self.assertIn("SOMENTE PESQUISA",markup)
+  self.assertIn("SUPORTE",markup.upper())
   self.assertNotIn("Fibonacci Trend",markup)
   self.assertNotIn("Toque no Teto",markup)
  def test_no_broker_execution_in_public_http_app(self):
