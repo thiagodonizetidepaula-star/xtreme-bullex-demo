@@ -1,262 +1,153 @@
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const p=v=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("pt-BR",{maximumFractionDigits:7});
-const pct=v=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toFixed(1).replace(".",",")+"%";
-const date=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleTimeString("pt-BR");};
-const names={"IMPULSO_APOS_PAUSA":"Impulso após Pausa",
-  "EXAUSTAO_DO_EXTREMO":"Falha no Extremo","MUDANCA_DE_RITMO":"Mudança de Ritmo"};
-let last=null,lastTime=0,clockOffsetMs=0;
-function wilson(w,n){
- if(!n)return 0;const z=1.96,q=w/n,z2=z*z;
- return (q+z2/(2*n)-z*Math.sqrt(q*(1-q)/n+z2/(4*n*n)))/(1+z2/n);
-}
-function scoreCard(x){
- const w=Number(x.wins)||0,l=Number(x.losses)||0,n=w+l;
- const breakeven=x.last_payout>0?1/(1+Number(x.last_payout)/100):null;
- const lower=wilson(w,n);
- const qualified=n>=80 && n>0 && w/n>=.70 && breakeven!=null && lower>breakeven+.02;
- return '<div class="bar"><div class="row"><strong>'+esc(names[x.strategy]||x.strategy)
-   +'</strong><span class="chip">'+esc(x.regime)+'</span></div>'
-   +'<div class="muted">'+esc(x.asset)+' · '+n+' entradas futuras · WIN '+w
-   +' · LOSS '+l+' · Sem cotação '+(Number(x.missing_quotes)||0)+'</div>'
-   +'<div class="row"><b>'+pct(n?100*w/n:null)+'</b><span class="muted">'+
-   (qualified?"Evidência estatística inicial":"Em estudo; amostra não suficiente para destaque")+
-   (breakeven==null?" · payout não confirmado":" · referência de equilíbrio "+pct(breakeven*100))+'</span></div></div>';
-}
-function simCard(t){
- const status=t.status;
- const color=status==="WIN"?"green":status==="LOSS"?"red":"";
- const left=(new Date(t.expiry_at).getTime()-Date.now())/1000;
- const when=status==="OPEN"?(left>0?"Encerra em "+Math.ceil(left)+" s":"Aguardando preço de encerramento"):esc(status);
- return '<div class="bar"><div class="row"><strong>'+esc(t.asset)+' · '+esc(names[t.strategy]||t.strategy)
-   +'</strong><b class="'+color+'">'+esc(t.direction)+' / '+esc(when)+'</b></div>'
-   +'<div class="muted">Regime '+esc(t.regime)+' · '+esc(t.evidence?.confluence_version||"BASE_ANTIGA")+' · preço ref. '+p(t.entry_price)
-   +' · saída '+p(t.exit_price)+' · '+esc(date(t.entry_at))
-   +' · virtual, não executado</div></div>';
+const escape=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const price=v=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString("pt-BR",{maximumFractionDigits:7});
+const percent=v=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toFixed(1).replace(".",",")+"%";
+const formatDate=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleTimeString("pt-BR");};
+let latest=null,lastFetched=0,offsetMs=0;
+function tradeCard(x){
+ const done=x.status!=="OPEN";
+ const label=done?x.status:"VIRTUAL · EM ANDAMENTO";
+ const shade=label==="WIN"?"green":label==="LOSS"?"red":"gold";
+ return '<div class="bar"><div class="row"><strong>'+escape(x.asset)+
+  '</strong><b class="'+shade+'">PUT · '+escape(label)+'</b></div>'+
+  '<p class="muted">Entrada '+price(x.entry_price)+' · Saída '+price(x.exit_price)+
+  ' · '+escape(formatDate(x.entry_at))+' · Expiração 30s · NÃO é ordem na Bulex.</p></div>';
 }
 function drawCandles(s){
- const host=$("chart30"),metrics=$("regime-metrics");
- if(!host)return;
- const raw=[...(s.last_candles||[]),...(s.last_current?[s.last_current]:[])].slice(-28);
+ const host=$("chart30");if(!host)return;
+ const raw=[...(s.last_candles||[]),...(s.last_current?[s.last_current]:[])].slice(-29);
  const candles=raw.map(r=>{
-   try{
-    const t=Number(r.from),o=Number(r.open),h=Number(r.max),l=Number(r.min),c=Number(r.close);
-    if(![t,o,h,l,c].every(Number.isFinite)||o<=0||l>Math.min(o,c)||h<Math.max(o,c))return null;
-    return {t,o,h,l,c};
-   }catch{return null;}
+  if(!r)return null;
+  const t=Number(r.from),o=Number(r.open),h=Number(r.max),l=Number(r.min),c=Number(r.close);
+  return [t,o,h,l,c].every(Number.isFinite)&&o>0&&l<=Math.min(o,c)&&h>=Math.max(o,c)?
+     {t,o,h,l,c}:null;
  }).filter(Boolean);
- if(candles.length<2){
-  host.innerHTML='<p class="muted">Aguardando pelo menos duas velas reais de 30 segundos.</p>';
-  return;
+ if(candles.length<3){
+  host.innerHTML='<p class="muted">Esperando candles reais da Bulex.</p>';return;
  }
- const yMin=Math.min(...candles.map(c=>c.l)),yMax=Math.max(...candles.map(c=>c.h));
- const diff=Math.max(1e-9,yMax-yMin), min=yMin-.07*diff,max=yMax+.07*diff;
- const W=700,H=210,top=8,bot=185,left=8,right=8;
- const y=v=>top+(max-v)/(max-min)*(bot-top);
- const step=(W-left-right)/candles.length;
- const grid=[.25,.5,.75].map(r=>{
-  const yy=top+(bot-top)*r;
-  return '<line x1="8" y1="'+yy+'" x2="692" y2="'+yy+'" stroke="#32415b" stroke-width="1"/>';
+ const lo=Math.min(...candles.map(x=>x.l)),hi=Math.max(...candles.map(x=>x.h));
+ const spread=Math.max(1e-10,hi-lo),min=lo-spread*.10,max=hi+spread*.10;
+ const W=690,TOP=12,BOT=195,span=(W-20)/candles.length;
+ const y=v=>TOP+(max-v)/(max-min)*(BOT-TOP);
+ const grid=[.25,.5,.75].map(p=>{
+  const h=TOP+(BOT-TOP)*p;
+  return '<line x1="8" y1="'+h+'" x2="682" y2="'+h+'" stroke="#2e4465"/>';
  }).join("");
- const bars=candles.map((c,i)=>{
-  const x=left+(i+.5)*step,green=c.c>=c.o;
-  const stroke=green?"#59e6ab":"#f58b95";
-  const y1=Math.min(y(c.o),y(c.c)),height=Math.max(1.25,Math.abs(y(c.c)-y(c.o)));
-  const bw=Math.min(15,Math.max(4,step*.62));
-  return '<line x1="'+x.toFixed(2)+'" x2="'+x.toFixed(2)+
-  '" y1="'+y(c.h).toFixed(2)+'" y2="'+y(c.l).toFixed(2)+
-  '" stroke="'+stroke+'" stroke-width="1.65"/><rect x="'+(x-bw/2).toFixed(2)+
-  '" y="'+y1.toFixed(2)+'" width="'+bw.toFixed(2)+'" height="'+height.toFixed(2)+
-  '" fill="'+stroke+'" opacity="'+(i===candles.length-1?1:.8)+'"/>';
+ const bars=candles.map((x,i)=>{
+  const center=10+(i+.5)*span,up=x.c>=x.o,color=up?"#58e1a4":"#fa8c96";
+  const upper=Math.min(y(x.o),y(x.c));
+  const height=Math.max(1.6,Math.abs(y(x.o)-y(x.c)));
+  const width=Math.min(15,span*.64);
+  return '<line x1="'+center+'" x2="'+center+'" y1="'+y(x.h)+'" y2="'+y(x.l)+
+   '" stroke="'+color+'" stroke-width="1.5"/>'+
+   '<rect x="'+(center-width/2)+'" y="'+upper+'" height="'+height+'" width="'+width+'" fill="'+color+'"/>';
  }).join("");
- const last=candles[candles.length-1],yClose=y(last.c);
- host.innerHTML='<svg viewBox="0 0 700 210" role="img" aria-label="Velas de 30 segundos observadas na corretora" style="width:100%;display:block;background:#0b1423;border-radius:10px">'
-  +grid+bars+'<line x1="8" y1="'+yClose.toFixed(2)+'" x2="692" y2="'+yClose.toFixed(2)+
-   '" stroke="#acc4ff" stroke-dasharray="5 6" opacity=".8"/>'
-   +'<text x="680" y="201" text-anchor="end" fill="#a7bfe6" font-size="12">M30s • '+esc(new Date(last.t*1000).toLocaleTimeString("pt-BR"))+'</text></svg>';
- const reg=s.last_analysis||{};
- if(metrics)metrics.textContent='Eficiência de deslocamento: '+(reg.efficiency==null?'—':pct(reg.efficiency*100))+
-   ' · Volatilidade relativa: '+(reg.volatility_ratio==null?'—':Number(reg.volatility_ratio).toFixed(2)+'×')+
-   ' · Gráfico de pesquisa, sem ordens';
+ const support=s.last_analysis?.support;
+ const supportLine=Number.isFinite(Number(support))&&support!=null?
+  '<line x1="8" x2="682" y1="'+y(Number(support))+'" y2="'+y(Number(support))+
+    '" stroke="#65e5b5" stroke-width="1.7" stroke-dasharray="8 5"/>':'';
+ host.innerHTML='<svg viewBox="0 0 690 215" role="img" aria-label="Candles da Bulex em 30 segundos e suporte móvel calculado" '+
+   'style="display:block;width:100%;height:auto;background:#0b1728;border-radius:12px">'+
+   grid+supportLine+bars+'</svg>';
 }
-
 function render(s){
- last=s;lastTime=Date.now();
- // The backend time is an estimate of the broker-aligned service clock.
- if(Number.isFinite(Number(s.timestamp)))
-   clockOffsetMs=Number(s.timestamp)*1000-Date.now();
- const age=s.last_live_quote_at?
-   (Date.now()-new Date(s.last_live_quote_at).getTime())/1000:null;
- const fresh=s.connected && s.collecting && age!==null && age>=0 && age<=12;
- const phase=String(s.connection_phase||s.auth_status||"INICIANDO");
- $("broker").textContent=fresh?
-    "● Bulex DEMO conectada · candles ao vivo":
-    s.connected?"◐ Conta DEMO autenticada · aguardando novas velas":
-    "○ Conexão em andamento ou indisponível";
- $("connection-phase").textContent=phase.replaceAll("_"," ");
- $("live-age").textContent=age!=null&&Number.isFinite(age)&&age>=0?
-    Math.round(age)+" s atrás":"Aguardando primeira atualização";
- $("startup-help").textContent=!s.connected?
-    "Se o Render estava adormecido, o site precisa iniciar e a Bulex autenticar novamente. O plano gratuito não mantém leitura 24 horas sem acessos.":
-    fresh?"Recebendo preços observados da Bulex. Nenhuma ordem é enviada.":
-    "Login DEMO realizado, mas o preço ainda não foi atualizado. O radar não considera cotações antigas como oportunidades.";
- $("error").textContent=s.last_error||"Nenhuma ordem é enviada. Pesquisa em andamento.";
- $("storage").textContent=s.storage||"Indisponível";
+ latest=s;lastFetched=Date.now();
+ if(Number.isFinite(Number(s.timestamp)))offsetMs=Number(s.timestamp)*1000-Date.now();
+ const age=s.last_live_quote_at?(Date.now()-Date.parse(s.last_live_quote_at))/1000:null;
+ const streaming=s.connected&&s.collecting&&age!=null&&age>=0&&age<12;
+ $("broker").textContent=streaming?"● Bulex DEMO · preços observados ao vivo":
+  s.connected?"◐ Login DEMO confirmado, aguardando preços":"○ Desconectado ou reiniciando";
+ $("connection-phase").textContent=String(s.connection_phase||"INICIANDO").replaceAll("_"," ");
+ $("live-age").textContent=age!=null&&Number.isFinite(age)&&age>=0?Math.round(age)+"s atrás":"aguardando";
+ $("error").textContent=s.last_error||"Quando o padrão não estiver confirmado, o sistema indica SEM OPERAÇÃO.";
+ $("storage").textContent=s.storage||"Não configurado";
+ $("updated").textContent="agora";
  $("total").textContent=Number(s.market_count)||0;
  $("scanned").textContent=Number(s.markets_scanned)||0;
  $("cycles").textContent=Number(s.scan_cycle)||0;
- $("batch").textContent="Lote atual: "+(s.batch||[]).join(" · ");
- $("asset").textContent=s.last_asset||"Aguardando";
- $("regime").textContent=s.last_regime||"INDEFINIDO";
- const analysis=s.last_analysis||{};
+ $("batch").textContent="Ativos em análise: "+(s.batch||[]).join(" · ");
+ $("asset").textContent=s.last_asset||"Aguardando mercado";
+ $("regime").textContent=String(s.last_analysis?.trend||"SEM LEITURA");
+ const bar=s.last_current;
+ $("candle").textContent=bar?"Abertura "+price(bar.open)+" · Máxima "+price(bar.max)+
+   " · Mínima "+price(bar.min)+" · Atual "+price(bar.close):
+   "Sem vela atual recebida";
  drawCandles(s);
- $("pattern").textContent=analysis.reason||"Aguardando coleta";
- const c=s.last_current;
- $("candle").textContent=c?
-   "30s observado · O "+p(c.open)+" · H "+p(c.max)+" · L "+p(c.min)+" · C "+p(c.close)
-    +(s.last_quote_fresh?" · cotação recente":" · cotação antiga / não atualizada"):
-   "Nenhum candle 30s recente";
+ const analysis=s.last_analysis||{};
+ $("pattern").textContent=analysis.reason||"Aguardando rompimento e confirmação";
+ $("regime-metrics").textContent=analysis.support!=null?"Suporte (13 velas anteriores): "+
+  price(analysis.support)+" · Pressão vendedora anterior: "+(analysis.efficiency!=null?
+   percent(Number(analysis.efficiency)*100):"—"):"Sem nível de suporte calculado";
+ const checks=analysis.checks||{};
+ $("checks").innerHTML=Object.keys(checks).length?
+  Object.entries(checks).map(([name,passed])=>
+   '<div class="bar"><span class="'+(passed?"green":"red")+'">'+(passed?"✓ ":"✕ ")+
+      escape(name.replaceAll("_"," "))+'</span></div>').join(""):
+  '<p class="muted">Aguardando pelo menos 36 candles de 30 segundos completos.</p>';
+ const confirm=s.last_confluence;
+ $("confluence").textContent=confirm?
+  (confirm.approved?"PUT VIRTUAL AUTORIZADO":"SEM OPERAÇÃO")+
+   " · "+escape(confirm.asset)+" · "+(confirm.reasons||[]).join(" / "):
+  "SEM OPERAÇÃO · Nenhuma oportunidade confirmada";
  const news=s.last_news||{};
- $("news").textContent="Filtro de notícias: "+(news.status||"NÃO VERIFICADO")
-   +" · "+(news.message||"Sem horários sincronizados");
- const rules=Object.entries(names).filter(([code])=>code!=="EXAUSTAO_DO_EXTREMO");
- $("strategies").innerHTML=rules.map(([code,name])=>{
-  const observed=(analysis.rules||[]).some(x=>x.strategy===code);
-  const policy=(s.strategy_policy||{})[code];
-  const label=policy && !policy.allowed?"SUSPENSA ABAIXO DE 58%":
-    observed?"PADRÃO OBSERVADO · AVALIAR FILTROS":"COLETANDO EVIDÊNCIAS";
-  return '<div class="bar"><div class="row"><strong>'+esc(name)+'</strong><span class="chip">'+
-    esc(label)+'</span></div>'
-    +'<p class="muted">Somente simulações com 7/7 verificações; uma estratégia suspensa não gera novas entradas.</p></div>';
- }).join("");
- const score=s.scoreboard||[];
- const phases=s.version_scores||[];
- const versionAssets=s.version_assets||[];
- const after=phases.filter(x=>x.phase==="FILTRADO_V3");
- const priorV2=phases.filter(x=>x.phase==="FILTRADO_V2");
- const before=phases.filter(x=>x.phase==="BASE_ANTIGA");
- const allW=after.reduce((n,x)=>n+Number(x.wins||0),0);
- const allL=after.reduce((n,x)=>n+Number(x.losses||0),0);
- $("wins").textContent=allW;
- $("losses").textContent=allL;
- $("rate").textContent=allW+allL?pct(100*allW/(allW+allL)):"—";
- const showPhases=(code)=>{
-   const old=before.find(x=>x.strategy===code)||{};
-   const newer=after.find(x=>x.strategy===code)||{};
-   const v2=priorV2.find(x=>x.strategy===code)||{};
-   const n0=Number(old.judged)||0,n1=Number(newer.judged)||0,n2=Number(v2.judged)||0;
-   const pct0=n0?pct(100*Number(old.wins)/n0):"—";
-   const pct1=n1?pct(100*Number(newer.wins)/n1):"—";
-   const pct2=n2?pct(100*Number(v2.wins)/n2):"—";
-   return "Base: "+pct0+" (n="+n0+") · Filtro v2: "+pct2+" (n="+n2+
-      ") · Rigor v3: "+pct1+" (n="+n1+")";
- };
- const activeCodes=["IMPULSO_APOS_PAUSA","MUDANCA_DE_RITMO"];
- $("policy").innerHTML=activeCodes.map(code=>{
-   const item=(s.strategy_policy||{})[code]||{};
-   return '<div class="bar"><div class="row"><strong>'+esc(names[code])+'</strong>'+
-     '<span class="chip">'+esc(item.status||"COLETANDO")+'</span></div>'+
-     '<p class="muted">'+esc(showPhases(code))+'</p>'+
-     '<p class="muted">'+esc(item.reason||"Sem dados suficientes")+'</p></div>';
- }).join("")+'<div class="bar"><strong>'+esc(names.EXAUSTAO_DO_EXTREMO)+
- '</strong> · <span class="red">SUSPENSA</span>'+
- '<p class="muted">'+esc(showPhases("EXAUSTAO_DO_EXTREMO"))+
- ' · Abaixo de 58%; não gera novas simulações.</p></div>';
- const selected=activeCodes.filter(code=>(s.strategy_policy||{})[code]?.allowed);
- $("qualified-count").textContent=selected.length;
- $("qualified").innerHTML=selected.length?selected.map(code=>
-   '<div class="bar"><strong>'+esc(names[code])+'</strong><p class="muted">'+esc(showPhases(code))+
-   '</p><p class="muted">Mantida em pesquisa; resultado não é recomendação de entrada.</p></div>').join(""):
-   '<p class="muted">Nenhuma família habilitada; aguardando dados suficientes.</p>';
- const con=s.last_confluence;
- if(con){
-   const failures=(con.reasons||[]).map(esc).join(" · ");
-   const checks=Object.entries(con.checks||{}).map(([key,val])=>
-      (val?"✓ ":"✕ ")+key.replaceAll("_"," ")).join(" · ");
-   $("confluence").innerHTML='<div class="bar"><div class="row"><strong>'+
-      esc(con.asset)+' · '+esc(names[con.strategy]||con.strategy)+'</strong><span class="chip">'+
-      (con.approved?"APROVADA PARA SIMULAÇÃO":"SEM OPERAÇÃO")+
-      '</span></div><p class="muted">Confluência '+Number(con.score)+'/'+Number(con.required)+
-      ' · '+esc(con.direction)+' · '+esc(con.regime)+'</p><p class="muted">'+esc(checks)+
-      '</p>'+(failures?'<p class="muted">Bloqueios: '+failures+'</p>':'')+'</div>';
- }else $("confluence").innerHTML='<p class="muted">Esperando formação e cotação nova; nenhum sinal aprovado sem confluência.</p>';
- const audit=(s.decisions||[]).filter(x=>x.version==="confluence-v3");
- const latestRejected=audit.filter(x=>x.decision!=="APROVADA_PAPER");
- $("audit").innerHTML='<p class="muted">No lote recente de decisões persistidas: '+latestRejected.length+
-  ' bloqueada(s) e '+(audit.length-latestRejected.length)+' permitida(s) para pesquisa virtual.</p>'+
-  (latestRejected.length?latestRejected.slice(0,7).map(x=>
-    '<div class="bar"><strong>'+esc(x.asset)+' · '+esc(names[x.strategy]||x.strategy)+
-    '</strong><p class="muted">'+esc(x.decision)+' · '+esc((x.reasons||[]).join(" / "))+
-    '</p></div>').join(""):'<p class="muted">Ainda sem veto registrado no Supabase.</p>');
- $("scoreboard").innerHTML=versionAssets.length?
-  [...versionAssets].sort((a,b)=>Number(b.judged)-Number(a.judged)).slice(0,45).map(x=>{
-    const w=Number(x.wins)||0,n=Number(x.judged)||0;
-    return '<div class="bar"><div class="row"><strong>'+esc(x.asset)+' · '+esc(names[x.strategy]||x.strategy)+
-      '</strong><span class="chip">'+esc(x.phase)+'</span></div><div class="muted">'+
-      esc(x.regime)+' · WIN '+w+' · LOSS '+(Number(x.losses)||0)+' · '+
-      pct(n?100*w/n:null)+' (n='+n+')</div></div>';
-  }).join(""):
-  '<p class="muted">Aguardando os resultados para cada ativo e regime.</p>';
- $("active").innerHTML=(s.active||[]).length?s.active.map(simCard).join(""):
-   '<p class="muted">Aguardando confluência 7/7 e duas cotações na mesma direção.</p>';
- $("recent").innerHTML=(s.recent||[]).length?s.recent.slice(0,8).map(simCard).join(""):
-   '<p class="muted">Aguardando primeiras simulações.</p>';
- $("integrity").innerHTML=(s.revisions||[]).length?s.revisions.slice(0,6).map(r=>
-   '<div class="bar"><b>'+esc(r.asset)+'</b><div class="muted">Vela '+esc(date(r.candle_time))
-   +' · revisão observada em '+esc(date(r.observed_at))
-   +' · sem conclusão sobre manipulação</div></div>').join(""):
-   '<p class="muted">Nenhuma revisão de candles fechados observada nesta coleta.</p>';
+ $("news").textContent="Notícias: "+(news.status||"NÃO VERIFICADO")+
+    " · "+(news.message||"Sem consulta automática ao Investing.com");
+ const rows=(s.scoreboard||[]).filter(x=>x.strategy==="ROMPIMENTO_VENDEDOR_30S");
+ const w=rows.reduce((a,x)=>a+Number(x.wins||0),0),
+       l=rows.reduce((a,x)=>a+Number(x.losses||0),0);
+ $("wins").textContent=w;$("losses").textContent=l;
+ $("rate").textContent=(w+l)?percent(100*w/(w+l)):"—";
+ $("scoreboard").innerHTML=rows.length?rows.map(x=>
+   '<div class="bar"><strong>'+escape(x.asset)+'</strong><p class="muted">'+
+   "WIN "+Number(x.wins||0)+" · LOSS "+Number(x.losses||0)+
+   " · Sem cotação "+Number(x.missing_quotes||0)+" · "+percent(x.hit_rate)+
+   '</p></div>').join(""):'<p class="muted">Nenhum resultado novo confirmado.</p>';
+ $("active").innerHTML=(s.active||[]).length?s.active.map(tradeCard).join(""):
+   '<p class="muted">Nenhuma entrada virtual ativa. Aguardando rompimento e duas cotações em queda.</p>';
+ $("recent").innerHTML=(s.recent||[]).length?s.recent.slice(0,10).map(tradeCard).join(""):
+   '<p class="muted">Ainda não há simulações para esta estratégia.</p>';
+ const revisions=s.revisions||[];
+ $("integrity").innerHTML=revisions.length?revisions.slice(0,5).map(r=>
+   '<div class="bar">'+escape(r.asset)+' · '+escape(formatDate(r.candle_time))+
+    ' · revisão de vela observada (não comprova manipulação)</div>').join(""):
+   "Nenhuma revisão de candle registrada no histórico exibido.";
+}
+function paintCountdowns(){
+ const now=Date.now()+offsetMs;
+ const age=latest?.last_live_quote_at?Date.now()-Date.parse(latest.last_live_quote_at):Infinity;
+ const fresh=latest?.connected&&latest?.collecting&&age>=0&&age<12000;
+ const clock=$("live-clock");if(clock)clock.textContent=latest&&latest.connected?
+    new Date(now).toLocaleTimeString("pt-BR",{hour12:false}):"--:--:--";
+ const candle=$("candle-countdown"),bar=$("candle-progress");
+ const sec=((now/1000)%30+30)%30;
+ if(candle)candle.textContent=fresh?"00:"+String(Math.ceil(30-sec)).padStart(2,"0"):"--:--";
+ if(bar)bar.style.width=fresh?(100*sec/30).toFixed(1)+"%":"0%";
+ const run=(latest?.active||[]).find(x=>x.status==="OPEN");
+ const op=$("operation-countdown"),opBar=$("operation-progress"),status=$("operation-status");
+ if(run){
+  const left=Math.max(0,(Date.parse(run.expiry_at)-now)/1000);
+  if(op)op.textContent="00:"+String(Math.ceil(left)).padStart(2,"0");
+  if(opBar)opBar.style.width=Math.min(100,100*(30-left)/30).toFixed(1)+"%";
+  if(status)status.textContent=left?"PUT virtual "+run.asset+" · expira em "+Math.ceil(left)+" segundos":
+   "Vencimento alcançado; aguardando preço observado da Bulex.";
+ }else{
+  if(op)op.textContent="--:--";
+  if(opBar)opBar.style.width="0%";
+  if(status)status.textContent="SEM OPERAÇÃO · só começa após romper suporte e confirmar pressão vendedora.";
+ }
+ if(lastFetched)$("updated").textContent="atualizado há "+Math.floor((Date.now()-lastFetched)/1000)+"s";
 }
 async function refresh(){
  try{
-  const resp=await fetch("/status",{cache:"no-store"});
-  if(!resp.ok)throw Error("offline");
-  render(await resp.json());
- }catch(e){$("broker").textContent="Falha temporária na atualização do radar";}
-}
-function paintCountdowns(){
- const now=Date.now()+clockOffsetMs;
- const fresh=last && last.connected && last.collecting &&
-   last.last_live_quote_at && (Date.now()-new Date(last.last_live_quote_at).getTime()<12000);
- const sec=((now/1000)%30+30)%30;
- const remaining=30-sec;
- const candle=$("candle-countdown");
- const candleBar=$("candle-progress");
- const active=$("operation-countdown");
- const activeBar=$("operation-progress");
- const opStatus=$("operation-status");
- const clock=$("live-clock");
- if(clock)clock.textContent=last && last.connected ?
-    new Date(now).toLocaleTimeString("pt-BR",{hour12:false}) : "--:--:--";
- if(candle){
-  candle.textContent=fresh?("00:"+String(Math.max(0,Math.ceil(remaining))).padStart(2,"0")):"--:--";
-  if(candleBar)candleBar.style.width=fresh?(100*sec/30).toFixed(1)+"%":"0%";
- }
- const running=(last?.active||[]).find(t=>t.status==="OPEN");
- if(active){
-   if(running){
-     const expiry=Date.parse(running.expiry_at);
-     const left=Math.max(0,(expiry-now)/1000);
-     active.textContent="00:"+String(Math.ceil(left)).padStart(2,"0");
-     if(activeBar)activeBar.style.width=(100*Math.min(1,(30-left)/30)).toFixed(1)+"%";
-     if(opStatus)opStatus.textContent=left>0?
-        ("Simulação virtual em andamento · "+running.asset+" · "+running.direction):
-        "Vencimento virtual atingido · aguardando preço de saída da Bulex";
-   }else{
-     active.textContent="--:--";
-     if(activeBar)activeBar.style.width="0%";
-     if(opStatus)opStatus.textContent="Sem operação virtual · monitorando confluência 7/7";
-   }
- }
- if(last && (last.active||[]).length)$("active").innerHTML=last.active.map(simCard).join("");
- if(lastTime)$("updated").textContent="há "+Math.floor((Date.now()-lastTime)/1000)+"s";
+  const res=await fetch("/status",{cache:"no-store"});
+  if(!res.ok)throw Error("status");
+  render(await res.json());
+ }catch(err){$("broker").textContent="Não foi possível consultar o status do radar";}
 }
 document.addEventListener("DOMContentLoaded",()=>{
- refresh();
- setInterval(refresh,2500);
- setInterval(paintCountdowns,150);
+ refresh();setInterval(refresh,2500);setInterval(paintCountdowns,150);
  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
 });
 })();
