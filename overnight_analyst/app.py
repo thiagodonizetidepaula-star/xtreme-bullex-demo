@@ -510,6 +510,8 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 <h1>Radar de Regimes</h1>
 <p>Pesquisa independente de movimento de preços. A aplicação não envia ordens nem liga qualquer estratégia anterior. Procura resultados prospectivos de 30 segundos. Quando não existir evidência suficiente, o diagnóstico será <strong>SEM OPERAÇÃO</strong>.</p>
 <div class="card"><div class="row"><strong class="status" id="broker">Verificando conexão...</strong><span class="chip">Nenhuma ordem na corretora</span></div>
+<p class="muted">Etapa da conexão: <b id="connection-phase">INICIANDO</b> · Último candle ao vivo: <b id="live-age">—</b></p>
+<p class="muted" id="startup-help">No plano Render gratuito, o servidor pode suspender após 15 minutos sem visitas e reiniciar ao abrir o site. Conexão à corretora e recebimento de velas são etapas diferentes.</p>
 <p class="muted" id="error">Carregando dados.</p><p class="muted">Supabase: <b id="storage">Aguardando</b> · Dados: <span id="updated">—</span></p>
 <div class="grid">
 <div class="metric"><small>Mercados abertos</small><strong id="total">0</strong></div>
@@ -524,10 +526,10 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 </div>
 <div class="card"><h2>Experimentos em avaliação</h2>
 <div id="strategies"></div>
-<p class="muted">Ficam em pesquisa as famílias com pelo menos 20 WIN/LOSS e 58% ou mais na base. Abaixo disso, são suspensas. Resultados com filtros novos (v2) são avaliados separadamente para não inflar a taxa antiga.</p><div id="policy">Avaliando taxas e amostras…</div><p class="muted">O limite de 58% é uma triagem de pesquisa, não uma garantia de lucratividade.</p>
+<p class="muted">Ficam em pesquisa as famílias com pelo menos 20 WIN/LOSS e 58% ou mais na base. Abaixo disso, são suspensas. Resultados com filtros novos (v2) são avaliados separadamente para não inflar a taxa antiga.</p><div id="policy">Avaliando taxas e amostras…</div><p class="muted">O limite de 58% é uma triagem de pesquisa, não uma garantia de lucratividade. Uma única simulação por vez, pausa de 120 segundos após LOSS e bloqueio temporário após revisão de candle fechado.</p>
 </div>
 <div class="card">
-<h2>Placar virtual · Confluência v2</h2><p class="muted">Somente simulações após os novos filtros. WIN/LOSS da versão anterior ficam arquivados.</p>
+<h2>Placar virtual · Confluência v3</h2><p class="muted">Somente simulações após a confirmação de sete verificações e duas atualizações consecutivas. Resultados da base antiga e da v2 ficam arquivados separadamente.</p>
 <div class="grid">
 <div class="metric"><small>WIN</small><strong id="wins">0</strong></div>
 <div class="metric"><small>LOSS</small><strong id="losses">0</strong></div>
