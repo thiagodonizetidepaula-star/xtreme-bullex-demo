@@ -27,13 +27,13 @@ class Confluence58Tests(unittest.TestCase):
   self.assertTrue(p["allowed"])
   self.assertEqual(p["status"],"EM_ESTUDO")
  def test_auto_suspend_after_25_new_filtered_results_under_58(self):
-  sample=self.base+[family("IMPULSO_APOS_PAUSA","FILTRADO_V2",25,12)]
+  sample=self.base+[family("IMPULSO_APOS_PAUSA","FILTRADO_V3",25,12)]
   p=selection("IMPULSO_APOS_PAUSA","EURUSD-OTC","LATERAL",sample,[])
   self.assertFalse(p["allowed"])
   self.assertEqual(p["status"],"SUSPENSA")
  def test_local_15_result_override_suspends_bad_market_regime(self):
-  sample=self.base+[family("IMPULSO_APOS_PAUSA","FILTRADO_V2",28,20)]
-  local=[dict(family("IMPULSO_APOS_PAUSA","FILTRADO_V2",15,7),
+  sample=self.base+[family("IMPULSO_APOS_PAUSA","FILTRADO_V3",28,20)]
+  local=[dict(family("IMPULSO_APOS_PAUSA","FILTRADO_V3",15,7),
               asset="EURUSD-OTC",regime="LATERAL")]
   p=selection("IMPULSO_APOS_PAUSA","EURUSD-OTC","LATERAL",sample,local)
   self.assertFalse(p["allowed"])
@@ -50,7 +50,8 @@ class Confluence58Tests(unittest.TestCase):
    gate=confluence(rule,snap,analysis)
    self.assertEqual(gate["version"],VERSION)
    self.assertTrue(gate["allowed"],gate)
-   self.assertGreaterEqual(gate["score"],6)
+   self.assertEqual(gate["score"],7)
+   self.assertEqual(gate["required"],7)
  def test_block_if_live_price_moves_against_pattern(self):
   snap=frame(1)
   analysis=analyze("EURUSD-OTC",snap)
