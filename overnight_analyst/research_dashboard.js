@@ -7,7 +7,7 @@ const pct=v=>v==null||!Number.isFinite(Number(v))?"—":Number(v).toFixed(1).rep
 const date=v=>{const d=new Date(v);return Number.isNaN(d.getTime())?"—":d.toLocaleTimeString("pt-BR");};
 const names={"IMPULSO_APOS_PAUSA":"Impulso após Pausa",
   "EXAUSTAO_DO_EXTREMO":"Falha no Extremo","MUDANCA_DE_RITMO":"Mudança de Ritmo"};
-let last=null,lastTime=0;
+let last=null,lastTime=0,clockOffsetMs=0;
 function wilson(w,n){
  if(!n)return 0;const z=1.96,q=w/n,z2=z*z;
  return (q+z2/(2*n)-z*Math.sqrt(q*(1-q)/n+z2/(4*n*n)))/(1+z2/n);
@@ -84,6 +84,9 @@ function drawCandles(s){
 
 function render(s){
  last=s;lastTime=Date.now();
+ // The backend time is an estimate of the broker-aligned service clock.
+ if(Number.isFinite(Number(s.timestamp)))
+   clockOffsetMs=Number(s.timestamp)*1000-Date.now();
  const age=s.last_live_quote_at?
    (Date.now()-new Date(s.last_live_quote_at).getTime())/1000:null;
  const fresh=s.connected && s.collecting && age!==null && age>=0 && age<=12;
@@ -126,7 +129,7 @@ function render(s){
     observed?"PADRÃO OBSERVADO · AVALIAR FILTROS":"COLETANDO EVIDÊNCIAS";
   return '<div class="bar"><div class="row"><strong>'+esc(name)+'</strong><span class="chip">'+
     esc(label)+'</span></div>'
-    +'<p class="muted">Somente simulações com 6/7 verificações; uma estratégia suspensa não gera novas entradas.</p></div>';
+    +'<p class="muted">Somente simulações com 7/7 verificações; uma estratégia suspensa não gera novas entradas.</p></div>';
  }).join("");
  const score=s.scoreboard||[];
  const phases=s.version_scores||[];
@@ -167,16 +170,16 @@ function render(s){
    '<div class="bar"><strong>'+esc(names[code])+'</strong><p class="muted">'+esc(showPhases(code))+
    '</p><p class="muted">Mantida em pesquisa; resultado não é recomendação de entrada.</p></div>').join(""):
    '<p class="muted">Nenhuma família habilitada; aguardando dados suficientes.</p>';
- const c=s.last_confluence;
- if(c){
-   const failures=(c.reasons||[]).map(esc).join(" · ");
-   const checks=Object.entries(c.checks||{}).map(([key,val])=>
+ const con=s.last_confluence;
+ if(con){
+   const failures=(con.reasons||[]).map(esc).join(" · ");
+   const checks=Object.entries(con.checks||{}).map(([key,val])=>
       (val?"✓ ":"✕ ")+key.replaceAll("_"," ")).join(" · ");
    $("confluence").innerHTML='<div class="bar"><div class="row"><strong>'+
-      esc(c.asset)+' · '+esc(names[c.strategy]||c.strategy)+'</strong><span class="chip">'+
-      (c.approved?"APROVADA PARA SIMULAÇÃO":"SEM OPERAÇÃO")+
-      '</span></div><p class="muted">Confluência '+Number(c.score)+'/'+Number(c.required)+
-      ' · '+esc(c.direction)+' · '+esc(c.regime)+'</p><p class="muted">'+esc(checks)+
+      esc(con.asset)+' · '+esc(names[con.strategy]||con.strategy)+'</strong><span class="chip">'+
+      (con.approved?"APROVADA PARA SIMULAÇÃO":"SEM OPERAÇÃO")+
+      '</span></div><p class="muted">Confluência '+Number(con.score)+'/'+Number(con.required)+
+      ' · '+esc(con.direction)+' · '+esc(con.regime)+'</p><p class="muted">'+esc(checks)+
       '</p>'+(failures?'<p class="muted">Bloqueios: '+failures+'</p>':'')+'</div>';
  }else $("confluence").innerHTML='<p class="muted">Esperando formação e cotação nova; nenhum sinal aprovado sem confluência.</p>';
  const audit=(s.decisions||[]).filter(x=>x.version==="confluence-v3");
@@ -197,7 +200,7 @@ function render(s){
   }).join(""):
   '<p class="muted">Aguardando os resultados para cada ativo e regime.</p>';
  $("active").innerHTML=(s.active||[]).length?s.active.map(simCard).join(""):
-   '<p class="muted">Nenhuma simulação em andamento.</p>';
+   '<p class="muted">Aguardando confluência 7/7 e duas cotações na mesma direção.</p>';
  $("recent").innerHTML=(s.recent||[]).length?s.recent.slice(0,8).map(simCard).join(""):
    '<p class="muted">Aguardando primeiras simulações.</p>';
  $("integrity").innerHTML=(s.revisions||[]).length?s.revisions.slice(0,6).map(r=>
@@ -213,10 +216,47 @@ async function refresh(){
   render(await resp.json());
  }catch(e){$("broker").textContent="Falha temporária na atualização do radar";}
 }
-document.addEventListener("DOMContentLoaded",()=>{refresh();setInterval(refresh,3000);
- setInterval(()=>{
-  if(lastTime)$("updated").textContent="há "+Math.floor((Date.now()-lastTime)/1000)+"s";
-  if(last && (last.active||[]).length)$("active").innerHTML=last.active.map(simCard).join("");
- },500);
+function paintCountdowns(){
+ const now=Date.now()+clockOffsetMs;
+ const fresh=last && last.connected && last.collecting &&
+   last.last_live_quote_at && (Date.now()-new Date(last.last_live_quote_at).getTime()<12000);
+ const sec=((now/1000)%30+30)%30;
+ const remaining=30-sec;
+ const candle=$("candle-countdown");
+ const candleBar=$("candle-progress");
+ const active=$("operation-countdown");
+ const activeBar=$("operation-progress");
+ const opStatus=$("operation-status");
+ const clock=$("live-clock");
+ if(clock)clock.textContent=last && last.connected ?
+    new Date(now).toLocaleTimeString("pt-BR",{hour12:false}) : "--:--:--";
+ if(candle){
+  candle.textContent=fresh?("00:"+String(Math.max(0,Math.ceil(remaining))).padStart(2,"0")):"--:--";
+  if(candleBar)candleBar.style.width=fresh?(100*sec/30).toFixed(1)+"%":"0%";
+ }
+ const running=(last?.active||[]).find(t=>t.status==="OPEN");
+ if(active){
+   if(running){
+     const expiry=Date.parse(running.expiry_at);
+     const left=Math.max(0,(expiry-now)/1000);
+     active.textContent="00:"+String(Math.ceil(left)).padStart(2,"0");
+     if(activeBar)activeBar.style.width=(100*Math.min(1,(30-left)/30)).toFixed(1)+"%";
+     if(opStatus)opStatus.textContent=left>0?
+        ("Simulação virtual em andamento · "+running.asset+" · "+running.direction):
+        "Vencimento virtual atingido · aguardando preço de saída da Bulex";
+   }else{
+     active.textContent="--:--";
+     if(activeBar)activeBar.style.width="0%";
+     if(opStatus)opStatus.textContent="Sem operação virtual · monitorando confluência 7/7";
+   }
+ }
+ if(last && (last.active||[]).length)$("active").innerHTML=last.active.map(simCard).join("");
+ if(lastTime)$("updated").textContent="há "+Math.floor((Date.now()-lastTime)/1000)+"s";
+}
+document.addEventListener("DOMContentLoaded",()=>{
+ refresh();
+ setInterval(refresh,2500);
+ setInterval(paintCountdowns,150);
+ document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
 });
 })();
