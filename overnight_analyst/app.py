@@ -300,7 +300,6 @@ def open_paper(asset,snapshot,analysis,payout):
             continue
         # A fresh-but-uncorroborated price must not be counted as a trade.
         # Only later observations can pass both the candle and live gates.
-            continue
         if not record_decision(asset,sig,analysis,
                ("APROVADA_PAPER" if approved else
                 "SUSPENSA_ASSERTIVIDADE" if not policy["allowed"] else
@@ -344,32 +343,48 @@ def open_paper(asset,snapshot,analysis,payout):
             print("REGIME_V2_PAPER_ENTRY "+asset+" "+sig["strategy"]+
                   " "+sig["direction"]+" score="+str(gate["score"]),flush=True)
     if open_trades:
-        update(active=list(open_trades.values())[:12])
+        if time.monotonic()-last_quote_monotonic>40:
+      update(connection_phase="SEM_TICKS_RECENTES",collecting=False,
+             last_quote_fresh=False)
+     if time.monotonic()-last_quote_monotonic>90:
+      raise RuntimeError("Fluxo de preços ficou 90s sem atualização; reconexão necessária")
+     update(active=list(open_trades.values())[:12])
 
 def worker():
  global last_refresh,last_prune
+ update(connection_phase="RECUPERANDO_HISTORICO",auth_status="STARTING")
  score_refresh()
  while True:
   proc=None
+  with LOCK:
+   state["reconnect_attempts"]+=1
+  update(connection_phase="VALIDANDO_AMBIENTE",auth_status="STARTING",
+         connected=False,collecting=False,last_quote_fresh=False)
   try:
    email=os.getenv("BULLEX_EMAIL","").strip()
    password=os.getenv("BULLEX_PASSWORD")
    if not email or not password:raise RuntimeError("Conta DEMO não configurada")
    if not (ROOT/"vendor/bullexapi/stable_api.py").exists():
+    update(connection_phase="PREPARANDO_BIBLIOTECA")
     subprocess.run([sys.executable,str(ROOT/"bootstrap.py")],check=True,
                    timeout=150,stdout=subprocess.DEVNULL)
+   update(connection_phase="INICIANDO_RECEPTOR",auth_status="STARTING")
    proc=subprocess.Popen([sys.executable,"-u",str(ROOT/"worker.py")],cwd=ROOT,
                          stdin=subprocess.PIPE,stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL,text=True,bufsize=1)
    q=queue.Queue()
    threading.Thread(target=read_worker,args=(proc,q),daemon=True).start()
+   update(connection_phase="AUTENTICANDO_BULEX",auth_status="AUTHENTICATING")
    connected=rpc(proc,q,"connect",timeout=55,email=email,password=password)
    if connected.get("mode")!="PRACTICE":
     raise RuntimeError("Acesso não é conta DEMO")
    update(connected=True,account_mode="PRACTICE",auth_status="CONNECTED",
-          last_error=None)
+          connection_phase="LOGIN_DEMO_CONFIRMADO",
+          last_connected_at=now_iso(time.time()),last_error=None)
    cursor=0
+   last_quote_monotonic=time.monotonic()
    while True:
+    update(connection_phase="CONSULTANDO_MERCADOS")
     catalog=rpc(proc,q,"research_market",timeout=20)
     markets=[m for m in catalog["assets"] if m.get("open") is True]
     if not markets:
@@ -384,6 +399,7 @@ def worker():
     cursor+=len(selected)
     if cursor>=len(markets):cursor=0;update(scan_cycle=state["scan_cycle"]+1)
     live=[]
+    update(connection_phase="ASSINANDO_VELAS_30S")
     payouts={}
     for candidate in selected:
      asset=candidate["asset"];payouts[asset]=candidate.get("payout")
@@ -392,19 +408,41 @@ def worker():
       if response.get("subscribed"):live.append(asset)
      except Exception as ex:
       print("REGIME_SUBSCRIBE_ERROR "+asset+" "+type(ex).__name__,flush=True)
-    update(batch=live,collecting=bool(live),
+    update(batch=live,collecting=False,
+           connection_phase="AGUARDANDO_ATUALIZACOES" if live else "SEM_VELAS_DISPONIVEIS",
            last_error=None if live else "Nenhum fluxo 30s disponível no lote.")
     if not live:
      time.sleep(6)
      continue
     since=time.monotonic()
     seen_quote=set()
-    while time.monotonic()-since<ROTATION_SEC or open_trades:
+    # Never keep scanning a dead group because an OPEN trade restored after a
+    # restart belongs to another asset. Score refresh will expire it safely.
+    while (time.monotonic()-since<ROTATION_SEC or
+           any(t["asset"] in live for t in open_trades.values())):
      for asset in live:
       try:
        snapshot=rpc(proc,q,"quad30_snapshot",asset=asset,timeout=8)
        if not snapshot.get("available"):continue
        scanned.add(asset)
+       if snapshot.get("changed") and snapshot.get("fresh"):
+        cur=snapshot.get("current") or {}
+        try:
+         t=float(snapshot["now"])
+         candle=int(cur["from"])
+         px=float(cur["close"])
+         if math.isfinite(px) and px>0 and candle==int(t//30)*30:
+          rows=recent_prices.get(asset,[])
+          if not rows or rows[-1][0]!=candle:
+           rows=[]
+          if not rows or (t>rows[-1][1] and px!=rows[-1][2]):
+           rows.append((candle,t,px))
+          recent_prices[asset]=rows[-3:]
+        except (TypeError,ValueError,KeyError,OverflowError):pass
+        last_quote_monotonic=time.monotonic()
+        update(last_live_quote_at=now_iso(time.time()),
+               connection_phase="RECEBENDO_VELAS_AO_VIVO",
+               collecting=True)
        result=analyze(asset,snapshot)
        if asset not in seen_quote and snapshot.get("changed"):
         seen_quote.add(asset)
@@ -435,6 +473,8 @@ def worker():
     except Exception:pass
   except Exception as ex:
    update(connected=False,collecting=False,auth_status="READ_ERROR",
+          connection_phase="RECONECTANDO_EM_BREVE",
+          last_quote_fresh=False,
           last_error="Falha na conexão de leitura: "+type(ex).__name__+" "+str(ex)[:110])
    print("REGIME_CONNECT_ERROR "+type(ex).__name__+" "+str(ex)[:150],flush=True)
    if "Login recusado" in str(ex) or "2FA" in str(ex):return
