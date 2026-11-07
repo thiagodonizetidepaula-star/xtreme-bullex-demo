@@ -1,6 +1,8 @@
 """Adaptive 58% candidate policy and conservative confluence audit.
 
-This selects *research candidates*, not executable broker signals. Statistical
+This selects *research candidates*, not executable broker signals. v3 requires every
+check to pass and a positive directional context, rather than allowing a weak
+candle to be offset by unrelated confirmations. Statistical
 selection on the same history can overfit. The base and filtered-v2 cohorts
 remain separate; v2 wins are evaluated only on later observations.
 """
@@ -8,7 +10,7 @@ from __future__ import annotations
 import math
 from statistics import median
 
-VERSION="confluence-v2"
+VERSION="confluence-v3"
 MIN_FAMILY=20
 MIN_LOCAL=15
 MIN_NEW=25
@@ -33,10 +35,10 @@ def selection(strategy,asset,regime,version_scores,version_assets):
     if strategy not in ACTIVE:
         return {"allowed":False,"status":"SUSPENSA","reason":"Estrategia anterior descartada"}
     old=_group(version_scores,strategy,"BASE_ANTIGA")
-    fresh=_group(version_scores,strategy,"FILTRADO_V2")
-    local=_group(version_assets,strategy,"FILTRADO_V2",asset,regime)
+    fresh=_group(version_scores,strategy,"FILTRADO_V3")
+    local=_group(version_assets,strategy,"FILTRADO_V3",asset,regime)
     reference=fresh if fresh[0]>=MIN_NEW else old
-    source="FILTRADO_V2" if fresh[0]>=MIN_NEW else "BASE_ANTIGA"
+    source="FILTRADO_V3" if fresh[0]>=MIN_NEW else "BASE_ANTIGA"
     family_rate=reference[2]
     if reference[0]>=MIN_FAMILY and family_rate is not None and family_rate<KEEP_RATE:
         return {"allowed":False,"status":"SUSPENSA","reason":
@@ -45,7 +47,7 @@ def selection(strategy,asset,regime,version_scores,version_assets):
     if local[0]>=MIN_LOCAL and local[2] is not None and local[2]<KEEP_RATE:
         return {"allowed":False,"status":"SUSPENSA_NO_ATIVO","reason":
             f"Ativo/regime com {local[2]*100:.1f}% ({local[0]} entradas filtradas)",
-            "sample":local[0],"rate":local[2],"source":"FILTRADO_V2"}
+            "sample":local[0],"rate":local[2],"source":"FILTRADO_V3"}
     return {"allowed":True,
         "status":"MANTIDA_58" if reference[0]>=MIN_FAMILY else "EM_ESTUDO",
         "reason":f"Referencia {source}: {reference[0]} resultados, "+
@@ -57,7 +59,7 @@ def confluence(rule,snapshot,analysis):
     asset=analysis.get("asset")
     direction=rule.get("direction")
     strategy=rule.get("strategy")
-    out={"allowed":False,"checks":{},"score":0,"required":6,
+    out={"allowed":False,"checks":{},"score":0,"required":7,
          "reasons":[],"version":VERSION,"asset":asset,
          "strategy":strategy,"direction":direction}
     if strategy not in ACTIVE or direction not in ("CALL","PUT"):
@@ -109,15 +111,15 @@ def confluence(rule,snapshot,analysis):
       "FECHAMENTO_FORTE":finish>=.72,
       "SEM_PICO_EXCESSIVO":.55*baseline<=full<=3.0*baseline,
       "VOLATILIDADE_ACEITAVEL":.15<=volatility<=2.05,
-      "DIRECAO_COERENTE":drift>=(-.65 if strategy=="IMPULSO_APOS_PAUSA" else -.35)*baseline,
-      "PRECO_ATUAL_CONFIRMA":(quote-quote_open)*sign>=.05*baseline,
+      "DIRECAO_COERENTE":drift>=(.45 if strategy=="IMPULSO_APOS_PAUSA" else .10)*baseline,
+      "PRECO_ATUAL_CONFIRMA":(quote-quote_open)*sign>=.08*baseline,
     }
     out["checks"]=checks
     out["score"]=sum(checks.values())
-    out["required"]=6
+    out["required"]=7
     # Core confirmations cannot be compensated by unrelated checks.
     essentials=("FORCA_DA_VELA","SOMBRA_CONTRA","PRECO_ATUAL_CONFIRMA")
-    out["allowed"]=out["score"]>=6 and all(checks[k] for k in essentials)
+    out["allowed"]=out["score"]==7 and all(checks[k] for k in essentials)
     out["reasons"]=[key for key,value in checks.items() if not value]
     out["evidence"]={"body_ratio":round(ratio,4),"adverse_wick_ratio":round(adverse/full,4),
         "volatility_ratio":volatility,"last_close_location":round(finish,4),
