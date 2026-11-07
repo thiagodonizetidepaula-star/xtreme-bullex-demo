@@ -84,8 +84,21 @@ function drawCandles(s){
 
 function render(s){
  last=s;lastTime=Date.now();
- $("broker").textContent=s.connected && s.account_mode==="PRACTICE"?
-   "● Lendo mercados Bulex (conta DEMO)":"○ Sem conexão de leitura";
+ const age=s.last_live_quote_at?
+   (Date.now()-new Date(s.last_live_quote_at).getTime())/1000:null;
+ const fresh=s.connected && s.collecting && age!==null && age>=0 && age<=12;
+ const phase=String(s.connection_phase||s.auth_status||"INICIANDO");
+ $("broker").textContent=fresh?
+    "● Bulex DEMO conectada · candles ao vivo":
+    s.connected?"◐ Conta DEMO autenticada · aguardando novas velas":
+    "○ Conexão em andamento ou indisponível";
+ $("connection-phase").textContent=phase.replaceAll("_"," ");
+ $("live-age").textContent=age!=null&&Number.isFinite(age)&&age>=0?
+    Math.round(age)+" s atrás":"Aguardando primeira atualização";
+ $("startup-help").textContent=!s.connected?
+    "Se o Render estava adormecido, o site precisa iniciar e a Bulex autenticar novamente. O plano gratuito não mantém leitura 24 horas sem acessos.":
+    fresh?"Recebendo preços observados da Bulex. Nenhuma ordem é enviada.":
+    "Login DEMO realizado, mas o preço ainda não foi atualizado. O radar não considera cotações antigas como oportunidades.";
  $("error").textContent=s.last_error||"Nenhuma ordem é enviada. Pesquisa em andamento.";
  $("storage").textContent=s.storage||"Indisponível";
  $("total").textContent=Number(s.market_count)||0;
@@ -118,7 +131,8 @@ function render(s){
  const score=s.scoreboard||[];
  const phases=s.version_scores||[];
  const versionAssets=s.version_assets||[];
- const after=phases.filter(x=>x.phase==="FILTRADO_V2");
+ const after=phases.filter(x=>x.phase==="FILTRADO_V3");
+ const priorV2=phases.filter(x=>x.phase==="FILTRADO_V2");
  const before=phases.filter(x=>x.phase==="BASE_ANTIGA");
  const allW=after.reduce((n,x)=>n+Number(x.wins||0),0);
  const allL=after.reduce((n,x)=>n+Number(x.losses||0),0);
@@ -128,10 +142,13 @@ function render(s){
  const showPhases=(code)=>{
    const old=before.find(x=>x.strategy===code)||{};
    const newer=after.find(x=>x.strategy===code)||{};
-   const n0=Number(old.judged)||0,n1=Number(newer.judged)||0;
+   const v2=priorV2.find(x=>x.strategy===code)||{};
+   const n0=Number(old.judged)||0,n1=Number(newer.judged)||0,n2=Number(v2.judged)||0;
    const pct0=n0?pct(100*Number(old.wins)/n0):"—";
    const pct1=n1?pct(100*Number(newer.wins)/n1):"—";
-   return "Base: "+pct0+" (n="+n0+") · Com filtros v2: "+pct1+" (n="+n1+")";
+   const pct2=n2?pct(100*Number(v2.wins)/n2):"—";
+   return "Base: "+pct0+" (n="+n0+") · Filtro v2: "+pct2+" (n="+n2+
+      ") · Rigor v3: "+pct1+" (n="+n1+")";
  };
  const activeCodes=["IMPULSO_APOS_PAUSA","MUDANCA_DE_RITMO"];
  $("policy").innerHTML=activeCodes.map(code=>{
@@ -162,7 +179,7 @@ function render(s){
       ' · '+esc(c.direction)+' · '+esc(c.regime)+'</p><p class="muted">'+esc(checks)+
       '</p>'+(failures?'<p class="muted">Bloqueios: '+failures+'</p>':'')+'</div>';
  }else $("confluence").innerHTML='<p class="muted">Esperando formação e cotação nova; nenhum sinal aprovado sem confluência.</p>';
- const audit=s.decisions||[];
+ const audit=(s.decisions||[]).filter(x=>x.version==="confluence-v3");
  const latestRejected=audit.filter(x=>x.decision!=="APROVADA_PAPER");
  $("audit").innerHTML='<p class="muted">No lote recente de decisões persistidas: '+latestRejected.length+
   ' bloqueada(s) e '+(audit.length-latestRejected.length)+' permitida(s) para pesquisa virtual.</p>'+
