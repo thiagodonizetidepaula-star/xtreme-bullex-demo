@@ -520,6 +520,24 @@ p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
 <div class="metric"><small>Voltas no catálogo</small><strong id="cycles">0</strong></div></div>
 <p class="muted">O scanner alterna grupos de até 8 mercados. Acompanhar todos simultaneamente não é possível com esta conexão.</p>
 <p class="muted" id="batch">Sem mercados no lote.</p></div>
+<div class="card">
+<h2>Relógio Bulex · Velas M30s</h2>
+<p class="muted">Horário sincronizado aproximadamente com o servidor: <strong id="live-clock">--:--:--</strong></p>
+<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+ <div class="metric">
+  <small>Tempo restante da vela atual</small>
+  <strong class="clock" id="candle-countdown" style="font-size:34px">--:--</strong>
+  <div style="height:7px;background:#283b53;border-radius:12px;overflow:hidden;margin-top:9px"><div id="candle-progress" style="width:0%;height:100%;background:#68aefb;transition:width .15s linear"></div></div>
+ </div>
+ <div class="metric">
+  <small>Expiração da operação virtual</small>
+  <strong class="clock" id="operation-countdown" style="font-size:34px">--:--</strong>
+  <div style="height:7px;background:#283b53;border-radius:12px;overflow:hidden;margin-top:9px"><div id="operation-progress" style="width:0%;height:100%;background:#6ce4ae;transition:width .15s linear"></div></div>
+ </div>
+</div>
+<p id="operation-status" class="muted">Aguardando conexão. Nenhuma ordem enviada à corretora.</p>
+<p class="muted">O relógio da vela é estimado a partir do horário do servidor; só é exibido como ativo enquanto chegam cotações recentes. Uma operação só ganha contador após passar na confluência 7/7.</p>
+</div>
 <div class="card"><h2>Leitura de velas e regime</h2>
 <div class="row"><span>Ativo: <b id="asset">—</b></span><span class="chip" id="regime">—</span></div>
 <p id="pattern">Aguardando uma formação reconhecível...</p><p class="muted" id="candle">Sem cotação nova.</p><div id="chart30" role="img" aria-label="Últimas velas de trinta segundos recebidas da Bulex" style="width:100%;min-height:175px;overflow:hidden"></div><p class="muted" id="regime-metrics"></p>
