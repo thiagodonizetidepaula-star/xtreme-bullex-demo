@@ -423,83 +423,79 @@ def worker():
 def page():
  return """<!doctype html><html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Radar de Regimes | Bulex Laboratório</title>
+<title>Rompimento Vendedor 30s | Radar Bulex</title>
 <style>
-:root{color-scheme:dark}
-*{box-sizing:border-box} body{margin:0;background:#080f1c;color:#eef5ff;font-family:system-ui,-apple-system,sans-serif}
-main{max-width:820px;margin:0 auto;padding:26px 14px 55px}
-h1{font-size:27px;margin:7px 0}h2{font-size:19px;margin:0 0 12px}
-h3{font-size:16px;margin:14px 0 8px}
-p{line-height:1.5;color:#aec0d8}small{color:#a8bbd4}a{color:#9ec2ff}
-.kicker{color:#92b5ff;font-size:12px;font-weight:850;letter-spacing:1px}
-.card{margin-top:17px;background:#142033;border:1px solid #304560;border-radius:17px;padding:18px}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
-.metric{background:#1a2b42;border:1px solid #314864;border-radius:13px;padding:11px}
-.metric strong{display:block;font-size:24px;margin-top:7px}
-.status{font-weight:800;color:#80e5ba}.warn{color:#ffcf90}
-.bar{border-top:1px solid #2d3f55;padding:11px 0}
-.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
-.chip{display:inline-block;border:1px solid #365b8d;border-radius:20px;padding:4px 8px;color:#abcaff;font-size:12px}
-.muted{font-size:12px;color:#a8bad0}
-.green{color:#65e5ad}.red{color:#ff9ea6}
-.clock{font-weight:800;color:#bfd3ff}
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#0a1020;color:#f0f6ff;font:15px system-ui,-apple-system,sans-serif}
+main{max-width:820px;margin:auto;padding:24px 14px 56px}
+h1{font-size:27px;margin:5px 0}h2{font-size:19px;margin:0 0 12px}h3{font-size:16px}
+p{line-height:1.48;color:#a9bdd4}a{color:#a9c8ff}
+.kicker{font-size:12px;letter-spacing:1px;font-weight:800;color:#91b2ff}
+.card{background:#132037;border:1px solid #304967;border-radius:17px;margin:15px 0;padding:17px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.metric{background:#1a2b45;border:1px solid #314867;border-radius:12px;padding:13px}
+.metric b{display:block;font-size:27px;margin-top:6px}
+.muted{color:#b1bfd2;font-size:13px}.green{color:#68e4ae}.red{color:#ffacb0}.gold{color:#f8d08b}
+.tag{display:inline-block;border:1px solid #3c6d98;border-radius:12px;padding:5px 9px;font-size:12px}
+.bar{border-top:1px solid #30435a;padding:10px 0}
+.count{font-size:31px;font-weight:800;color:#c4dbff}
+.progress{height:8px;background:#293c55;border-radius:20px;overflow:hidden;margin-top:7px}
+.fill{height:100%;width:0;background:#65b1f3;transition:width .15s linear}
 </style></head><body><main>
-<div class="kicker">BULEX · ANÁLISE DE VELAS · 100% SOMENTE LEITURA</div>
-<h1>Radar de Regimes</h1>
-<p>Pesquisa independente de movimento de preços. A aplicação não envia ordens nem liga qualquer estratégia anterior. Procura resultados prospectivos de 30 segundos. Quando não existir evidência suficiente, o diagnóstico será <strong>SEM OPERAÇÃO</strong>.</p>
-<div class="card"><div class="row"><strong class="status" id="broker">Verificando conexão...</strong><span class="chip">Nenhuma ordem na corretora</span></div>
-<p class="muted">Etapa da conexão: <b id="connection-phase">INICIANDO</b> · Último candle ao vivo: <b id="live-age">—</b></p>
-<p class="muted" id="startup-help">No plano Render gratuito, o servidor pode suspender após 15 minutos sem visitas e reiniciar ao abrir o site. Conexão à corretora e recebimento de velas são etapas diferentes.</p>
-<p class="muted" id="error">Carregando dados.</p><p class="muted">Supabase: <b id="storage">Aguardando</b> · Dados: <span id="updated">—</span></p>
-<div class="grid">
-<div class="metric"><small>Mercados abertos</small><strong id="total">0</strong></div>
-<div class="metric"><small>Ativos observados</small><strong id="scanned">0</strong></div>
-<div class="metric"><small>Voltas no catálogo</small><strong id="cycles">0</strong></div></div>
-<p class="muted">O scanner alterna grupos de até 8 mercados. Acompanhar todos simultaneamente não é possível com esta conexão.</p>
-<p class="muted" id="batch">Sem mercados no lote.</p></div>
+<div class="kicker">VÍDEO ANALISADO · BULEX · CONTA DEMONSTRATIVA · SOMENTE PESQUISA</div>
+<h1>Rompimento Vendedor Confirmado · 30s</h1>
+<p>Somente PUT virtual: vela vermelha forte rompe o suporte, confirma tendência e pressão vendedora e duas cotações reais consecutivas mostram continuação. Nenhuma ordem é enviada à corretora.</p>
 <div class="card">
-<h2>Relógio Bulex · Velas M30s</h2>
-<p class="muted">Horário sincronizado aproximadamente com o servidor: <strong id="live-clock">--:--:--</strong></p>
-<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
- <div class="metric">
-  <small>Tempo restante da vela atual</small>
-  <strong class="clock" id="candle-countdown" style="font-size:34px">--:--</strong>
-  <div style="height:7px;background:#283b53;border-radius:12px;overflow:hidden;margin-top:9px"><div id="candle-progress" style="width:0%;height:100%;background:#68aefb;transition:width .15s linear"></div></div>
- </div>
- <div class="metric">
-  <small>Expiração da operação virtual</small>
-  <strong class="clock" id="operation-countdown" style="font-size:34px">--:--</strong>
-  <div style="height:7px;background:#283b53;border-radius:12px;overflow:hidden;margin-top:9px"><div id="operation-progress" style="width:0%;height:100%;background:#6ce4ae;transition:width .15s linear"></div></div>
- </div>
-</div>
-<p id="operation-status" class="muted">Aguardando conexão. Nenhuma ordem enviada à corretora.</p>
-<p class="muted">O relógio da vela é estimado a partir do horário do servidor; só é exibido como ativo enquanto chegam cotações recentes. Uma operação só ganha contador após passar na confluência 7/7.</p>
-</div>
-<div class="card"><h2>Leitura de velas e regime</h2>
-<div class="row"><span>Ativo: <b id="asset">—</b></span><span class="chip" id="regime">—</span></div>
-<p id="pattern">Aguardando uma formação reconhecível...</p><p class="muted" id="candle">Sem cotação nova.</p><div id="chart30" role="img" aria-label="Últimas velas de trinta segundos recebidas da Bulex" style="width:100%;min-height:175px;overflow:hidden"></div><p class="muted" id="regime-metrics"></p>
-<p class="muted" id="news">Notícias ainda não verificadas.</p>
-</div>
-<div class="card"><h2>Experimentos em avaliação</h2>
-<div id="strategies"></div>
-<p class="muted">Ficam em pesquisa as famílias com pelo menos 20 WIN/LOSS e 58% ou mais na base. Abaixo disso, são suspensas. Resultados com filtros novos (v2) são avaliados separadamente para não inflar a taxa antiga.</p><div id="policy">Avaliando taxas e amostras…</div><p class="muted">O limite de 58% é uma triagem de pesquisa, não uma garantia de lucratividade. Uma única simulação por vez, pausa de 120 segundos após LOSS e bloqueio temporário após revisão de candle fechado.</p>
+ <div class="row"><strong id="broker">Verificando conexão…</strong><span class="tag">PAPER ONLY</span></div>
+ <p class="muted">Conexão: <strong id="connection-phase">INICIANDO</strong> · Última atualização: <strong id="live-age">—</strong></p>
+ <p id="error" class="muted"></p><p class="muted">Supabase: <strong id="storage">—</strong> · Tela: <span id="updated">—</span></p>
+ <div class="grid3"><div class="metric"><small>Mercados abertos</small><b id="total">0</b></div>
+ <div class="metric"><small>Ativos observados</small><b id="scanned">0</b></div>
+ <div class="metric"><small>Voltas no catálogo</small><b id="cycles">0</b></div></div>
+ <p class="muted" id="batch">Buscando ativos…</p>
 </div>
 <div class="card">
-<h2>Placar virtual · Confluência v3</h2><p class="muted">Somente simulações após a confirmação de sete verificações e duas atualizações consecutivas. Resultados da base antiga e da v2 ficam arquivados separadamente.</p>
-<div class="grid">
-<div class="metric"><small>WIN</small><strong id="wins">0</strong></div>
-<div class="metric"><small>LOSS</small><strong id="losses">0</strong></div>
-<div class="metric"><small>Assertividade</small><strong id="rate">—</strong></div></div>
-<h3>Estratégias mantidas (≥58%) · <span id="qualified-count">0</span></h3><div id="qualified">Carregando resultados.</div>
-<h3>Confluência da última oportunidade</h3><div id="confluence">Aguardando padrão de vela.</div><h3>Entradas rejeitadas pelo filtro</h3><div id="audit">Sem rejeições registradas.</div><h3>Comparativo por ativo e regime</h3><div id="scoreboard">Ainda sem resultados.</div>
-<h3>Simulações ativas</h3><div id="active">Nenhuma.</div>
-<h3>Últimas simulações</h3><div id="recent">Nenhuma.</div>
+ <h2>Relógios ao vivo</h2>
+ <p class="muted">Hora da referência do servidor: <strong id="live-clock">--:--:--</strong></p>
+ <div class="grid">
+  <div class="metric"><small>Vela M30s</small><b class="count" id="candle-countdown">--:--</b>
+   <div class="progress"><div class="fill" id="candle-progress"></div></div></div>
+  <div class="metric"><small>Entrada virtual 30s</small><b class="count" id="operation-countdown">--:--</b>
+   <div class="progress"><div class="fill" id="operation-progress" style="background:#65dda0"></div></div></div>
+ </div>
+ <p class="muted" id="operation-status">SEM OPERAÇÃO · Aguardando os filtros da estratégia.</p>
 </div>
-<div class="card"><h2>Integridade do gráfico</h2>
-<p class="muted">Revisões de candles fechados são armazenadas como evidência técnica. Não são prova de manipulação.</p>
-<div id="integrity">Nenhuma revisão registrada neste laboratório.</div></div>
-<div class="card"><h2>Notícias e risco</h2>
-<p>Consulte o calendário econômico do <a href="https://br.investing.com/economic-calendar/" target="_blank" rel="noopener noreferrer">Investing.com</a>. Horários de notícias de alto impacto precisam ser cadastrados manualmente; sem integração, a situação é indicada como não verificada.</p></div>
+<div class="card">
+ <h2>Velas reais Bulex de 30 segundos</h2>
+ <div class="row"><strong id="asset">Aguardando ativo</strong><span class="tag" id="regime">SEM COTAÇÃO</span></div>
+ <p class="muted" id="candle">Sem preço atual.</p>
+ <div id="chart30" role="img" aria-label="Últimas velas de 30 segundos da Bulex"></div>
+ <p class="muted" id="regime-metrics"></p>
+</div>
+<div class="card">
+ <h2>Filtro de entrada · 7 verificações</h2>
+ <p class="muted" id="pattern">Aguardando a formação da vela rompendo o suporte.</p>
+ <div id="checks"></div>
+ <p id="confluence" class="muted">SEM OPERAÇÃO</p>
+ <p class="muted" id="news">Notícias: não verificadas automaticamente.</p>
+ <p class="muted">A linha verde do vídeo é uma marcação visual; neste teste o suporte é calculado como a mínima dos 13 candles anteriores. A direção vista no Investing.com não é sincronizada automaticamente com a cotação OTC da Bulex.</p>
+</div>
+<div class="card">
+ <h2>Placar exclusivo desta estratégia</h2>
+ <div class="grid3"><div class="metric"><small>WIN</small><b class="green" id="wins">0</b></div>
+ <div class="metric"><small>LOSS</small><b class="red" id="losses">0</b></div>
+ <div class="metric"><small>Assertividade</small><b id="rate">—</b></div></div>
+ <p class="muted">É uma estratégia nova e ainda não validada. Resultados antigos não são contabilizados. Payout exibido é indicativo; não representa execução da corretora.</p>
+ <h3>Última simulação</h3><div id="active"><p class="muted">Nenhuma simulação ativa.</p></div>
+ <h3>Últimas simulações encerradas</h3><div id="recent"><p class="muted">Ainda não há resultados.</p></div>
+ <h3>Por ativo</h3><div id="scoreboard"><p class="muted">Sem dados suficientes.</p></div>
+</div>
+<div class="card"><h2>Notícias e integridade</h2>
+ <p>Consulte o <a href="https://br.investing.com/economic-calendar/" target="_blank" rel="noopener noreferrer">calendário do Investing.com</a>. Os horários precisam estar cadastrados para bloquear notícias automaticamente. Não se presume ausência de notícias.</p>
+ <div id="integrity" class="muted">Nenhuma revisão de candle registrada.</div>
+</div>
 <script src="/research.js" defer></script>
 </main></body></html>"""
 
