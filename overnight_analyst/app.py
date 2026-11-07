@@ -30,6 +30,11 @@ BATCH=8
 ROTATION_SEC=100
 state={
  "connected":False,"collecting":False,"auth_status":"INICIALIZANDO",
+ "connection_phase":"SERVIDOR_INICIANDO",
+ "service_started_at":datetime.datetime.now(datetime.timezone.utc).isoformat(),
+ "last_connected_at":None,"last_live_quote_at":None,"last_loss_at":None,
+ "reconnect_attempts":0,"stream_age_seconds":None,
+ "service_plan_note":"Render Free pode suspender após 15 minutos sem acessos.",
  "account_mode":"UNAVAILABLE","research_mode":"REGIMES_ONLY",
  "broker_orders_enabled":False,"demo_orders_enabled":False,
  "strategies":RULES,"retired_strategies":RETIRED,"version":VERSION,
@@ -50,6 +55,8 @@ seen_bars={}
 scanned=set()
 recent_ids=set()
 decision_ids=set()
+recent_revisions={}
+recent_prices={}
 last_refresh=0
 last_prune=0
 
@@ -76,6 +83,27 @@ def score_refresh():
  try:
   output=api("GET","regime-research")
   entries=output.get("trades",[])
+  # A Render Free cold start can outlive a virtual 30s expiry. Mark such
+  # records SEM_COTACAO, never fabricate a WIN/LOSS or stall the scanner.
+  expired=[]
+  for original in entries:
+   if original.get("status")!="OPEN":continue
+   try:
+    expiry=datetime.datetime.fromisoformat(original["expiry_at"]).timestamp()
+    if time.time()>expiry+6:
+     t=dict(original)
+     t["status"]="SEM_COTACAO"
+     t["completed_at"]=now_iso(time.time())
+     t["exit_price"]=None
+     expired.append(t)
+   except (ValueError,TypeError,KeyError):continue
+  if expired and ingest(trades=expired[:15]):
+   expired_ids={t["id"] for t in expired[:15]}
+   for trade in entries:
+    if trade.get("id") in expired_ids:
+     trade.update(status="SEM_COTACAO",completed_at=now_iso(time.time()),exit_price=None)
+     open_trades.pop(trade["id"],None)
+   print("REGIME_RECOVER_MISSING_QUOTE "+str(len(expired_ids)),flush=True)
   for trade in entries:
    if trade.get("status")=="OPEN":
     open_trades.setdefault(trade["id"],dict(trade))
@@ -153,6 +181,7 @@ def observe_closed(asset,snapshot):
  if batch or revisions:
   ingest(bars=batch[:30],revisions=revisions[:8])
  if revisions:
+  recent_revisions[asset]=time.time()
   print("REGIME_CLOSED_BAR_REVISED "+asset+" count="+str(len(revisions)),flush=True)
 
 def live_settle(asset,snapshot):
@@ -186,7 +215,10 @@ def live_settle(asset,snapshot):
    open_trades.pop(key,None)
    finished.append(trade)
    print("REGIME_PAPER_RESULT "+asset+" "+trade["strategy"]+" "+trade["status"],flush=True)
- if finished:score_refresh()
+ if finished:
+  if any(t["status"]=="LOSS" for t in finished):
+   update(last_loss_at=now_iso(now))
+  score_refresh()
 
 
 def record_decision(asset,signal,analysis,decision,reasons,checks,policy):
@@ -216,7 +248,7 @@ def record_decision(asset,signal,analysis,decision,reasons,checks,policy):
 
 def open_paper(asset,snapshot,analysis,payout):
     if state["storage"]!="CONNECTED":return
-    if any(t["asset"]==asset for t in open_trades.values()):return
+    if open_trades:return  # One paper simulation at a time across ALL assets.
     signals=prospectively_enter(analysis,snapshot,payout)
     if not signals:return
     news=check_news(asset,float(snapshot["now"]))
@@ -229,6 +261,24 @@ def open_paper(asset,snapshot,analysis,payout):
         reasons=[]
         if not policy["allowed"]:reasons.append(policy["reason"])
         if news["blocked"]:reasons.append("CALENDARIO: "+str(news["status"]))
+        # Price confirmation requires two different broker updates inside the
+        # same live candle, pointing in the intended direction.
+        samples=recent_prices.get(asset,[])
+        signed=1 if sig["direction"]=="CALL" else -1
+        confirmed=(len(samples)>=2 and
+                   samples[-1][0]==samples[-2][0] and
+                   samples[-1][0]==int(float(snapshot["now"])//30)*30 and
+                   (samples[-1][2]-samples[-2][2])*signed>0 and
+                   0<samples[-1][1]-samples[-2][1]<=2.5)
+        if not confirmed:reasons.append("AGUARDANDO_DUAS_COTACOES_CONSECUTIVAS")
+        if time.time()-recent_revisions.get(asset,0)<240:
+            reasons.append("VELA_FECHADA_REVISADA_RECENTEMENTE")
+        try:
+            loss_time=datetime.datetime.fromisoformat(state["last_loss_at"]).timestamp()
+        except (TypeError,ValueError):
+            loss_time=0
+        if time.time()-loss_time<120:
+            reasons.append("PAUSA_DE_120S_APOS_LOSS")
         if float(sig.get("payout") or 0)<80:
             reasons.append("PAYOUT INDICATIVO INFERIOR A 80%")
         if not gate["allowed"]:reasons+=gate["reasons"]
@@ -242,8 +292,14 @@ def open_paper(asset,snapshot,analysis,payout):
           "approved":approved,"news_status":news["status"]})
         # Observe the first seconds rather than rejecting a still-forming
         # live confirmation immediately. Never move the close-time pattern.
-        if (not approved and reasons==["PRECO_ATUAL_CONFIRMA"] and
+        if (not approved and
+                all(r in ("PRECO_ATUAL_CONFIRMA",
+                          "AGUARDANDO_DUAS_COTACOES_CONSECUTIVAS")
+                    for r in reasons) and
                 float(snapshot["now"])%30<3.6):
+            continue
+        # A fresh-but-uncorroborated price must not be counted as a trade.
+        # Only later observations can pass both the candle and live gates.
             continue
         if not record_decision(asset,sig,analysis,
                ("APROVADA_PAPER" if approved else
