@@ -414,7 +414,8 @@ def worker():
     # Never keep scanning a dead group because an OPEN trade restored after a
     # restart belongs to another asset. Score refresh will expire it safely.
     while (time.monotonic()-since<ROTATION_SEC or
-           any(t["asset"] in live for t in open_trades.values())):
+           (time.monotonic()-since<ROTATION_SEC+70 and
+            any(t["asset"] in live for t in open_trades.values()))):
      for asset in live:
       try:
        snapshot=rpc(proc,q,"quad30_snapshot",asset=asset,timeout=8)
