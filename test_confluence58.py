@@ -77,7 +77,8 @@ class Confluence58Tests(unittest.TestCase):
   from overnight_analyst import app
   self.assertFalse(app.state["broker_orders_enabled"])
   self.assertFalse(app.state["demo_orders_enabled"])
-  self.assertEqual(app.state["research_mode"],"VIDEO_BEARISH_BREAKOUT_30S_ONLY")
+  self.assertEqual(app.state["research_mode"],"OBSERVACAO_SEM_ESTRATEGIA")
+  self.assertEqual(app.state["strategies"],{})
 
 if __name__=="__main__":
  unittest.main()
