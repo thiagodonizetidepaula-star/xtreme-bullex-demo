@@ -70,7 +70,10 @@ def market(force=False):
         payout=100-float(commission) if valid_commission else 0.0
         fresh[name]={'payout':payout,'open':a.get('enabled') is True and a.get('is_suspended') is False,'otc':'OTC' in name.upper()}
         api.get_all_ACTIVES_OPCODE()[name]=int(asset_id)
-    market_cache=fresh;market_at=requested_at
+    market_cache=fresh
+    # The cache TTL must begin AFTER the broker response, not when HTTP/WS
+    # fetching began; slow catalogs previously appeared expired immediately.
+    market_at=time.time()
     return fresh
 
 def dispatch(c):
@@ -132,8 +135,13 @@ def dispatch(c):
             # Copiar: o receptor websocket atualiza o dicionário em outra thread.
             snapshot=list(api.api.real_time_candles[asset][60].copy().values())
             current=int(now//60)*60
-            if not any(b.get('from')==current for b in snapshot):continue
+            # The previous M1 candle may already be closed when the new
+            # candle has not received its first tick. Waiting for the new
+            # candle can miss the whole broker 5-second entry window.
+            # We ONLY expose the confirmed prior closed candle; no live
+            # unfinished bar or future price is used as evidence.
             closed=[dict(b) for b in snapshot if b.get('from',now)+60<=current]
+            if not any(b.get('from')==current-60 for b in closed):continue
             context=list(api.api.real_time_candles[asset][300].copy().values()) if asset in context_assets else []
             closed5=[dict(b) for b in context if b.get('from',now)%300==0 and b.get('from',now)+300<=now]
             items.append({'asset':asset,'candles':closed,'candles5':closed5})
