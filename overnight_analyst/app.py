@@ -38,7 +38,7 @@ state={
  "account_mode":"UNAVAILABLE","research_mode":"OBSERVACAO_SEM_ESTRATEGIA",
  "broker_orders_enabled":False,"demo_orders_enabled":False,
  "strategies":{},"retired_strategies":{},"version":"monitor-only-v1",
- "min_accuracy":None,"min_history":30,"confluence_version":VERSION,
+ "min_accuracy":None,"min_history":30,"confluence_version":None,
  "version_scores":[],"version_assets":[],"decisions":[],"strategy_policy":{},
  "last_confluence":None,"audit_approvals":0,"audit_blocks":0,
  "last_error":None,"storage":"INICIALIZANDO","storage_error":None,
