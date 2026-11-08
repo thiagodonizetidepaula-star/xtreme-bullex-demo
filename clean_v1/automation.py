@@ -62,6 +62,8 @@ def run(state, call):
         last_catalog=0;assets=[];rot=0;last_prepare=-1;last_study_selection=0
         frozen_subset=[];frozen_minute=None
         state['rejections']={'late':0,'preflight':0,'busy':0,'broker':0,'lateral':0,'exhausted':0,'rsi':0}
+        state['scan_diagnostics']={'status':'AGUARDANDO_CANDLES','received':0,'closed_ready':0,
+            'short_history':0,'stale_closed':0,'no_signal':0,'source_errors':[]}
         while not state['stop'].is_set():
             now=time.time();sec=now%60
             if not state['running']:break
@@ -98,11 +100,16 @@ def run(state, call):
                 state['ready']=0;state['market_active_batch']=[]
                 state['message']='Nenhum ativo aberto elegível no mercado escolhido (payout ≥80%). Reconsultando regularmente.'
                 state['stop'].wait(2);continue
-            if 56<=sec<59 and last_prepare!=int(now//60):
+            if 56<=sec<59.4 and last_prepare!=int(now//60):
                 try:
-                    call('exec',{'op':'demo_prepare'},22)
-                    last_prepare=int(now//60)
-                    state['message']='Saldo e payout validados; analisando sinais M1'
+                    preflight=call('exec',{'op':'demo_prepare'},22)
+                    # An overlong network response may cross a minute boundary.
+                    # Such preparation is not considered valid for the next
+                    # candle, and the executor will also enforce its short TTL.
+                    if preflight.get('ready') and int(time.time()//60)==int(now//60):
+                        last_prepare=int(now//60)
+                        state['message']='Saldo e payout validados; analisando sinais M1'
+                    else:state['message']='Pré-validação chegou fora da janela; nenhuma ordem enviada'
                 except Exception as ex:state['message']='Pré-validação: '+str(ex)[:100]
             # Catalog covers ALL open assets; scan in rotating batches to avoid
             # overwhelming broker streams. No permanently privileged top 12.
@@ -145,9 +152,20 @@ def run(state, call):
             wall_now=time.time()
             boundary=int(server_now//60)*60
             mg.expire(state,boundary,wall_now)
+            diag={'status':'ANALISANDO','received':len(snap.get('items',[])),
+                  'closed_ready':0,'short_history':0,'stale_closed':0,
+                  'no_signal':0,'source_errors':(snap.get('errors') or [])[:3],
+                  'clock_second':round(server_now%60,2)}
+            state['scan_diagnostics']=diag
             for item in snap.get('items',[]):
                 bars=normalized(item.get('candles',[]),server_now)
-                if len(bars)<55 or bars[-1]['t']!=boundary-60:continue
+                # Trending needs 62 closed bars; fewer bars cannot authorize
+                # an order, even if a Sniper pattern appears earlier.
+                if len(bars)<62:
+                    diag['short_history']+=1;continue
+                if bars[-1]['t']!=boundary-60:
+                    diag['stale_closed']+=1;continue
+                diag['closed_ready']+=1
                 enabled=study_selector.effective(state)
                 if not enabled:continue  # never execute unvalidated study patterns
                 policy=state.get('signal_policy','any')
@@ -205,7 +223,9 @@ def run(state, call):
                 # Avoid contradicting orders across timeframes at the same close.
                 if m1 and m5 and m1[0]!=m5[0]:continue
                 chosen=m5 or m1
-                if not chosen:continue
+                if not chosen:
+                    diag['no_signal']+=1
+                    continue
                 signal,strategy_name,signal_bars,timeframe_minutes,rsi_value=chosen
                 stake_to_send,is_recovery=mg.amount_for_signal(state,boundary,item['asset'],timeframe_minutes)
                 if stake_to_send is None:continue
