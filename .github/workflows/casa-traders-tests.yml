@@ -1,0 +1,44 @@
+name: Casa Traders - testes da integração PRACTICE
+on:
+  push:
+    branches:
+      - 'feature/casa-traders-bullix-practice'
+  pull_request:
+    paths:
+      - 'casa_traders/**'
+      - 'test_casa_traders.py'
+      - 'clean_v1/app.py'
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile Python without running broker clients
+        run: python -m compileall -q clean_v1 casa_traders test_casa_traders.py
+      - name: Validate ranking and settlement safeguards
+        run: python -m unittest test_casa_traders -v
+      - name: Check JavaScript effects syntax
+        run: node --check casa_traders/effects.js
+      - name: Validate HTML inline JavaScript
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Scripts(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.inside=False; self.scripts=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="script" and not dict(attrs).get("src"): self.inside=True
+              def handle_endtag(self,tag):
+                  if tag=="script": self.inside=False
+              def handle_data(self,value):
+                  if self.inside: self.scripts.append(value)
+          p=Scripts();p.feed(Path("casa_traders/mural.html").read_text())
+          Path("/tmp/casa-inline.js").write_text("\n".join(p.scripts))
+          PY
+          node --check /tmp/casa-inline.js
