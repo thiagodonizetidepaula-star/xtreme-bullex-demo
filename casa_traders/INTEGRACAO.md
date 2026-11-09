@@ -88,8 +88,11 @@ não cliques no personagem, animações ou sinais sem ordem.
 ## Status em 09/11/2026
 ✅ Lógica de ranking + deduplicação + efeitos + testes *adicionados em branch separada*.
 ✅ Rota server-side privada de leitura adicionada à mesma branch.
+✅ Página responsiva `/casa` adicionada à mesma branch para testar o mural autenticado no mesmo domínio; inclui `/assets/casa_effects.js`.
+✅ PR em rascunho #21 aberta para revisão.
+✅ GitHub Actions: CI da Casa e testes legados de padrões ilustrados passaram nesta branch.
 ❌ Código da Casa ChatGPT Site NÃO foi modificado nesta conversa.
-❌ Bridge NÃO foi publicada na produção; sem conexão cross-origin estabelecida.
+❌ Bridge NÃO foi publicada na produção; sem conexão cross-origin estabelecida. O Xtreme Tiger tem sessão PRACTICE ativa ou potencialmente ativa conforme logs; publicar provocaria reinício e não deve ocorrer durante operação pendente.
 ❌ Não houve execução ou confirmação de novas ordens.
 ❌ Classificação simultânea de todas as estratégias ainda exige motor dedicado
    e teste em conta PRACTICE antes de ativação.
@@ -103,3 +106,9 @@ Não publicar sem teste de autenticação, risco, bloqueio de duplicidades e
 mapeamento das estratégias. Conforme o Help Center, alterações em Sites
 são feitas no fluxo do editor do Site existente, não pelo serviço Render
 do antigo `trader-office-3d` que redireciona para outro aplicativo.
+
+### Teste pré-publicação
+- CI verde: `Casa Traders - testes da integração PRACTICE` e `Verify illustrated patterns on clean-v1` no PR #21.
+- Não disparar deploy automático do robô em produção enquanto um pedido de compra ou liquidação estiver pendente; verificar usuário/desligamento primeiro.
+- Após implantação segura: conectar PRACTICE no Xtreme Tiger original e visitar `https://xtreme-bot-clean-v1.onrender.com/casa` em **mesmo navegador/sessão autenticada** para validar dados do mural. Este URL ainda não está publicado nesta branch.
+- Depois utilizar no site original link para mural ou proxy autenticado de integração, sem iframe anônimo expondo resultados.
