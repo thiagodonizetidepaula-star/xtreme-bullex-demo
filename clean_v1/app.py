@@ -688,6 +688,22 @@ def app(environ,start_response):
         if not current and viewer_info and viewer_info.get('durable'):
             return respond(start_response,'200 OK',{'connected':False,'trusted_waiting':True,'remote_control':viewer_info.get('scope')=='control'})
         return respond(start_response,'200 OK',state_view(current)|{'monitor_only':False})
+    if method=='GET' and path in ('/casa','/casa/','/assets/casa_effects.js'):
+        # Authenticated PRACTICE leaderboard. UI is read-only and same-origin
+        # with the broker-connected owner's session. The separate 3D Casa
+        # Sites app remains untouched; no CORS or credentials are exposed.
+        if path=='/assets/casa_effects.js':
+            path_on_disk=ROOT/'casa_traders'/'effects.js'
+            content_type='application/javascript; charset=utf-8'
+        else:
+            path_on_disk=ROOT/'casa_traders'/'mural.html'
+            content_type='text/html; charset=utf-8'
+        data=path_on_disk.read_bytes()
+        start_response('200 OK',[('Content-Type',content_type),
+                       ('Content-Length',str(len(data))),
+                       ('Cache-Control','no-store'),
+                       ('X-Content-Type-Options','nosniff')])
+        return [data]
     if method=='GET' and path=='/api/casa/scoreboard':
         # Secure, account-scoped, read-only feed for the Casa dos Traders.
         # Browser requests without the owner's session or trusted pairing
