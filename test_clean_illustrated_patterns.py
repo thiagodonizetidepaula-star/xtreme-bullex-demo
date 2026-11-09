@@ -52,7 +52,9 @@ class IllustratedTests(unittest.TestCase):
         self.assertEqual(len(ILLUSTRATED),6)
         self.assertEqual(len(IDS),12)
         self.assertEqual(len(STUDY_STRATEGY_IDS),16)
-        self.assertEqual(len(ALL_STRATEGY_IDS),30)
+        # 30 catalogued legacy strategies + the isolated video_1r added earlier.
+        self.assertEqual(len(ALL_STRATEGY_IDS),31)
+        self.assertIn('video_1r',ALL_STRATEGY_IDS)
         self.assertIn('sniper',ALL_STRATEGY_IDS)
         self.assertEqual(strategy_id("Engolfo de Alta (confirmado)",1),"fig_engolfo_alta_m1")
         self.assertIsNone(strategy_id("unknown",5))
