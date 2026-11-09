@@ -129,7 +129,7 @@ a{color:#ffd075}
 #monitorViewer{padding:5px}
 .bot-tabs.monitor-tabs{grid-template-columns:minmax(0,1fr)}
 .bot-tabs button[hidden]{display:none}
-.operation-visual{margin-top:20px;border:1px solid #815238;border-radius:16px;overflow:hidden;background:#100f1f;aspect-ratio:16/9;min-height:170px;display:flex;align-items:center;justify-content:center}.operation-visual video{display:block;width:100%;height:100%;object-fit:cover}</style></head><body><main>
+.operation-visual{margin-top:20px;border:1px solid #815238;border-radius:16px;overflow:hidden;background:#100f1f;aspect-ratio:16/9;min-height:170px;display:flex;align-items:center;justify-content:center}.operation-visual video{display:block;width:100%;height:100%;object-fit:cover}</style></head><body><a href="/3d" style="position:fixed;z-index:100;bottom:14px;right:14px;padding:13px 16px;background:linear-gradient(115deg,#08bda9,#2b8de9);border:1px solid #93f3db;border-radius:999px;color:#041b2c;font:800 14px system-ui;text-decoration:none;box-shadow:0 8px 22px #0008" aria-label="Abrir Sala de Traders 3D">◈ Abrir Sala 3D</a><main>
 <div class="brand"><div class="brand-copy"><div class="xtreme-logo-wrap" aria-label="Logo Xtreme Tiger animada"><img class="xtreme-logo xtreme-logo-fallback" src="/assets/xtreme_tiger_logo.webp?v=1" alt="Xtreme Tiger — tigre dourado com gráficos de mercado" width="600" height="200" loading="eager" decoding="async"><video id="xtremeLogoVideo" class="xtreme-logo-video" autoplay muted loop playsinline preload="metadata" poster="/assets/xtreme_tiger_logo.webp?v=1" aria-label="Xtreme Tiger animado"><source src="/assets/xtreme_tiger_logo_animada.mp4?v=1" type="video/mp4"></video></div></div></div>
 <nav class="bot-tabs" aria-label="Abas do aplicativo"><button type="button" id="tabBot" class="tab-selected" aria-selected="true">◉ Bot</button><button type="button" id="tabSettings" aria-selected="false">⚙ Configurações</button><button type="button" id="tabStudy" aria-selected="false">◈ Estudo de velas</button></nav><div id="botPanel">
 <section class="card" id="monitorCard">
@@ -609,6 +609,14 @@ def app(environ,start_response):
         if not history_session:return respond(start_response,'401 Unauthorized',{'error':'Conecte à PRACTICE ou use controle remoto autorizado'})
         try:return respond(start_response,'200 OK',{'enabled':configured(),**history(history_session.get('archive_account'))})
         except Exception:return respond(start_response,'503 Service Unavailable',{'enabled':configured(),'days':[],'error':'Falha ao consultar gravações no Supabase. Verifique as credenciais do Render e tente novamente.'})
+    if method=='GET' and path in ('/3d','/3d/'):
+        # Dedicated, read-only visual client of the *existing* PRACTICE session.
+        # Never exposes credentials or creates a second broker connection.
+        data=(ROOT/'clean_v1'/'office3d.html').read_bytes()
+        start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),
+                       ('Content-Length',str(len(data))),
+                       ('Cache-Control','no-store'),('X-Content-Type-Options','nosniff')])
+        return [data]
     if path=='/':
         data=HTML.encode()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),('Content-Length',str(len(data))),('Cache-Control','no-store')])
