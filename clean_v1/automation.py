@@ -12,6 +12,7 @@ from clean_v1.candle_research import features,summarize
 from clean_v1 import archive
 from clean_v1 import martingale as mg
 from clean_v1 import study_selector
+from clean_v1 import notifications
 from clean_v1.market_selection import classify,rotate
 from engine import normalized
 
@@ -31,6 +32,8 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
         if pnl>0:state['wins']+=1
         elif pnl<0:state['losses']+=1
         state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name,'expiration_minutes':expiration_minutes,'timeframe_minutes':timeframe_minutes,'rsi_14':candle_features.get('rsi_14'),'stake':candle_features.get('stake',state.get('stake',2)),'martingale':was_recovery}
+        try: notifications.publish(state,'win' if pnl>0 else 'loss' if pnl<0 else 'draw',asset,direction,pnl)
+        except Exception:pass  # Alerts never affect DEMO settlement
         state.setdefault('research',[]).append({'asset':asset,'direction':direction,'status':result['status'],'profit':pnl,'features':candle_features,'at':time.time()})
         state['research']=state['research'][-300:]
         state['research_summary']=summarize(state['research'])
@@ -50,6 +53,8 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
             state['message']='Resultado confirmado: '+result['status']+' · analisando novas entradas'
             state['phase']='scan' if state['running'] else 'result'
     except Exception:
+        try: notifications.publish(state,'uncertain',asset,direction)
+        except Exception:pass
         mg.reset_on_stop(state)
         state['running']=False;state['uncertain']=True
         state['phase']='uncertain';state['message']='Resultado incerto; confira a ordem na Bullex antes de retomar'
@@ -260,6 +265,8 @@ def run(state, call):
                     if state['pending'] or not state['running']:continue
                     state['pending']=True
                     state['phase']='sending';state['message']='Sinal válido, enviando ordem DEMO...'
+                try: notifications.publish(state,'opportunity',item['asset'],'CALL' if signal==1 else 'PUT')
+                except Exception:pass
                 try:
                     expiration_minutes=5 if timeframe_minutes==5 else state['expiration_minutes']
                     order=call('exec',{'op':'demo_order','asset':item['asset'],'direction':'call' if signal==1 else 'put','stake':stake_to_send,'h':expiration_minutes,'candle':boundary-60,'min_payout':80},13)
@@ -278,6 +285,8 @@ def run(state, call):
                         state['current_expiration_minutes']=expiration_minutes
                         state['message']='Ordem em andamento; analisando outros ativos'
                         state['last_order']={'asset':item['asset'],'direction':state['current_direction'],'id':str(order['id']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value,'stake':stake_to_send,'martingale':is_recovery}
+                        try: notifications.publish(state,'order',item['asset'],state['current_direction'])
+                        except Exception:pass
                         threading.Thread(target=settle,args=(state,call,order,item['asset'],state['current_direction'],{**features(signal_bars,state['current_direction']),'strategy':strategy_name,'timeframe_minutes':timeframe_minutes,'expiration_minutes':expiration_minutes,'rsi_14':rsi_value,'stake':stake_to_send,'martingale':is_recovery},expiration_minutes,strategy_name,timeframe_minutes),daemon=True).start()
                     else:
                         state['rejections']['broker']+=1
@@ -286,6 +295,8 @@ def run(state, call):
                         state['message']=reason
                         with state['order_lock']:state['pending']=False
                 except Exception:
+                    try: notifications.publish(state,'uncertain',item['asset'],'CALL' if signal==1 else 'PUT')
+                    except Exception:pass
                     mg.reset_on_stop(state)
                     state['running']=False;state['uncertain']=True
                     state['phase']='uncertain'
