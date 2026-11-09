@@ -77,5 +77,5 @@ def decision(bars,period_seconds=60):
     # Resolve any contradicting region setups conservatively.
     if not candidates or len({d for d,_ in candidates})!=1:return 0,""
     direction=max(candidates,key=lambda x:x[1])[0]
-    return direction,("CALL · suporte rompido e retestado" if direction==1
-                      else "PUT · suporte perdido e retestado")
+    return direction,("CALL · resistência rompida e retestada" if direction==1
+                      else "PUT · suporte rompido para baixo e retestado")
