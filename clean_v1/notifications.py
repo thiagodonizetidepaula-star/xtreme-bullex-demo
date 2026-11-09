@@ -77,6 +77,7 @@ def _deliver(state,subscribers,payload):
                 vapid_private_key=os.environ["XTREME_PUSH_PRIVATE_KEY"],
                 vapid_claims={"sub":"https://xtreme-bot-clean-v1.onrender.com"},
                 ttl=180,
+                timeout=8,
             )
         except WebPushException as exc:
             status=getattr(exc,"status_code",None)
