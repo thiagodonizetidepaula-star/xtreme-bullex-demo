@@ -32,14 +32,24 @@ def classify_strategy(label):
     """Only recognized one-family strategies get an individual performance."""
     value=str(label or "").strip().lower()
     if not value:return None
-    # A confluence of different family decisions cannot be assigned to one
-    # trader. This avoids inventing credit for a shared recommendation.
-    if " + " in value:return None
-    if "1r do vídeo" in value or "1r do video" in value:return "trader_2"
-    if "xtreme sniper" in value:return "thiago"
-    if value.startswith("price action"):return "trader_1"
-    if "engolfo" in value:return "trader_3"
-    if "rompimento" in value:return "trader_4"
+    # Human-readable strategy NAMES themselves may contain "+": Xtreme
+    # Sniper + Tendência is one strategy, just as Engolfo + RSI 14 is one.
+    # Real confluences with another independent family stay unassigned.
+    if value.startswith(("1r do vídeo","1r do video")):
+        return "trader_2"
+    if value.startswith("xtreme sniper"):
+        if any(word in value for word in ("engolfo","rompimento","price action")):
+            return None
+        return "thiago"
+    if value.startswith("price action"):
+        if "xtreme sniper" in value:return None
+        return "trader_1"
+    if value.startswith("engolfo"):
+        if "rompimento" in value:return None
+        return "trader_3"
+    if value.startswith(("rompimento","falso rompimento")):
+        if "engolfo" in value:return None
+        return "trader_4"
     return None
 
 def _normalize(row):
