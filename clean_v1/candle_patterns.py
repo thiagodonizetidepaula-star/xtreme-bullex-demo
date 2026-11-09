@@ -46,7 +46,7 @@ PATTERN_METADATA={
 }
 STUDY_STRATEGY_IDS=tuple(slug+'_m'+str(tf) for slug,_ in PATTERN_METADATA.values() for tf in (1,5))
 from clean_v1.illustrated_patterns import IDS as ILLUSTRATED_STRATEGY_IDS
-ALL_STRATEGY_IDS=frozenset(('sniper','price_action')+STUDY_STRATEGY_IDS) | ILLUSTRATED_STRATEGY_IDS
+ALL_STRATEGY_IDS=frozenset(('sniper','price_action','video_1r')+STUDY_STRATEGY_IDS) | ILLUSTRATED_STRATEGY_IDS
 
 def pattern_id(name,timeframe):
     metadata=PATTERN_METADATA.get(name)
