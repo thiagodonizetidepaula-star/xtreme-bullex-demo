@@ -8,8 +8,9 @@ const safeGet=(k,d)=>{try{return localStorage.getItem(k)||d;}catch(e){return d;}
 const safeSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
 let soundOn=safeGet("xtreme_sound_enabled","false")==="true";
 let pushOn=safeGet("xtreme_push_enabled","false")==="true";
-let volume=Math.min(100,Math.max(0,Number(safeGet("xtreme_alert_volume","88"))||88));
-let context=null,initialized=false,lastIds=new Set(),lastConnected=false,lastSync=0,busy=false;
+const savedVolume=Number(safeGet("xtreme_alert_volume","88"));
+let volume=Number.isFinite(savedVolume)?Math.min(100,Math.max(0,savedVolume)):88;
+let context=null,nextAudioTime=0,initialized=false,lastIds=new Set(),lastConnected=false,lastSync=0,busy=false;
 let lastAppState=null;
 function setStatus(text){setText("alertStatus",text);}
 function updateButtons(){
@@ -36,7 +37,7 @@ function beep(type){
  try{
   const c=audioContext();
   c.resume().catch(()=>{});
-  const n=c.currentTime+.04;
+  const n=Math.max(c.currentTime+.04,nextAudioTime);
   const tunes={
    opportunity:[880,1080,880],
    order:[660,880,1200],
@@ -47,6 +48,7 @@ function beep(type){
   };
   const tones=tunes[type]||tunes.opportunity;
   const strength=Math.min(.26,.23*(volume/100));
+  nextAudioTime=n+tones.length*.265+.10;
   tones.forEach((freq,i)=>{
    const start=n+i*.265;
    const osc=c.createOscillator(),gain=c.createGain();
@@ -182,6 +184,9 @@ $("alertTestButton").addEventListener("click",async()=>{
  }catch(e){setStatus("Teste: "+e.message);}
 });
 updateButtons();
+if(soundOn){
+ document.addEventListener("pointerdown",()=>{try{audioContext().resume().catch(()=>{});}catch(e){}},{once:true});
+}
 if(!supportsPush())setStatus("Som disponível nesta página. Push depende do navegador e das permissões do Android.");
 else setStatus("Toque para ativar som e receber push no celular. Os alertas só avisam operações DEMO.");
 })();
