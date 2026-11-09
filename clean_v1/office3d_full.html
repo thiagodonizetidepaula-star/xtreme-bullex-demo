@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070d1a">
+<title>Xtreme Trader 3D | Escritório DEMO</title>
+<style>
+:root{color-scheme:dark;--bg:#080d1b;--card:#0f1b32;--line:#274366;--muted:#a4bad4;--green:#56e4b3;--gold:#ffd578;--blue:#61b7fb;--red:#ff8e9f;--white:#f2f8ff}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--white);background:radial-gradient(ellipse at 50% 0,#142947,#080d1b 60%) fixed}
+.wrap{max-width:1340px;margin:auto;padding:19px clamp(12px,3vw,32px) 36px}
+h1{font-size:clamp(24px,3.6vw,38px);letter-spacing:-.5px;margin:2px 0 8px}h2{font-size:19px;margin:0 0 12px}
+small,p{color:var(--muted)}p{line-height:1.52}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.eyebrow{font-size:12px;letter-spacing:1.4px;color:#67c4ee;font-weight:850}
+.toplinks{display:flex;gap:9px;flex-wrap:wrap}
+a.btn,button.btn{border:1px solid #44729a;background:#122945;padding:11px 14px;color:#e5f4ff;text-decoration:none;border-radius:12px;font-size:13px;font-weight:750;cursor:pointer}
+a.btn:hover,button.btn:hover{background:#1c3c5c}
+.btn.ghost{background:transparent}
+.pill{border:1px solid #496688;border-radius:999px;padding:8px 12px;font-size:12px;color:#bed3e6;background:#14253b}
+.pill.ok{color:#6cf1bf;border-color:#216f60;background:#102e2b}.pill.warn{color:#ffd782;border-color:#806035}
+.headline{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+.headline span{font-size:13px;color:#b7cce1}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,340px);gap:14px;align-items:start}
+.panel{background:linear-gradient(153deg,#11213a,#0c172b 77%);border:1px solid #283e5c;border-radius:18px;box-shadow:0 12px 34px #0003;overflow:hidden}
+.scene-head{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:14px 17px;border-bottom:1px solid #2a4567}
+.scene-head strong{font-size:14px}.scene-head small{display:block;margin-top:4px;font-size:11px}
+.stage{position:relative;height:clamp(335px,53vw,590px);overflow:hidden;background:radial-gradient(circle at 40% 25%,#1c3758,#101e31 62%,#0a1629)}
+#three-root{position:absolute;inset:0}
+#three-root canvas{width:100%;height:100%;display:block;touch-action:pan-y}
+.scene-label{position:absolute;left:13px;bottom:12px;padding:7px 10px;border:1px solid #2b4f70;border-radius:9px;background:#0d1d31cb;font-size:11px;color:#b8d7e7;pointer-events:none}
+#fallback{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:#a7c3dc}
+#fallback[hidden]{display:none}
+.status-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:#253850}
+.status-strip>div{background:#111f36;padding:12px 9px;text-align:center;min-width:0}
+.status-strip strong{display:block;font-size:clamp(15px,2.2vw,23px);margin-top:5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.status-strip small{font-size:11px}
+.sidebar{display:grid;gap:13px}
+.pad{padding:17px}
+.agent-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#agent-badge{display:inline-block;border-radius:40px;padding:5px 9px;background:#163757;color:#79e0ef;font-size:11px;font-weight:800}
+#agent-state{font-weight:800;color:#a5d8ff;margin:9px 0}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini{padding:10px;background:#152740;border:1px solid #294465;border-radius:11px}
+.mini small{display:block}.mini strong{font-size:19px;margin-top:5px;display:block;overflow-wrap:anywhere}
+.agent-text{min-height:66px;margin:11px 0 0}
+.agent-detail{border-left:3px solid #5eb8dd;padding:3px 0 3px 10px;color:#c3d6e9;font-size:13px;min-height:54px}
+.station-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;padding:13px}
+.station{border-radius:12px;padding:12px 8px;background:#13263e;border:1px solid #2e4e6e;color:#c7dbf0;cursor:pointer;text-align:center;font:inherit;min-width:0}
+.station[aria-pressed="true"]{border-color:#6edfea;background:#1b3d50;box-shadow:inset 0 -3px #5fe6cc}
+.station b{display:block;margin-bottom:5px;font-size:12px}.station small{display:block;font-size:11px;overflow-wrap:anywhere}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#56657b;margin-right:4px}
+.dot.live{background:#52e9b4;box-shadow:0 0 9px #44ffc0aa}.dot.wait{background:#f3bd68}
+.logs{font-size:13px;line-height:1.7}
+.logs strong{color:#daeaff}.logs .warning{color:#ffcc89}
+.note{margin:15px 0 0;padding:12px 15px;border:1px solid #344b61;border-radius:12px;background:#101b2b;font-size:12px;color:#b8cadc}
+.progress{background:#273d57;height:8px;border-radius:40px;overflow:hidden;margin:12px 0}.progress>div{height:100%;width:0;background:linear-gradient(90deg,#40bff5,#4bf2bd);transition:width .2s linear}
+#timer{font-size:29px;font-weight:850;font-variant-numeric:tabular-nums;color:#b5edfc}
+#stale{color:#ffca85;font-size:12px;display:none}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{grid-template-columns:repeat(2,minmax(0,1fr))}.station-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.wrap{padding:12px 10px 26px}.top{gap:5px}.layout{gap:10px}.stage{height:390px}.sidebar{grid-template-columns:1fr}.station-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:9px}.station{padding:12px 5px}.status-strip small{font-size:10px}.pad{padding:14px}.scene-label{font-size:10px}.metrics{gap:5px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style></head><body>
+<main class="wrap">
+ <header class="top">
+  <div><div class="eyebrow">XTREME TIGER · ESCRITÓRIO VIRTUAL</div>
+  <h1>Sala de Traders <span style="color:#65ecd0">3D</span></h1>
+  <p style="margin:0">Veja as etapas reais do bot DEMO representadas por cinco personagens.</p></div>
+  <div class="toplinks"><a class="btn" href="/">⚙ Abrir controles do bot</a><button class="btn ghost" id="reset-camera">↻ Centralizar sala</button></div>
+ </header>
+ <div class="headline">
+  <span id="connection" class="pill">○ Consultando conta DEMO…</span>
+  <span class="pill" id="mode">SOMENTE VISUALIZAÇÃO 3D</span>
+  <span id="age" style="margin-left:auto">Atualização: aguardando</span>
+ </div>
+ <div class="layout">
+  <div>
+   <section class="panel">
+    <div class="scene-head"><div><strong>Escritório de análise · cinco estações</strong><small>Arraste a sala para girar. Toque num personagem ou use os cartões abaixo.</small></div><span class="pill" id="scene-mode">3D</span></div>
+    <div class="stage"><div id="three-root"></div><div id="fallback">Preparando escritório interativo 3D…<small>Os cartões dos agentes continuam disponíveis caso seu celular não suporte WebGL.</small></div><div class="scene-label">Cena 3D interativa · Dados reais do /api/state</div></div>
+    <div class="status-strip">
+      <div><small>Operações DEMO</small><strong id="orders">—</strong></div>
+      <div><small>WIN</small><strong id="wins" style="color:#62ebb9">—</strong></div>
+      <div><small>LOSS</small><strong id="losses" style="color:#ff9eaf">—</strong></div>
+      <div><small>Resultado</small><strong id="profit">—</strong></div>
+    </div>
+    <div class="station-list" id="stations"></div>
+   </section>
+   <p class="note"><strong>Como funciona:</strong> os personagens ilustram etapas do mesmo Xtreme Tiger (radar, sinais, risco, executor e auditoria). Não são cinco IAs independentes. A sala apenas lê o estado do bot; <strong>não envia ordens</strong>. As operações DEMO continuam controladas pela tela original, com seus filtros e limites.</p>
+  </div>
+  <aside class="sidebar">
+   <section class="panel pad">
+    <div class="agent-head"><h2 id="agent-name">Agente Radar</h2><span id="agent-badge">RADAR</span></div>
+    <div id="agent-state">Aguardando conexão</div>
+    <div class="agent-detail" id="agent-detail">Selecione um personagem.</div>
+    <p class="agent-text" id="agent-text">O radar recebe a situação dos mercados disponibilizada pelo bot.</p>
+   </section>
+   <section class="panel pad">
+    <h2>Operação DEMO</h2>
+    <div class="metrics">
+     <div class="mini"><small>Ativo</small><strong id="asset">—</strong></div>
+     <div class="mini"><small>Direção</small><strong id="direction">—</strong></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:13px"><small>Contagem da operação</small><span id="timer">--:--</span></div>
+    <div class="progress"><div id="time-progress"></div></div>
+    <p id="operation-info" style="font-size:13px;margin-bottom:0">Nenhuma ordem DEMO ativa.</p>
+   </section>
+   <section class="panel pad">
+    <h2>Diagnóstico do motor</h2>
+    <div class="logs">
+     <div><strong>Fase:</strong> <span id="phase">—</span></div>
+     <div><strong>Ativos elegíveis:</strong> <span id="markets">—</span></div>
+     <div><strong>Velas preparadas:</strong> <span id="ready">—</span></div>
+     <div><strong>Sinais:</strong> <span id="signals">—</span></div>
+     <div><strong>Estratégias:</strong> <span id="enabled">—</span></div>
+     <div><strong>Última ordem:</strong> <span id="last-order">—</span></div>
+     <div><strong>Motivo de bloqueio:</strong> <span id="reason">—</span></div>
+    </div>
+    <p id="stale">Sem atualizações recentes do servidor.</p>
+   </section>
+  </aside>
+ </div>
+</main>
+<script>
+(function(){
+ const labels=[
+  {id:"radar",name:"Radar",subtitle:"Mercados",color:"#50b8ff"},
+  {id:"strategy",name:"Estratégias",subtitle:"Confluência",color:"#a993ff"},
+  {id:"risk",name:"Risco",subtitle:"Limites DEMO",color:"#ffd17f"},
+  {id:"executor",name:"Operador",subtitle:"Execução DEMO",color:"#66ecc3"},
+  {id:"audit",name:"Auditoria",subtitle:"WIN / LOSS",color:"#ff9cb2"}
+ ];
+ const $=id=>document.getElementById(id);
+ let state=null,lastFetch=0,selected="radar";
+ const set=(id,value)=>{let el=$(id);if(el)el.textContent=value};
+ const num=(n,dec=0)=>Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+ const map={sniper:"Xtreme Sniper",price_action:"Price Action"};
+ function active(id,s){
+  if(!s||!s.connected)return false;
+  if(id==="radar")return !!s.running&&Number(s.markets)>0;
+  if(id==="strategy")return !!s.running&&Number(s.ready)>0;
+  if(id==="risk")return !!s.running;
+  if(id==="executor")return !!s.pending||!!s.current_order_id;
+  if(id==="audit")return Number(s.orders)>0||!!s.last_result;
+  return false;
+ }
+ function info(id,s){
+  if(!s||!s.connected)return ["DESLIGADO","Conecte a Bulex na tela original.","A sala não usa credenciais nem abre uma nova sessão."];
+  const d=s.scan_diagnostics||{};
+  if(id==="radar")return [s.running?"MONITORANDO":"PARADO",
+   "Mercados elegíveis: "+num(s.markets)+". Velas preparadas: "+num(s.ready)+".",
+   "O radar acompanha o catálogo e a leitura das velas realmente recebidos da conta PRACTICE."];
+  if(id==="strategy")return [s.running?"ANALISANDO":"AGUARDANDO",
+   "Sinais encontrados na sessão: "+num(s.signals)+".",
+   "Candles no lote: "+num(d.received)+". Com histórico curto: "+num(d.short_history)+". Sem sinal válido: "+num(d.no_signal)+"."];
+  if(id==="risk")return [s.running?"FILTROS ATIVOS":"AGUARDANDO",
+   "Bloqueios de risco registrados: "+num(Object.values(s.rejections||{}).reduce((sum,n)=>sum+(Number(n)||0),0))+".",
+   "Stop Loss: "+num(s.settings?.stop_loss,2)+". Stop Win: "+num(s.settings?.stop_win,2)+". Sem martingale obrigatório."];
+  if(id==="executor")return [s.current_order_id?"ORDEM DEMO CONFIRMADA":s.pending?"AGUARDANDO CORRETORA":"SEM ORDEM ATIVA",
+   s.current_order_id?"Ordem ID "+String(s.current_order_id):"Nenhuma ordem no momento.",
+   "O operador visual apenas espelha o envio da aplicação original. Não envia operações por esta tela."];
+  return ["ACOMPANHAMENTO",num(s.wins)+" WIN · "+num(s.losses)+" LOSS · saldo da sessão "+num(s.profit,2)+".",
+   s.last_result?"Último resultado confirmado: "+String(s.last_result.status||"—")+" · "+String(s.last_result.asset||"—"):"Ainda sem operação concluída nesta sessão."];
+ }
+ function refreshAgent(){
+  const m=labels.find(x=>x.id===selected)||labels[0],i=info(selected,state);
+  set("agent-name","Agente "+m.name);set("agent-badge",m.subtitle.toUpperCase());
+  set("agent-state",i[0]);set("agent-detail",i[1]);set("agent-text",i[2]);
+  for(const row of document.querySelectorAll(".station"))row.setAttribute("aria-pressed",String(row.dataset.id===selected));
+ }
+ window.officeSelect=function(id){
+  selected=id;refreshAgent();
+  if(typeof window.officeHighlight==="function")window.officeHighlight(id);
+ };
+ $("stations").replaceChildren(...labels.map(item=>{
+  const b=document.createElement("button");b.type="button";b.className="station";b.dataset.id=item.id;b.onclick=()=>window.officeSelect(item.id);
+  const title=document.createElement("b");title.textContent=item.name;const sub=document.createElement("small");sub.textContent=item.subtitle;
+  const dot=document.createElement("span");dot.className="dot";dot.style.backgroundColor=item.color;
+  b.append(title,dot,sub);return b;
+ }));
+ refreshAgent();
+ window.officeLabels=labels;
+ window.officeIsActive=(id)=>active(id,state);
+ window.officeGetState=()=>state;
+ function updateStatus(s){
+  state=s;lastFetch=Date.now();
+  const connected=!!s.connected,run=connected&&!!s.running;
+  set("connection",!connected?(s.trusted_waiting?"○ Reconecte no painel original":"○ Desconectado da Bulex"):run?"● Bulex DEMO · motor ativo":"◐ Bulex DEMO · robô parado");
+  $("connection").className="pill "+(run?"ok":connected?"warn":"");
+  set("mode",connected&&s.executor_connected?"Executor DEMO conectado":"Sala de observação");
+  for(const key of ["orders","wins","losses"])set(key,connected?num(s[key]):"—");
+  set("profit",connected?num(s.profit,2):"—");
+  set("asset",s.current_asset||"—");set("direction",s.current_direction||"—");
+  set("phase",s.phase||"—");set("markets",connected?num(s.markets):"—");
+  set("ready",connected?num(s.ready):"—");set("signals",connected?num(s.signals):"—");
+  set("enabled",(s.settings?.enabled_strategies||[]).map(x=>map[x]||x).join(", ")||"—");
+  set("last-order",s.last_order?.asset?(s.last_order.asset+" · "+s.last_order.direction):"—");
+  const reasons=s.rejections||{};
+  const sorted=Object.entries(reasons).sort((a,b)=>Number(b[1])-Number(a[1]));
+  set("reason",s.uncertain?"Confirmação de ordem incerta — verifique a corretora":
+    s.stop_reason||s.last_rejection_reason|| (sorted.length&&Number(sorted[0][1])>0?sorted[0][0]+" ("+sorted[0][1]+")":"Nenhum bloqueio registrado"));
+  set("operation-info",s.current_order_id?
+    "Operação DEMO registrada pela corretora. ID "+String(s.current_order_id):
+    s.pending?"Envio ou resultado pendente; não iniciar outra ordem.":"Nenhuma ordem DEMO ativa.");
+  for(const b of document.querySelectorAll(".station")){
+   const dot=b.querySelector(".dot");dot.className="dot "+(active(b.dataset.id,s)?"live":connected?"wait":"");
+  }
+  refreshAgent();
+ }
+ async function poll(){
+  try{
+   const r=await fetch("/api/state",{credentials:"same-origin",cache:"no-store"});
+   if(!r.ok)throw Error("API não respondeu");
+   const d=await r.json();updateStatus(d);
+  }catch(e){
+   set("connection","○ Sem comunicação com o servidor");$("connection").className="pill";
+   $("stale").style.display="block";set("stale","Falha na atualização: consulte o painel original.");
+  }
+ }
+ function tick(){
+  if(lastFetch)set("age","Atualização há "+Math.floor((Date.now()-lastFetch)/1000)+"s");
+  $("stale").style.display=lastFetch&&Date.now()-lastFetch>11000?"block":"none";
+  const exp=Number(state?.expire_ts)||0;
+  const entry=Number(state?.entry_ts)||0;
+  const ongoing=!!state?.current_order_id&&exp>0;
+  if(!ongoing){set("timer","--:--");$("time-progress").style.width="0%";return;}
+  const rem=Math.max(0,exp-Date.now()/1000);
+  set("timer",String(Math.floor(rem/60)).padStart(2,"0")+":"+String(Math.ceil(rem%60)).padStart(2,"0"));
+  const duration=Math.max(1,exp-(entry||exp-60));
+  $("time-progress").style.width=(100*Math.max(0,Math.min(1,1-rem/duration))).toFixed(1)+"%";
+ }
+ poll();setInterval(poll,2600);setInterval(tick,200);
+ document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll();});
+})();
+</script>
+<script type="module">
+try{
+ const THREE=await import("https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js");
+ const root=document.getElementById("three-root");
+ const scene=new THREE.Scene();scene.background=new THREE.Color("#101f35");scene.fog=new THREE.Fog("#101f35",17,31);
+ const camera=new THREE.OrthographicCamera(-8,8,6,-6,.1,100);
+ const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:"default"});
+ renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.7));
+ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+ renderer.outputColorSpace=THREE.SRGBColorSpace;
+ root.appendChild(renderer.domElement);
+ const light=new THREE.HemisphereLight(0xbdefff,0x23314d,2.1);scene.add(light);
+ const sun=new THREE.DirectionalLight(0xf0f8ff,2.5);sun.position.set(5,11,6);sun.castShadow=true;
+ sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-12;sun.shadow.camera.right=12;sun.shadow.camera.top=11;sun.shadow.camera.bottom=-11;
+ scene.add(sun);
+ const mat=(hex,opts={})=>new THREE.MeshStandardMaterial({color:hex,metalness:.18,roughness:.64,...opts});
+ const wall=mat("#1d304b"),floor=mat("#15273d"),desk=mat("#273c53"),metal=mat("#6a8aa9",{metalness:.5,roughness:.35});
+ function cube(w,h,d,m,x,y,z,group=scene){
+  const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);
+  o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;group.add(o);return o;
+ }
+ function cylinder(r1,r2,h,m,x,y,z,group=scene){
+  const o=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,16),m);
+  o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;group.add(o);return o;
+ }
+ function sphere(r,m,x,y,z,group=scene){
+  const o=new THREE.Mesh(new THREE.SphereGeometry(r,20,14),m);
+  o.position.set(x,y,z);o.castShadow=true;group.add(o);return o;
+ }
+ cube(15,.18,12,floor,0,-.18,0);cube(15,4.8,.22,wall,0,2.1,-6);
+ cube(.2,4.8,12,wall,-7.5,2.1,0);
+ for(let i=-6;i<7;i+=2){cube(.017,.012,11,mat("#254461"),i,-.079,0);}
+ for(let z=-5;z<6;z+=2){cube(14,.012,.017,mat("#254461"),0,-.078,z);}
+ const windowFrame=mat("#62abc7",{metalness:.55});const glass=mat("#153c5c",{transparent:true,opacity:.64,metalness:.4});
+ for(let x=-4.8;x<5.5;x+=3.6){
+  cube(2.65,1.6,.05,windowFrame,x,2.8,-5.82);
+  cube(2.53,1.5,.058,glass,x,2.8,-5.78);
+  cube(.07,1.5,.05,windowFrame,x,2.8,-5.73);
+  cube(2.5,.05,.06,windowFrame,x,2.8,-5.71);
+ }
+ cube(3,.2,.9,desk,0,1.1,-5.37);cube(2.9,.1,.15,windowFrame,0,1.45,-5.27);
+ // Main holographic clock / data board
+ const board=mat("#09192b",{emissive:"#073849",emissiveIntensity:.7});
+ cube(3,.92,.12,board,5.65,2.45,-5.7);
+ const boardCan=document.createElement("canvas");boardCan.width=512;boardCan.height=140;
+ const boardCtx=boardCan.getContext("2d");boardCtx.fillStyle="#051b2a";boardCtx.fillRect(0,0,512,140);
+ boardCtx.fillStyle="#75e9d8";boardCtx.font="bold 36px sans-serif";boardCtx.textAlign="center";boardCtx.fillText("XTREME · DEMO",256,65);
+ boardCtx.font="24px sans-serif";boardCtx.fillText("MERCADOS  |  ESTRATÉGIAS",256,108);
+ const boardTex=new THREE.CanvasTexture(boardCan);
+ const boardMesh=new THREE.Mesh(new THREE.PlaneGeometry(2.7,.75),new THREE.MeshBasicMaterial({map:boardTex,transparent:true}));
+ boardMesh.position.set(5.65,2.42,-5.622);scene.add(boardMesh);
+ const names=window.officeLabels||[];
+ const positions=[[-4.5,-2.65],[0,-2.65],[4.5,-2.65],[-2.35,2.2],[2.35,2.2]];
+ const agents=[];
+ function textSprite(text,color){
+  const c=document.createElement("canvas");c.width=512;c.height=128;
+  const cx=c.getContext("2d");cx.fillStyle="#0b2034";cx.beginPath();cx.roundRect(7,9,498,108,21);cx.fill();
+  cx.strokeStyle=color;cx.lineWidth=6;cx.stroke();
+  cx.fillStyle="#f1f9ff";cx.textAlign="center";cx.textBaseline="middle";cx.font="bold 39px system-ui";cx.fillText(text,256,65);
+  const t=new THREE.CanvasTexture(c);
+  const mesh=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false}));
+  mesh.scale.set(2.9,.72,1);return mesh;
+ }
+ names.forEach((entry,i)=>{
+  const g=new THREE.Group();const [x,z]=positions[i];g.position.set(x,0,z);scene.add(g);
+  const tint=mat(entry.color,{emissive:entry.color,emissiveIntensity:.08});
+  const body=mat("#2e425c");
+  // Workstation: desk, two legs, keyboard, monitor and chair
+  cube(2.85,.17,1.36,desk,0,.90,-.32,g);
+  cube(.14,.85,.14,metal,-1.21,.43,-.77,g);cube(.14,.85,.14,metal,1.21,.43,-.77,g);
+  cube(.14,.85,.14,metal,-1.21,.43,.12,g);cube(.14,.85,.14,metal,1.21,.43,.12,g);
+  cube(1.35,.82,.11,body,0,1.55,-.78,g);
+  cube(1.22,.7,.034,tint,0,1.55,-.705,g);
+  cube(.09,.25,.13,metal,0,1.05,-.79,g);
+  cube(.97,.035,.32,metal,0,1.02,.02,g);
+  const terminal=new THREE.Group();terminal.position.set(0,1.55,-.678);g.add(terminal);
+  for(let k=0;k<4;k++){
+   const light=mat(["#6ee8d0","#78baf9","#e5b5ff","#ffda9a"][k],{emissive:entry.color,emissiveIntensity:.4});
+   cube(.87,.034,.018,light,0,.22-k*.14,.014,terminal);
+  }
+  cylinder(.5,.48,.11,body,0,.36,.65,g);
+  cylinder(.16,.20,.67,metal,0,.66,.65,g);
+  // Stylized friendly robot avatar
+  const robot=new THREE.Group();robot.position.set(0,.37,.57);g.add(robot);
+  cylinder(.31,.37,.58,tint,0,.58,0,robot);
+  sphere(.31,tint,0,1.1,0,robot);
+  const face=mat("#ecfaff",{emissive:"#b1f5ff",emissiveIntensity:.4});
+  sphere(.062,face,-.115,1.14,.275,robot);sphere(.062,face,.115,1.14,.275,robot);
+  sphere(.12,metal,-.40,.77,0,robot);sphere(.12,metal,.40,.77,0,robot);
+  cylinder(.07,.09,.18,metal,0,1.49,0,robot);
+  sphere(.095,face,0,1.59,0,robot);
+  cube(.35,.26,.37,body,-.33,.25,0,robot);cube(.35,.26,.37,body,.33,.25,0,robot);
+  const lamp=sphere(.11,mat(entry.color,{emissive:entry.color,emissiveIntensity:1}),1.2,1.09,-.55,g);
+  const label=textSprite(entry.name.toUpperCase(),entry.color);label.position.set(0,2.70,0);g.add(label);
+  agents.push({id:entry.id,group:g,robot,screen:terminal,light:lamp,baseY:robot.position.y,agentMaterial:tint,index:i});
+ });
+ const ringmat=mat("#2bdcc5",{emissive:"#23c0a5",emissiveIntensity:.6});
+ const activeRing=new THREE.Mesh(new THREE.TorusGeometry(1.43,.045,8,60),ringmat);
+ activeRing.rotation.x=-Math.PI/2;activeRing.position.y=.015;scene.add(activeRing);
+ let yaw=.10;
+ function placeCamera(){camera.position.set(12*Math.sin(yaw)+13*Math.cos(yaw),12,12*Math.cos(yaw)-13*Math.sin(yaw));camera.lookAt(0,.50,-.05);}
+ placeCamera();
+ window.officeHighlight=id=>{
+  const o=agents.find(a=>a.id===id);if(o)activeRing.position.set(o.group.position.x,.018,o.group.position.z);
+ };
+ window.officeHighlight("radar");
+ const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+ let drag=false,dragX=0,dragY=0,rotated=false;
+ renderer.domElement.addEventListener("pointerdown",e=>{drag=true;dragX=e.clientX;dragY=e.clientY;rotated=false;renderer.domElement.setPointerCapture(e.pointerId);});
+ renderer.domElement.addEventListener("pointermove",e=>{
+  if(!drag)return;const dx=e.clientX-dragX,dy=e.clientY-dragY;
+  if(Math.abs(dx)+Math.abs(dy)>3)rotated=true;
+  yaw+=dx*.007;dragX=e.clientX;dragY=e.clientY;placeCamera();
+ });
+ renderer.domElement.addEventListener("pointerup",e=>{
+  drag=false;if(rotated)return;
+  const r=renderer.domElement.getBoundingClientRect();
+  pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+  raycaster.setFromCamera(pointer,camera);
+  const hits=raycaster.intersectObjects(agents.map(a=>a.group),true);
+  if(hits.length){let current=hits[0].object;
+   while(current&&!agents.some(a=>a.group===current))current=current.parent;
+   const a=agents.find(x=>x.group===current);
+   if(a&&window.officeSelect)window.officeSelect(a.id);
+  }
+ });
+ document.getElementById("reset-camera").onclick=()=>{yaw=.10;placeCamera();window.officeSelect("radar");};
+ const clock=new THREE.Clock();
+ function resize(){
+  const w=Math.max(240,root.clientWidth),h=Math.max(250,root.clientHeight);
+  camera.left=-8.5;camera.right=8.5;camera.top=8.5*h/w;camera.bottom=-8.5*h/w;
+  // Maintain visibility on portrait phone screens.
+  const portrait=w<h;
+  const viewWidth=portrait?12.0:8.5;
+  camera.left=-viewWidth;camera.right=viewWidth;
+  const vertical=viewWidth*h/w;camera.top=vertical;camera.bottom=-vertical;
+  camera.updateProjectionMatrix();renderer.setSize(w,h,false);
+ }
+ new ResizeObserver(resize).observe(root);resize();
+ document.getElementById("fallback").hidden=true;
+ function animate(){
+  requestAnimationFrame(animate);const t=clock.getElapsedTime();
+  agents.forEach(a=>{
+   const live=window.officeIsActive?.(a.id)||false;
+   const bounce=live ? 0.045 : 0.009;
+   a.robot.position.y=a.baseY+Math.sin(t*(live?3.0:1.0)+a.index)*bounce;
+   a.robot.rotation.y=Math.sin(t*.65+a.index)*.07;
+   a.agentMaterial.emissiveIntensity=live ? 0.27 : 0.035;
+   a.screen.rotation.y=Math.sin(t*2+a.index)*.017;
+   a.light.scale.setScalar(live ? 1+0.12*Math.sin(t*5+a.index) : 0.7);
+  });
+  activeRing.rotation.z=t*.34;renderer.render(scene,camera);
+ }
+ animate();
+}catch(e){
+ console.error("Cena 3D indisponível",e);
+ document.getElementById("scene-mode").textContent="Modo simples";
+ document.getElementById("fallback").textContent="Este navegador não conseguiu abrir o 3D. O painel e os cinco agentes continuam funcionais abaixo.";
+}
+</script>
+</body></html>
