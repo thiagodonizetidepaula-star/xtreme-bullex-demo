@@ -609,10 +609,13 @@ def app(environ,start_response):
         if not history_session:return respond(start_response,'401 Unauthorized',{'error':'Conecte à PRACTICE ou use controle remoto autorizado'})
         try:return respond(start_response,'200 OK',{'enabled':configured(),**history(history_session.get('archive_account'))})
         except Exception:return respond(start_response,'503 Service Unavailable',{'enabled':configured(),'days':[],'error':'Falha ao consultar gravações no Supabase. Verifique as credenciais do Render e tente novamente.'})
-    if method=='GET' and path in ('/3d','/3d/'):
-        # Dedicated, read-only visual client of the *existing* PRACTICE session.
-        # Never exposes credentials or creates a second broker connection.
-        data=(ROOT/'clean_v1'/'office3d.html').read_bytes()
+    if method=='GET' and path in ('/3d','/3d/','/3d/full','/3d/full/'):
+        # Default is a light SVG office for mobile; /3d/full preserves the
+        # original opt-in WebGL scene. Both consume authenticated /api/state.
+        # No order command or account credentials are exposed here.
+        is_full=path.startswith('/3d/full')
+        file_name='office3d_full.html' if is_full else 'office3d.html'
+        data=(ROOT/'clean_v1'/file_name).read_bytes()
         start_response('200 OK',[('Content-Type','text/html; charset=utf-8'),
                        ('Content-Length',str(len(data))),
                        ('Cache-Control','no-store'),('X-Content-Type-Options','nosniff')])
