@@ -115,7 +115,9 @@ def scoreboard(rows,goal=20.0):
                 goals.append({"trade_id":e["id"],"target":round(crossed*goal,2),
                               "at":e["at"]})
             previous_level=level
-    rank=sorted(scores.values(),key=lambda s:(-s["profit"],
+    # Traders with no real executed order must never be ranked above a
+    # participant just because their P&L stayed at zero.
+    rank=sorted(scores.values(),key=lambda s:(s["orders"]==0,-s["profit"],
           -(s["wins"]/(s["wins"]+s["losses"]) if s["wins"]+s["losses"] else 0),
           -s["wins"],s["id"]))
     for i,stat in enumerate(rank,1):
