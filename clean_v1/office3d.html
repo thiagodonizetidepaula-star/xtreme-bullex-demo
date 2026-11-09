@@ -84,7 +84,7 @@ a.btn:hover,button.btn:hover{background:#1c3c5c}
     </div>
     <div class="station-list" id="stations"></div>
    </section>
-   <p class="note">**Como funciona:** os personagens ilustram etapas do mesmo Xtreme Tiger (radar, sinais, risco, executor e auditoria). Não são cinco IAs independentes. A sala apenas lê o estado do bot; <strong>não envia ordens</strong>. As operações DEMO continuam controladas pela tela original, com seus filtros e limites.</p>
+   <p class="note"><strong>Como funciona:</strong> os personagens ilustram etapas do mesmo Xtreme Tiger (radar, sinais, risco, executor e auditoria). Não são cinco IAs independentes. A sala apenas lê o estado do bot; <strong>não envia ordens</strong>. As operações DEMO continuam controladas pela tela original, com seus filtros e limites.</p>
   </div>
   <aside class="sidebar">
    <section class="panel pad">
@@ -232,8 +232,8 @@ a.btn:hover,button.btn:hover{background:#1c3c5c}
 })();
 </script>
 <script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js";
 try{
+ const THREE=await import("https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js");
  const root=document.getElementById("three-root");
  const scene=new THREE.Scene();scene.background=new THREE.Color("#101f35");scene.fog=new THREE.Fog("#101f35",17,31);
  const camera=new THREE.OrthographicCamera(-8,8,6,-6,.1,100);
@@ -375,12 +375,12 @@ try{
   requestAnimationFrame(animate);const t=clock.getElapsedTime();
   agents.forEach(a=>{
    const live=window.officeIsActive?.(a.id)||false;
-   const bounce=live?.045:.009;
+   const bounce=live ? 0.045 : 0.009;
    a.robot.position.y=a.baseY+Math.sin(t*(live?3.0:1.0)+a.index)*bounce;
    a.robot.rotation.y=Math.sin(t*.65+a.index)*.07;
-   a.agentMaterial.emissiveIntensity=live?.27:.035;
+   a.agentMaterial.emissiveIntensity=live ? 0.27 : 0.035;
    a.screen.rotation.y=Math.sin(t*2+a.index)*.017;
-   a.light.scale.setScalar(live?1+.12*Math.sin(t*5+a.index):.7);
+   a.light.scale.setScalar(live ? 1+0.12*Math.sin(t*5+a.index) : 0.7);
   });
   activeRing.rotation.z=t*.34;renderer.render(scene,camera);
  }
