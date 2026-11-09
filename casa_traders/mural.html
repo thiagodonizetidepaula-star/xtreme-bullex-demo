@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d172b"><title>Casa dos Traders · Mural PRACTICE</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1325;--card:#132138;--line:#324962;--light:#eaf5ff;--muted:#9cb2cb;--gold:#f5c26d;--cyan:#60cadd}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 45% 0%,#20375b 0%,#0b1325 65%);color:var(--light);font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+.wrap{max-width:1120px;margin:auto;padding:20px clamp(12px,3vw,28px) 45px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:1.4px;color:#8fcded}
+h1{font-size:clamp(24px,4.5vw,42px);margin:3px 0 7px;font-weight:900;letter-spacing:-1px}
+h1 span{color:var(--gold)}
+p{line-height:1.52;color:var(--muted)}
+a{color:#a8defb}
+a.btn,button.btn{border:1px solid #5c819c;color:#eaf7ff;background:#1a3555;border-radius:12px;font-weight:750;padding:11px 14px;text-decoration:none;font:inherit;cursor:pointer}
+a.btn:hover,button.btn:hover{background:#275070}
+button.btn:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.status{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin:14px 0}
+.pill{border-radius:999px;font-weight:750;font-size:12px;border:1px solid #46627a;background:#152940;color:#bbd9ed;padding:8px 12px}
+.pill.ok{color:#79edbd;border-color:#2a7960}
+.pill.warn{color:#ffdda6;border-color:#796147}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,300px);gap:14px}
+.card{border:1px solid #2b4562;background:linear-gradient(145deg,#142641,#101d34);padding:18px;border-radius:18px;box-shadow:0 9px 28px #0002}
+.card h2{margin:0 0 12px;font-size:17px;letter-spacing:.1px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:14px 0}
+.kpi{border:1px solid #304f6c;background:#142641;border-radius:12px;padding:12px;text-align:center}
+.kpi small{display:block;color:#a4bdd1;font-size:11px}.kpi strong{display:block;font-size:23px;margin-top:4px;font-variant-numeric:tabular-nums}
+#board>h2{margin-bottom:8px;font-size:20px}
+#board{min-height:160px}
+.alert{border-left:3px solid #e9b76e;padding:12px;background:#283145;color:#f8e6c6;border-radius:7px;font-size:13px;margin-top:10px}
+#events{display:grid;gap:9px;max-height:430px;overflow-y:auto}
+.event{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;border-bottom:1px solid #2d4560;font-size:12px}
+.event:last-child{border:0}
+.event small{color:#aabdd0;font-size:11px}
+.win{color:#77edc5;font-weight:850}.loss{color:#ffabb7;font-weight:850}.draw{color:#d3dfec}
+.details{display:grid;gap:11px}
+.detail{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #324961;padding:8px 0;font-size:13px}
+.detail strong{font-variant-numeric:tabular-nums;text-align:right}
+.goal{height:8px;border-radius:40px;background:#344a65;overflow:hidden;margin:7px 0 12px}.goal>div{height:100%;width:0;background:linear-gradient(90deg,#52baf1,#f4c871);transition:width .3s}
+.muted{color:#9db5ca;font-size:12px;line-height:1.55}
+.no-connection{border:1px solid #bb8f59;background:#322719;color:#ffe1a8;padding:13px;border-radius:12px;font-size:13px;margin-bottom:12px}
+.no-connection[hidden]{display:none}
+#announce{font-size:13px;color:#f5d7a4;min-height:22px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,1fr)}.wrap{padding:14px 10px 30px}.card{padding:14px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body><main class="wrap">
+<header><div><div class="eyebrow">XTREME TIGER · BULLIX PRACTICE</div><h1>🏆 Mural dos <span>Traders</span></h1>
+<p style="margin:0">Resultados da corretora, não operações simuladas pela casa.</p></div>
+<div class="actions"><a class="btn" href="/">⚙ Controles do bot</a><a class="btn" href="https://casa-traders-thiago.bnik33887.chatgpt.site/" target="_blank" rel="noopener noreferrer">🏠 Casa original</a></div>
+</header>
+<div class="status"><span class="pill" id="online">◌ Consultando sessão PRACTICE...</span><span class="pill">SEM ORDENS POR ESTA TELA</span><small id="updated" class="muted">—</small></div>
+<div id="no-connection" class="no-connection" hidden>Conecte a Bullix PRACTICE na tela de controles do Xtreme Tiger, ou abra este mural no celular pareado com a sessão. Não é necessário compartilhar login ou senha com a Casa dos Traders. <a href="/">Abrir controles</a></div>
+<section class="kpis" aria-label="Totais da conta DEMO">
+<div class="kpi"><small>Ordens confirmadas</small><strong id="orders">—</strong></div>
+<div class="kpi"><small>WIN</small><strong id="wins" style="color:#75edba">—</strong></div>
+<div class="kpi"><small>LOSS</small><strong id="losses" style="color:#ffafba">—</strong></div>
+<div class="kpi"><small>Lucro / prejuízo DEMO</small><strong id="profit">—</strong></div></section>
+<div class="grid">
+<div><section class="card"><div id="board"><h2>🏆 Classificação</h2><p>Aguardando resultados confirmados.</p></div></section>
+<section class="card" style="margin-top:14px"><h2>📜 Últimos resultados reais</h2><div id="events"><p class="muted">Sem operações confirmadas para exibir.</p></div></section></div>
+<aside class="details">
+<section class="card"><h2>🎺 Efeitos de vitória</h2><p class="muted">Quando chegar um WIN novo: buzina. Quando o lucro atingir uma nova meta: festa de confetes.</p>
+<button class="btn" id="activateSound">🔊 Ativar som e testar buzina</button>
+<p class="muted" id="soundStatus">Para o áudio funcionar no Android, toque no botão e aumente o volume do aparelho.</p><p id="announce" role="status" aria-live="polite"></p>
+</section>
+<section class="card"><h2>🎯 Meta coletiva da casa</h2>
+<div class="detail"><span>Próximo marco</span><strong id="goal-next">—</strong></div>
+<div class="goal"><div id="goal-fill"></div></div>
+<div class="detail"><span>Lucro confirmado</span><strong id="goal-pnl">—</strong></div>
+<p class="muted">Meta baseada somente no resultado acumulado confirmado pelo histórico da corretora. Não libera novas ordens.</p></section>
+<section class="card"><h2>👩‍💼 Beatriz · Contabilidade</h2><p class="muted">Beatriz permanece na sala contábil, fora das operações e do ranking de traders.</p></section>
+</aside></div>
+<p class="muted" style="margin-top:18px">O mural é apenas um painel de acompanhamento. Traders sem operações confirmadas não recebem vitórias fictícias. A Casa 3D original não foi alterada; esse painel é um componente de integração separado.</p>
+</main><script src="/assets/casa_effects.js"></script>
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const money=n=>"US$ "+Number(n||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const show=(id,v)=>{const el=$(id);if(el)el.textContent=v;};
+let effect=null,lastSeen=0,busy=false;
+try{effect=window.CasaTraderEffects.create({container:$("board"),
+ onEvent:ev=>{show("announce",ev.trader_id+" · "+ev.status+" · "+money(ev.profit));},
+ goalText:goal=>{show("announce","🎉 META CONFIRMADA! "+money(goal.target));}});}
+catch(e){show("announce","Efeitos visuais indisponíveis: "+e.message);}
+$("activateSound").addEventListener("click",async()=>{
+ try{if(!effect)throw Error("Efeitos indisponíveis");await effect.unlockAudio();
+ show("soundStatus","Som liberado neste aparelho! Você ouviu o teste da buzina.");
+ $("activateSound").textContent="✅ Som ativado";
+ }catch(e){show("soundStatus",e.message||"O navegador bloqueou o áudio.");}
+});
+function renderEvents(events){
+ const root=$("events");root.replaceChildren();
+ const sorted=[...(events||[])].sort((a,b)=>String(b.at).localeCompare(String(a.at)));
+ if(!sorted.length){const p=document.createElement("p");p.className="muted";p.textContent="Sem operações confirmadas atribuídas a estratégias ainda.";root.append(p);return;}
+ for(const e of sorted.slice(0,12)){
+   const row=document.createElement("div");row.className="event";
+   const left=document.createElement("div");
+   const name=document.createElement("strong");name.textContent=(e.trader_id||"Trader")+" · "+(e.asset||"—");
+   const date=document.createElement("small");date.style.display="block";
+   date.textContent=(e.direction||"")+" · "+(e.at?new Date(e.at).toLocaleString("pt-BR"):"");
+   left.append(name,date);
+   const result=document.createElement("span");result.className=e.status==="WIN"?"win":e.status==="LOSS"?"loss":"draw";
+   result.textContent=e.status+" · "+money(e.profit);
+   row.append(left,result);root.append(row);
+ }
+}
+function render(board){
+ effect?.update(board);
+ show("orders",board.totals?.orders||0);
+ show("wins",board.totals?.wins||0);
+ show("losses",board.totals?.losses||0);
+ show("profit",money(board.totals?.profit||0));
+ const unit=Math.max(0.01,Number(board.goal_demo_usd)||20);
+ const pnl=Number(board.totals?.profit)||0;
+ const next=(Math.max(0,Math.floor(pnl/unit))+1)*unit;
+ show("goal-next",money(next));show("goal-pnl",money(pnl));
+ $("goal-fill").style.width=Math.round(Math.max(0,Math.min(100,pnl/next*100)))+"%";
+ renderEvents(board.events||[]);
+ show("online","● PRACTICE · histórico autenticado");
+ $("online").className="pill ok";
+ $("no-connection").hidden=true;
+ show("updated","Atualizado: "+new Date().toLocaleTimeString("pt-BR"));
+ lastSeen=Date.now();
+}
+async function poll(){
+ if(document.hidden||busy)return;
+ busy=true;
+ const ctl=new AbortController();const timeout=setTimeout(()=>ctl.abort(),8500);
+ try{
+  const r=await fetch("/api/casa/scoreboard",{credentials:"same-origin",cache:"no-store",signal:ctl.signal});
+  if(!r.ok){
+    if(r.status===401){$("no-connection").hidden=false;
+      show("online","◌ Conecte a PRACTICE");$("online").className="pill warn";
+      return;}
+    throw Error("Serviço retornou "+r.status);
+  }
+  const board=await r.json();render(board);
+ }catch(e){show("online","◌ Mural indisponível");$("online").className="pill warn";show("updated",e.message||"Sem resposta");}
+ finally{clearTimeout(timeout);busy=false;}
+}
+poll();setInterval(poll,4500);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)poll();});
+})();
+</script></body></html>
