@@ -2,6 +2,7 @@
 import os,time,threading,math
 from clean_v1.xtreme_sniper import decision
 from clean_v1.price_action import decision as price_action_decision
+from clean_v1.video_1r import decision as video_1r_decision,NAME as VIDEO_1R_NAME
 from clean_v1.m5_bars import normalized5
 from clean_v1.rsi_filter import confirms as rsi_confirms
 from clean_v1.candle_patterns import patterns,pattern_id
@@ -31,6 +32,10 @@ def settle(state,call,order,asset,direction,candle_features,expiration_minutes,s
         state['profit']+=pnl
         if pnl>0:state['wins']+=1
         elif pnl<0:state['losses']+=1
+        if strategy_name.startswith(VIDEO_1R_NAME):
+            separate=state.setdefault('video_1r_results',{'wins':0,'losses':0,'draws':0,'profit':0.0})
+            separate['wins' if pnl>0 else 'losses' if pnl<0 else 'draws']+=1
+            separate['profit']=round(separate['profit']+pnl,2)
         state['last_result']={'asset':asset,'direction':direction,'id':str(order['id']),'status':result['status'],'profit':pnl,'strategy':strategy_name,'expiration_minutes':expiration_minutes,'timeframe_minutes':timeframe_minutes,'rsi_14':candle_features.get('rsi_14'),'stake':candle_features.get('stake',state.get('stake',2)),'martingale':was_recovery}
         try: notifications.publish(state,'win' if pnl>0 else 'loss' if pnl<0 else 'draw',asset,direction,pnl)
         except Exception:pass  # Alerts never affect DEMO settlement
@@ -178,6 +183,13 @@ def run(state, call):
                 # candle study: exactly the same definitions, no future bars.
                 def proposal(candles,period_seconds):
                     timeframe=period_seconds//60
+                    # Video 1R is an ISOLATED classifier. It is not merged with
+                    # Sniper, other patterns, RSI 14 or a directional trend gate.
+                    # Broker safety checks remain untouched below.
+                    if 'video_1r' in enabled:
+                        value,setup=video_1r_decision(candles,period_seconds)
+                        if not value:return None
+                        return value,VIDEO_1R_NAME+' · '+setup,candles,timeframe,None
                     candidates=[]
                     if 'sniper' in enabled:
                         sniper=decision(candles,period_seconds)
@@ -246,11 +258,11 @@ def run(state, call):
                     state['rejections']['late']+=1;continue
                 if not state['running'] or state['pending']:
                     state['rejections']['busy']+=1;continue
-                if not trending(signal_bars,signal):
+                if 'video_1r' not in enabled and not trending(signal_bars,signal):
                     state['rejections']['lateral']+=1
                     state['message']='Mercado sem tendência confirmada; entrada descartada'
                     continue
-                if exhausted(signal_bars,signal):
+                if 'video_1r' not in enabled and exhausted(signal_bars,signal):
                     state['rejections']['exhausted']+=1
                     state['message']='Fluxo de velas já estendido; entrada descartada'
                     continue
