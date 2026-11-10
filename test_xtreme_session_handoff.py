@@ -155,7 +155,7 @@ class SessionHandoffTests(unittest.TestCase):
         def fake_spawn(*_args,**_kwargs):
             w=FakeWorker();workers.append(w);return w
         def fake_auth(worker,_command,timeout=50):
-            if worker is workers[1]:
+            if len(workers)>1 and worker is workers[1]:
                 raise RuntimeError('Executor não respondeu')
             return {'mode':'PRACTICE','balance':100.0,'currency':'USD'}
         with patch.object(service.subprocess,'Popen',side_effect=fake_spawn),\
