@@ -15,25 +15,27 @@ async function req(url,method='GET',body){
 }
 function empty(title,description){$('cards').innerHTML='<div class="empty"><span class="orbit">◎</span><strong>'+esc(title)+'</strong><p>'+esc(description)+'</p></div>';}
 function card(c){
- const dir=c.direction==='CALL'?'CALL':'SELL';
+ const direction=c.direction==='CALL'?'CALL':'SELL';
  const entry=Number(c.entryAtMs),end=Number(c.endsAtMs),before=entry>now();
- const filters=Array.isArray(c.filters)?c.filters:[];
- return '<article class="card fresh '+dir.toLowerCase()+'" data-entry="'+entry+'" data-end="'+end+
+ const approved=Array.isArray(c.filters)?c.filters:[];
+ return '<article class="card fresh '+direction.toLowerCase()+'" data-entry="'+entry+'" data-end="'+end+
  '"><div class="cardtop"><div><h4>'+esc(name(c.name||c.symbol))+
- '</h4><small>HEIKIN-ASHI · M5 + M1</small></div><b class="payout">'+
+ '</h4><small>MAIORIA DAS VELAS · M1</small></div><b class="payout">'+
  Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+
- '% PAYOUT</b></div><div class="direction '+dir.toLowerCase()+'">'+
- (dir==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+
- (before?'TENDÊNCIAS M5 E M1 ALINHADAS · PRÉ-SINAL':'SINAL FIXADO ATÉ VENCIMENTO')+
- '</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA (NÃO É PROBABILIDADE DE WIN)</span><b>'+
- Number(c.score||0)+'/'+Number(c.total||10)+'</b></div><div class="dots">'+
- filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+
- '</div><p class="evidence neutral">Heikin-Ashi M5 + M1 para tendência. Entrada e resultado avaliados somente por PREÇOS REAIS.</p>'+
+ '% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+
+ (direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+
+ (before?'DIREÇÃO PREDOMINANTE · PRÉ-SINAL':'ENTRADA EM ACOMPANHAMENTO')+
+ '</p><div class="rating"><span>PREDOMINÂNCIA DE CORES (NÃO É TAXA DE WIN)</span><b>'+
+ Number(c.dominantCandles||0)+'/'+Number(c.candleCount||9)+' velas · '+
+ Number(c.predominancePct||0).toLocaleString('pt-BR',{maximumFractionDigits:1})+
+ '%</b></div><div class="dots">'+
+ approved.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+
+ '</div><p class="evidence neutral">A cor predominante foi conferida em candles reais M1. Não garante o resultado.</p>'+
  '<div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+
  '</strong></div><div><small class="timer-title">'+(before?'ENTRA EM':'TERMINA EM')+
  '</small><strong class="count">'+countdown((before?entry:end)-now())+
  '</strong></div><div><small>EXPIRAÇÃO</small><strong>1 minuto</strong></div></div>'+
- '<p class="warning">Sinal experimental, sem certeza de acerto. Nenhuma ordem enviada.</p></article>';
+ '<p class="warning">Um sinal por vez; resultado apenas com cotações reais verificadas. Sem ordens automáticas.</p></article>';
 }
 function renderLedger(data){
  const score=data.scoreboard||{win:0,loss:0,draw:0,notVerified:0,pending:0,winRatePct:null,observedCount:0,persistent:false};
@@ -63,12 +65,12 @@ function renderLedger(data){
  }
 }
 function render(){
- if(!state.authorized){empty('Radar protegido','Conecte sua conta DEMO para buscar sinais Heikin-Ashi.');return;}
- const list=state.latest.filter(c=>c.payout>=87&&c.verifiedHA&&
-    Number(c.expirySeconds)===60&&Number(c.endsAtMs)>now()).slice(0,1);
+ if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para pesquisar ativos.');return;}
+ const list=state.latest.filter(c=>c.payout>=87&&c.verifiedMajority&&Number(c.expirySeconds)===60&&
+ Number(c.endsAtMs)>now()).slice(0,1);
  if(!list.length){
-  if(!state.connected){empty('Sem cotações reais','A conexão DEMO da Pocket Option está indisponível.');return;}
-  empty('AGUARDAR — SEM ENTRADA SEGURA','As velas Heikin-Ashi M5 e M1 precisam concordar com o preço real e passar nos 10 filtros. Na dúvida, não há sinal.');
+  if(!state.connected){empty('COTAÇÕES DESCONECTADAS','Sessão da Pocket Option indisponível. O servidor tenta reconectar; se a autenticação foi rejeitada, atualize PO_SSID somente no Render.');return;}
+  empty('AGUARDAR — SEM SINAL CONFIRMADO','Analisando os ativos com payout mínimo de 87%. Um sinal só aparece se pelo menos 7 das últimas 9 velas tiverem a mesma cor e a direção recente confirmar.');
   return;
  }
  $('cards').innerHTML=list.map(card).join('');
@@ -101,9 +103,9 @@ async function poll(){
    state.scanning=!!s.running;state.latest=Array.isArray(s.candidates)?s.candidates:[];
    renderLedger(s);
    $('eligible').textContent=state.connected?String(s.eligible||0):'—';
-   $('examined').textContent=state.connected?String(s.examined||0):'—';
-   $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Analisando tendências Heikin-Ashi M5 e M1…'):'Inicializando radar…');
-   sScanStatus='Analisados: '+Number(s.examined||0)+' · sem consenso M1/M5: '+Number(s.rejected||0)+'.';
+   $('examined').textContent=state.connected?String(s.roundAnalyzed||0)+'/'+String(s.eligible||0):'—';
+   $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Buscando predominância de velas reais M1 em todos os ativos elegíveis…'):'Inicializando radar…');
+   sScanStatus='Ciclo '+Number(s.round||0)+': '+Number(s.roundAnalyzed||0)+'/'+Number(s.eligible||0)+' ativos · sem sinal: '+Number(s.rejected||0)+' · falhas do feed: '+Number(s.feedErrors||0)+'.';
   }catch(e){if(e.status===401){state.authorized=false;state.scanning=false;state.latest=[];}else $('info').textContent=e.message;}
   if(!state.configured){
    $('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';
@@ -112,13 +114,13 @@ async function poll(){
      ?'Sem conexão: a sessão Pocket Option pode ter expirado ou sido recusada. Atualize PO_SSID nas variáveis privadas do Render.'
      :(p.message||'Aguardando cotações autenticadas.');
   }else if(state.connected && state.authorized && !state.latest.length && state.scanning){
-   $('info').textContent=sScanStatus||'Exigindo 10 confirmações, M1 e M5 alinhados.';
+   $('info').textContent=sScanStatus||'Verificando maioria de cores, direção recente e rejeições nas velas.';
   }
   await startScan();
   $('health').textContent=state.connected?(state.scanning?'● RADAR ATIVO':'● DEMO CONECTADA'):'● SEM COTAÇÕES';
   $('health').className='health '+(state.connected?'online':'offline');
   $('scanState').textContent=state.scanning?'BUSCANDO':state.connected?'INICIANDO':'PARADO';
-  $('loginButton').textContent=state.authorized?(state.connected?'RADAR HEIKIN ATIVO':'AGUARDANDO FEED'):'CONECTAR DEMO';
+  $('loginButton').textContent=state.authorized?(state.connected?'RADAR DE CORES ATIVO':'AGUARDANDO FEED'):'CONECTAR DEMO';
   $('loginButton').disabled=state.authorized;
   if(!state.authorized)$('info').textContent='Digite o PIN para ativar a busca automática.';
   render();
@@ -131,5 +133,5 @@ $('loginForm').addEventListener('submit',async e=>{
  try{await req('/api/unlock','POST',{pin:$('pin').value});state.authorized=true;$('pin').value='';$('login').close();state.lastStart=0;await poll();}
  catch(ex){$('loginError').textContent=ex.message;}
 });
-setInterval(liveClock,230);setInterval(poll,2500);poll();
+setInterval(liveClock,230);setInterval(poll,2400);poll();
 })();

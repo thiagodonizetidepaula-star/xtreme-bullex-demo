@@ -17,5 +17,5 @@ jobs:
         env:
           PYTHONPATH: signal-focus
         run: |
-          python -m unittest discover -v -s signal-focus/test -p test_heikin_strategy.py
+          python -m unittest discover -v -s signal-focus/test -p test_majority_candles.py
           python -m unittest discover -v -s signal-focus/test -p test_signal_ledger.py
