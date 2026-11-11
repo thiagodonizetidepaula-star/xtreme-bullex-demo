@@ -1,108 +1,74 @@
-/* Focus Pocket 1.7 — sequential payout search, no order placement. */
-(function(){
+(() => {
 'use strict';
-const q=id=>document.getElementById(id);
-const state={running:false,busy:false,stopping:false,lastKey:'',candidates:[],isSwitching:false};
-const shortName=s=>String(s||'').replace('_otc',' OTC').replace(/^([A-Z]{3})([A-Z]{3})/,'$1/$2');
-const sleep=ms=>new Promise(done=>setTimeout(done,ms));
-async function request(url,method='GET'){
-  const response=await fetch(url,{method:method,credentials:'same-origin',cache:'no-store'});
-  let data={};
-  try{data=await response.json()}catch(_){}
-  if(!response.ok){const error=new Error(data.error||'Erro na conexão com o servidor.');error.status=response.status;throw error}
-  return data;
+const $=id=>document.getElementById(id);
+const state={authorized:false,configured:false,connected:false,scanning:false,offset:0,latest:[],busy:false,lastStart:0};
+const name=s=>String(s||'').replace(/_otc$/i,' OTC').replace(/^([A-Z]{3})([A-Z]{3})(?=\s|$)/,'$1/$2');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clock=t=>new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const now=()=>Date.now()+state.offset;
+const countdown=ms=>{let x=Math.max(0,Math.ceil(ms/1000));return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0');};
+async function req(url,method='GET',body){
+ const start=Date.now();const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+ let data={};try{data=await response.json();}catch{}
+ if(Number.isFinite(data.serverTimeMs))state.offset=data.serverTimeMs-(start+Date.now())/2;
+ if(!response.ok){const e=new Error(data.error||'Erro de conexão.');e.status=response.status;throw e;}return data;
 }
-function message(text){q('scanStatus').textContent=text}
-function render(data){
-  state.running=Boolean(data.running);state.stopping=Boolean(data.stopping);
-  q('scanToggle').textContent=data.running?'⏸ PAUSAR BUSCA AUTOMÁTICA':data.stopping?'CONCLUINDO…':'▶ INICIAR BUSCA AUTOMÁTICA';
-  q('scanToggle').disabled=state.busy||state.stopping;
-  q('scanToggle').classList.toggle('on',state.running);
-  q('scanEligible').textContent=data.eligible==null?'—':data.eligible;
-  q('scanDone').textContent=data.examined==null?'—':data.examined;
-  q('scanRound').textContent=data.round==null?'—':data.round;
-  q('scanCurrent').textContent=data.current?'Analisando '+shortName(data.current)+' · payout confirmado ≥87%':data.running?'Aguardando catálogo ou histórico de ativos…':'Varredura pausada.';
-  message(data.error|| (data.running?'Busca em andamento. Candidatos ainda exigem confirmação ao vivo.':data.stopping?'Finalizando leitura atual…':'Pronto para iniciar.'));
-  const list=Array.isArray(data.candidates)?data.candidates:[];
-  const key=list.map(x=>x.symbol+'/'+x.payout+'/'+x.score+'/'+x.checkedAt).join('!');
-  if(state.lastKey===key)return;
-  state.lastKey=key;state.candidates=list;
-  const results=q('scanCandidates');results.replaceChildren();
-  if(!list.length){const p=document.createElement('p');p.textContent='Nenhuma oportunidade aprovada nesta rodada. AGUARDAR.';results.append(p);return}
-  for(const item of list){
-    const box=document.createElement('article');box.className='scanner-candidate';
-    const title=document.createElement('strong');title.textContent=shortName(item.name||item.symbol);
-    const side=document.createElement('b');side.className=item.direction==='SELL'?'scanner-sell':'scanner-buy';
-    side.textContent=(item.direction==='SELL'?'↓ SELL':'↑ BUY')+' · CANDIDATO';
-    const desc=document.createElement('p');desc.textContent='Payout '+item.payout+'% · '+item.score+'/'+item.total+' filtros · '+item.pattern+' · M1';
-    const caution=document.createElement('small');caution.textContent='Histórico M1, ainda NÃO validado por ticks ao vivo.';
-    const btn=document.createElement('button');btn.type='button';btn.dataset.symbol=item.symbol;btn.textContent='ACOMPANHAR GRÁFICO AO VIVO';
-    box.append(title,side,desc,caution,btn);results.append(box);
-  }
+function empty(title,description){$('cards').innerHTML='<div class="empty"><span class="orbit">◎</span><strong>'+esc(title)+'</strong><p>'+esc(description)+'</p></div>';}
+function card(c){
+ const direction=c.direction==='CALL'?'CALL':'SELL';
+ const seconds=Number(c.entryAtMs)-now();
+ const confirmed=!!c.liveQuoteFresh&&seconds>2500;
+ const pc=Math.round(Number(c.score)*100/Math.max(1,Number(c.total)));
+ const filters=Array.isArray(c.filters)?c.filters:[];
+ return '<article class="card '+(confirmed?'fresh ':'')+direction.toLowerCase()+'" data-entry="'+Number(c.entryAtMs)+'"><div class="cardtop"><div><h4>'+esc(name(c.name||c.symbol))+'</h4><small>'+esc(c.pattern||'Análise de tendência')+' · M1</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+(confirmed?'TICK REAL · PRÉ-SINAL':'PRÉ-SINAL · REQUER CONFIRMAÇÃO')+'</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA</span><b>'+pc+'% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+'</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(Number(c.entryAtMs))+'</strong></div><div><small>CONTAGEM</small><strong class="count">'+countdown(seconds)+'</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+' min</strong></div></div><p class="warning">'+(confirmed?'Revalidar cenário na entrada.':'Apenas histórico fechado: NÃO é sinal executável.')+'</p></article>';
+}
+function render(){
+ if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para procurar ativos.');return;}
+ if(!state.connected){empty('Sem cotações reais','Aguarde a reconexão da Pocket Option DEMO no servidor.');return;}
+ const list=state.latest.filter(x=>x.payout>=87&&x.entryAtMs>now()+2500);
+ if(!list.length){empty('Nenhuma oportunidade aprovada','O radar continua procurando. Quando não há confluência, a decisão é AGUARDAR.');return;}
+ $('cards').innerHTML=list.map(card).join('');
+}
+function liveClock(){
+ document.querySelectorAll('.card[data-entry]').forEach(el=>{
+  const left=Number(el.dataset.entry)-now();const node=el.querySelector('.count');if(node)node.textContent=countdown(left);
+  if(left<=2500){el.classList.add('expired');const p=el.querySelector('.provisional');if(p)p.textContent='EXPIRADO · AGUARDAR NOVO SINAL';}
+ });
+}
+async function startScan(){
+ if(!state.connected||!state.authorized||state.scanning||state.busy||Date.now()-state.lastStart<9000)return;
+ state.busy=true;state.lastStart=Date.now();
+ try{const x=await req('/api/scanner/start','POST');state.scanning=Boolean(x.running);}
+ catch(e){$('info').textContent=e.message;if(e.status===401)state.authorized=false;}
+ finally{state.busy=false;}
 }
 async function poll(){
- if(state.busy||!q('scanToggle'))return;
- try{render(await request('/api/scanner/status'))}
- catch(e){message(e.status===401?'Conecte com o PIN e volte para iniciar a busca.':e.message)}
-}
-async function stop(){
- let r=await request('/api/scanner/stop','POST');render(r);
- for(let i=0;i<20;i++){
-   if(!r.stopping)return true;
-   await sleep(500);
-   r=await request('/api/scanner/status');render(r);
- }
- message('O feed ainda está terminando a consulta. Tente novamente.');return false;
-}
-async function toggle(){
- if(state.busy)return;
- const starting=!state.running;state.busy=true;
  try{
-   if(!starting){await stop();return}
-   const connect=q('connectBtn');
-   if(connect&&/PAUSAR COTAÇÕES/i.test(connect.textContent||''))connect.click();
-   let begun=false;
-   for(let i=0;i<6;i++){
-     try{render(await request('/api/scanner/start','POST'));begun=true;break}
-     catch(e){if(e.status!==409||i===5)throw e;await sleep(700)}
-   }
-   if(!begun)message('Não foi possível iniciar a busca.');
- }catch(e){message(e.status===401?'Toque CONECTAR COTAÇÕES para informar seu PIN. Depois ative a busca.':e.message)}
- finally{state.busy=false;await poll()}
+  const p=await req('/api/status');state.connected=!!p.connected;state.configured=!!p.configured;
+  try{
+   const s=await req('/api/scanner/status');state.authorized=true;
+   state.scanning=!!s.running;state.latest=Array.isArray(s.candidates)?s.candidates:[];
+   $('eligible').textContent=state.connected?String(s.eligible||0):'—';
+   $('examined').textContent=state.connected?String(s.examined||0):'—';
+   $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Procurando em todos os ativos elegíveis…'):'Inicializando radar…');
+  }catch(e){if(e.status===401){state.authorized=false;state.scanning=false;state.latest=[];}else $('info').textContent=e.message;}
+  if(!state.configured){$('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';}
+  await startScan();
+  $('health').textContent=state.connected?(state.scanning?'● RADAR ATIVO':'● DEMO CONECTADA'):'● SEM COTAÇÕES';
+  $('health').className='health '+(state.connected?'online':'offline');
+  $('scanState').textContent=state.scanning?'BUSCANDO':state.connected?'INICIANDO':'PARADO';
+  $('loginButton').textContent=state.authorized?(state.connected?'BUSCA AUTOMÁTICA ATIVA':'AGUARDANDO FEED'):'CONECTAR DEMO';
+  $('loginButton').disabled=state.authorized;
+  if(!state.authorized)$('info').textContent='Digite o PIN para ativar a busca automática.';
+  render();
+ }catch(e){state.connected=false;state.scanning=false;$('health').textContent='● SERVIDOR INDISPONÍVEL';$('health').className='health offline';$('info').textContent=e.message;empty('Sem conexão','O radar não cria sinais fictícios quando o servidor está indisponível.');}
 }
-async function follow(symbol){
- if(state.busy||!state.candidates.some(x=>x.symbol===symbol))return;
- state.busy=true;
- try{
-   if(!await stop())return;
-   const select=q('asset');
-   if(![...select.options].some(o=>o.value===symbol)){
-     message('Ativo ausente no seletor. Reconecte as cotações.');return;
-   }
-   select.value=symbol;
-   select.dispatchEvent(new Event('change',{bubbles:true}));
-   await sleep(1400);
-   if(!/PAUSAR COTAÇÕES/i.test(q('connectBtn').textContent||''))q('connectBtn').click();
-   message('Acompanhando '+shortName(symbol)+'. Aguarde confirmação com ticks ao vivo.');
- }catch(e){message(e.message)}finally{state.busy=false;await poll()}
-}
-function init(){
- const controls=document.querySelector('.focus-controls');if(!controls)return;
- const section=document.createElement('section');section.className='scanner-box';section.id='autoScanBox';
- section.innerHTML='<header><span>RADAR DE OPORTUNIDADES · V1.7</span><h3>Busca automática <em>≥87% payout</em></h3><p>Todos os ativos que a corretora informar como abertos. Uma assinatura de mercado por vez.</p></header>'+
- '<div class="scanner-actions"><button id="scanToggle" type="button">▶ INICIAR BUSCA AUTOMÁTICA</button><span id="scanStatus">Desligado · aguardando sessão DEMO.</span></div>'+
- '<div class="scanner-stats"><div>ATIVOS ELEGÍVEIS<strong id="scanEligible">—</strong></div><div>ANALISADOS<strong id="scanDone">—</strong></div><div>RODADA<strong id="scanRound">—</strong></div></div>'+
- '<p id="scanCurrent" class="scanner-current">Aguardando.</p><div id="scanCandidates" class="scanner-candidates"><p>Sem candidatos.</p></div>'+
- '<p class="scanner-disclaimer">A busca geral usa M1 e dados históricos reais. Candidatos não são sinais executáveis. Abrir um gráfico pausa a busca e exige validação com ticks ao vivo. Para 5S, primeiro colete 48 velas reais. Sem execução de ordens.</p>';
- controls.insertAdjacentElement('afterend',section);
- q('scanToggle').addEventListener('click',toggle);
- q('scanCandidates').addEventListener('click',ev=>{const btn=ev.target.closest('button[data-symbol]');if(btn)follow(btn.dataset.symbol)});
- q('monitorBtn').addEventListener('click',async ev=>{
-   if(!state.running||state.isSwitching)return;
-   ev.preventDefault();ev.stopImmediatePropagation();state.isSwitching=true;
-   try{if(await stop())q('monitorBtn').click()}finally{state.isSwitching=false}
- },true);
- setInterval(poll,3000);poll();
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+$('loginButton').addEventListener('click',()=>$('login').showModal());
+$('closeLogin').addEventListener('click',()=>$('login').close());
+$('loginForm').addEventListener('submit',async e=>{
+ e.preventDefault();$('loginError').textContent='';
+ try{await req('/api/unlock','POST',{pin:$('pin').value});state.authorized=true;$('pin').value='';$('login').close();state.lastStart=0;await poll();}
+ catch(ex){$('loginError').textContent=ex.message;}
+});
+setInterval(liveClock,230);setInterval(poll,3200);poll();
 })();

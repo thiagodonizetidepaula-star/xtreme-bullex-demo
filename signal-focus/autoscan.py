@@ -6,6 +6,7 @@ import math
 import threading
 import time
 from urllib.parse import urlsplit
+from pathlib import Path
 
 PAYOUT_MIN=87.0
 
@@ -79,8 +80,52 @@ def grade(bars):
             results.append({'direction':side,'score':score,'total':8,'pattern':'BOLLINGER CURVA '+side,
                 'expirySeconds':60 if score==8 else 120,'strength':'FORTE' if score==8 else 'MÉDIO',
                 'verifiedLive':False,'status':'CANDIDATO HISTÓRICO — REQUER VALIDAÇÃO AO VIVO',
-                'timestamp':last['time']})
+                'timestamp':last['time'],'checks':[bool(v) for v in checks]})
     return max(results,key=lambda x:x['score']) if results else None
+
+
+def grade_radar(bars):
+    """Independent closed-bar strategies, NOT proof of live win probability."""
+    curve=grade(bars)
+    if curve:
+        curve['direction']='CALL' if curve['direction']=='BUY' else 'SELL'
+        return curve
+    if len(bars)<48:return None
+    b=bars[-85:]
+    if any(b[i]['time']-b[i-1]['time']!=60 for i in range(len(b)-47,len(b))):return None
+    last=b[-1]
+    if not 0<=time.time()-(last['time']+60)<=68:return None
+    close=[x['close'] for x in b]
+    f=ema(close,9);s=ema(close,21)
+    v=rsi(close)
+    if v is None:return None
+    i=len(b)-1
+    atr=sum(max(b[j]['high']-b[j]['low'],abs(b[j]['high']-b[j-1]['close']),abs(b[j]['low']-b[j-1]['close'])) for j in range(i-18,i+1))/19
+    if atr<=0:return None
+    last4=b[-4:]; body=abs(last['close']-last['open']);bar_range=max(1e-10,last['high']-last['low'])
+    support=min(x['low'] for x in b[-25:-5]);resistance=max(x['high'] for x in b[-25:-5])
+    results=[]
+    for direction in ('CALL','SELL'):
+        up=direction=='CALL';sgn=1 if up else -1
+        trend=sgn*(f[-1]-s[-1])>.12*atr and sgn*(f[-1]-f[-4])>.06*atr
+        rr=(50<v<78) if up else (22<v<50)
+        bodies=sum(x['close']>x['open'] if up else x['close']<x['open'] for x in last4)
+        candles=bodies>=3 and (last['close']>last['open'] if up else last['close']<last['open'])
+        breaked=(last['close']>max(x['high'] for x in b[-6:-1])) if up else (last['close']<min(x['low'] for x in b[-6:-1]))
+        pullback=abs(last['close']-f[-1])<.9*atr and ((last['low']<=f[-1]) if up else (last['high']>=f[-1]))
+        wick=(last['high']-max(last['open'],last['close'])) if up else (min(last['open'],last['close'])-last['low'])
+        risk=body/bar_range>.3 and wick/bar_range<.5 and abs(last['close']-f[-1])<1.8*atr and bar_range<2.4*atr
+        near=(resistance-.28*atr<last['close']<=resistance) if up else (support<=last['close']<support+.28*atr)
+        strength=abs(close[-1]-close[-8])/max(sum(abs(close[j]-close[j-1]) for j in range(i-6,i+1)),1e-12)>.30
+        structure=(max(x['high'] for x in b[-5:])>max(x['high'] for x in b[-12:-5])) if up else (min(x['low'] for x in b[-5:])<min(x['low'] for x in b[-12:-5]))
+        for label,entry in (('TENDÊNCIA E PULLBACK',pullback),('ROMPIMENTO DE PREÇO',breaked),('PRICE ACTION',candles and structure)):
+            checks=[bool(entry),bool(trend),bool(rr),bool(candles),bool(structure),bool(strength),bool(not near),bool(risk)]
+            score=sum(checks)
+            if entry and trend and rr and candles and risk and not near and score>=6:
+                results.append({'direction':direction,'score':score,'total':8,'checks':checks,'pattern':label,
+                                'expirySeconds':60 if score>=7 else 120,'strength':'CONFLUÊNCIA TÉCNICA',
+                                'verifiedLive':False,'timestamp':last['time']})
+    return max(results,key=lambda x:x['score'],default=None)
 
 class Scanner:
     def __init__(self,broker):
@@ -102,7 +147,7 @@ class Scanner:
             active=self.active();now=time.time()
             return {'running':active and not self.stop_signal.is_set(),'stopping':active and self.stop_signal.is_set(),
                 'minPayout':PAYOUT_MIN,'scanPeriod':'M1','eligible':self.eligible,'examined':self.examined,
-                'round':self.round,'current':self.current,'candidates':[x.copy() for x in self.best if now-x['checkedAt']<120][:6],
+                'round':self.round,'current':self.current,'candidates':[dict(x,liveQuoteFresh=bool(x.get('verifiedLive') and x.get('tickAtMs') and 0<=now*1000-x['tickAtMs']<4500)) for x in self.best if now-x['checkedAt']<65 and x.get('entryAtMs',0)>now*1000+2500][:8],
                 'error':self.error,'lastUpdateMs':int(self.seen_at*1000),'serverTimeMs':int(now*1000),
                 'mode':'historic-watchlist-not-live-trade','readOnly':True}
     def run(self):
@@ -122,13 +167,29 @@ class Scanner:
                     with self.lock:self.current=a['symbol']
                     try:
                         bars=self.broker.candles(a['symbol'],60)
-                        candidate=grade(bars)
+                        candidate=grade_radar(bars)
                         item=next((x for x in self.broker.get_symbols() if x['symbol']==a['symbol']),None)
                         if item and item['open'] is True and item.get('payout') is not None and item['payout']>=PAYOUT_MIN and candidate:
-                            candidate.update({'symbol':a['symbol'],'name':a['name'],'payout':item['payout'],'checkedAt':time.time()})
+                            moment=time.time()
+                            if moment-(bars[-1]['time']+60)>68:
+                                candidate=None
+                            else:
+                                ticks=self.broker.ticks(a['symbol'])
+                                tick=max((t for t in ticks if 0<=moment-t[0]<4),default=None,key=lambda t:t[0])
+                                live=bool(tick and (tick[1]>=bars[-1]['close']-.2*(bars[-1]['high']-bars[-1]['low']) if candidate['direction']=='CALL'
+                                                    else tick[1]<=bars[-1]['close']+.2*(bars[-1]['high']-bars[-1]['low'])))
+                                entry=int((math.floor(moment/60)+1)*60000)
+                                candidate.update({'symbol':a['symbol'],'name':a['name'],'payout':item['payout'],
+                                                  'checkedAt':moment,'entryAtMs':entry,'verifiedLive':live,
+                                                  'tickAtMs':int(tick[0]*1000) if tick else None,
+                                                  'filters':[{'name':name,'ok':v} for name,v in zip(
+                                                     ('Bollinger/tendência','EMA 9/21','RSI','Velas','Estrutura',
+                                                      'Força','Suporte/resistência','Risco'),candidate.get('checks',[False]*8))]})
+                                if entry-moment*1000<8000:candidate=None
                             with self.lock:
-                                self.best=[x for x in self.best if x['symbol']!=a['symbol']]+[candidate]
-                                self.best=sorted(self.best,key=lambda x:(-x['score'],-x['payout']))[:6]
+                                if candidate:
+                                    self.best=[x for x in self.best if x['symbol']!=a['symbol']]+[candidate]
+                                self.best=sorted(self.best,key=lambda x:(-x['score'],-x['payout']))[:8]
                     except Exception:pass # Unofficial API may reject an asset; continue.
                     with self.lock:self.examined+=1;self.seen_at=time.time()
                     if self.stop_signal.wait(1.3):break
@@ -151,7 +212,20 @@ def install(ns):
             item['payout']=payout(entry.get('payout'))
         return symbols
     def do_get(self):
-        if urlsplit(self.path).path!='/api/scanner/status':return original_get(self)
+        route=urlsplit(self.path).path
+        if route in ('/','/index.html'):
+            page=Path(ns['ROOT'])/'radar-page.html'
+            if page.is_file():
+                content=page.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type','text/html; charset=utf-8')
+                self.send_header('Cache-Control','no-store')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.send_header('Content-Length',str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+        if route!='/api/scanner/status':return original_get(self)
         if not self.auth():return send(self,401,{'error':'Informe o PIN para consultar o scanner.'})
         return send(self,200,scanner.status())
     def do_post(self):
