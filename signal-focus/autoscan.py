@@ -177,163 +177,136 @@ def grade_radar(bars):
     return max(results,key=lambda x:x['score'],default=None)
 
 class Scanner:
+    """Sequential scanner. Pins at most three M1 + five-second validated signals until expiry."""
     def __init__(self,broker):
         self.broker=broker;self.lock=threading.RLock();self.stop_signal=threading.Event()
         self.worker=None;self.stream_users=0;self.eligible=0;self.examined=0;self.round=0
         self.current=None;self.best=[];self.error=None;self.seen_at=0
-    def active(self):return bool(self.worker and self.worker.is_alive())
+        self.micro_rejected=0
+
+    def active(self):
+        return bool(self.worker and self.worker.is_alive())
+
     def start(self):
         with self.lock:
             if self.active():return
-            if self.stream_users:raise RuntimeError('Pause o gráfico ao vivo antes da busca automática.')
-            if not self.broker.connected():raise RuntimeError('Conecte a sessão DEMO antes de iniciar a varredura.')
-            self.stop_signal=threading.Event();self.examined=0;self.round=0;self.eligible=0;self.current=None
-            self.best=[];self.error=None;self.seen_at=0
-            self.worker=threading.Thread(target=self.run,daemon=True);self.worker.start()
-    def stop(self):self.stop_signal.set()
+            if self.stream_users:raise RuntimeError('Pause o gráfico antes de iniciar a busca automática.')
+            if not self.broker.connected():raise RuntimeError('Conecte a sessão DEMO antes de iniciar a busca.')
+            self.stop_signal=threading.Event();self.examined=0;self.round=0;self.eligible=0
+            self.current=None;self.best=[];self.error=None;self.seen_at=0;self.micro_rejected=0
+            self.worker=threading.Thread(target=self.run,daemon=True,name='focus-radar-v19')
+            self.worker.start()
+
+    def stop(self):
+        self.stop_signal.set()
+
     def status(self):
+        now=time.time();ms=int(now*1000)
         with self.lock:
             active=self.active()
-            now=time.time()
-            self.best=[x for x in self.best if x.get('endAtMs',0)>now*1000]
-            return {
-                'running':active and not self.stop_signal.is_set(),
-                'stopping':active and self.stop_signal.is_set(),
-                'minPayout':PAYOUT_MIN,
-                'minConfluence':90,
-                'maxSignals':3,
-                'scanPeriod':'M1 + S5',
-                'eligible':self.eligible,
-                'examined':self.examined,
-                'round':self.round,
-                'current':self.current,
-                'lockedCount':len(self.best),
-                'candidates':[dict(x) for x in self.best[:3]],
-                'error':self.error,
-                'lastUpdateMs':int(self.seen_at*1000),
-                'serverTimeMs':int(now*1000),
-                'mode':'confirmed-m1-and-closed-s5-readonly',
-                'readOnly':True
-            }
-
-    def _scan_asset(self,a):
-        symbol=a['symbol']
-        bars=self.broker.candles(symbol,60)
-        candidate=grade_radar(bars)
-        if not candidate:
-            return
-        moment=time.time()
-        if moment-(bars[-1]['time']+60)>68:
-            return
-        active=next((x for x in self.broker.get_symbols() if x['symbol']==symbol),None)
-        if not active or active.get('open') is not True:
-            return
-        current_payout=active.get('payout')
-        if current_payout is None or current_payout<PAYOUT_MIN:
-            return
-        basechecks=[bool(c) for c in candidate.get('checks',[])]
-        if len(basechecks)!=8 or sum(basechecks)<7:
-            return
-        ticks=self.broker.ticks(symbol)
-        live_tick=max((t for t in ticks if 0<=moment-t[0]<=3),default=None,key=lambda t:t[0])
-        if not live_tick:
-            return
-        # Never emit SELL if the 5-second microtrend is rising (or vice versa).
-        # Requires 12 consecutive closed 5-second candles from ACTUAL broker ticks.
-        if not confirm_five_seconds(ticks,candidate['direction'],moment):
-            return
-        entry_ms=int((math.floor(moment/60)+1)*60000)
-        if entry_ms-moment*1000<8000:
-            return
-        expiry_sec=int(candidate.get('expirySeconds',60))
-        if expiry_sec not in (60,120):
-            expiry_sec=60
-        checks=basechecks+[True,True]
-        score=sum(checks)
-        if score/len(checks)<.90:
-            return
-        candidate.update({
-            'symbol':symbol,'name':active.get('name') or symbol,
-            'payout':current_payout,
-            'checkedAt':moment,'lockedAtMs':int(moment*1000),
-            'entryAtMs':entry_ms,'endAtMs':entry_ms+expiry_sec*1000,
-            'expirySeconds':expiry_sec,
-            'score':score,'total':len(checks),
-            'checks':checks,
-            'verifiedLive':True,
-            'confirmed5s':True,
-            'tickAtMs':int(live_tick[0]*1000),
-            'pinned':True,
-            'filters':[{'name':label,'ok':value} for label,value in zip(
-                ('Bollinger/tendência','EMA 9/21','RSI','Velas M1',
-                 'Estrutura','Força','Suporte/resistência','Risco',
-                 'Tendência 5S','Tick recente'),checks)]
-        })
-        with self.lock:
-            now_ms=int(time.time()*1000)
-            self.best=[x for x in self.best if x.get('endAtMs',0)>now_ms]
-            if len(self.best)>=3 or any(x['symbol']==symbol for x in self.best):
-                return
-            self.best.append(candidate)
-            self.best.sort(key=lambda x:x['lockedAtMs'])
-            self.best=self.best[:3]
-            self.seen_at=time.time()
+            cards=[dict(c) for c in self.best if c.get('endsAtMs',0)>ms]
+            return {'running':active and not self.stop_signal.is_set(),
+                    'stopping':active and self.stop_signal.is_set(),
+                    'minPayout':PAYOUT_MIN,'minConfluence':100,'maxSignals':3,
+                    'scanPeriod':'M1','microPeriod':'5S','eligible':self.eligible,
+                    'examined':self.examined,'round':self.round,'current':self.current,
+                    'candidates':cards[:3],'error':self.error,
+                    'microRejected':self.micro_rejected,
+                    'lastUpdateMs':int(self.seen_at*1000),'serverTimeMs':ms,
+                    'mode':'m1-and-5s-confirmed-at-issuance','readOnly':True}
 
     def run(self):
+        from micro_validation import validate_five_sec
         try:
             while not self.stop_signal.is_set() and self.broker.connected():
+                now_ms=int(time.time()*1000)
                 with self.lock:
-                    now_ms=int(time.time()*1000)
-                    self.best=[x for x in self.best if x.get('endAtMs',0)>now_ms]
-                    full=len(self.best)>=3
-                    if full:
-                        self.current=None
-                if full:
-                    if self.stop_signal.wait(.5):
-                        break
+                    self.best=[c for c in self.best if c.get('endsAtMs',0)>now_ms]
+                    pinned=list(self.best)
+                    self.current=None
+                if pinned:
+                    # Keep the entire set of 1–3 cards fixed until the last scheduled expiry.
+                    remaining=max(c['endsAtMs'] for c in pinned)/1000-time.time()
+                    if self.stop_signal.wait(max(.2,min(1.5,remaining))):break
                     continue
                 assets=self.broker.get_symbols()
                 eligible=sorted(
-                    [x for x in assets if x.get('open') is True and x.get('payout') is not None and x['payout']>=PAYOUT_MIN],
-                    key=lambda x:(-x['payout'],x['symbol'])
-                )
+                    [a for a in assets if a['open'] is True and a.get('payout') is not None
+                     and a['payout']>=PAYOUT_MIN],
+                    key=lambda a:(-a['payout'],a['symbol']))
                 with self.lock:
-                    self.round+=1
-                    self.eligible=len(eligible)
-                    self.error=None if eligible else 'Nenhum ativo aberto com payout confirmado ≥87%.'
+                    self.round+=1;self.eligible=len(eligible);self.error=None
                 if not eligible:
-                    if self.stop_signal.wait(10):
-                        break
+                    with self.lock:self.error='Sem ativos abertos com payout confirmado de 87% ou mais.'
+                    if self.stop_signal.wait(10):break
                     continue
-                for a in eligible:
-                    if self.stop_signal.is_set() or not self.broker.connected():
-                        break
+                for asset in eligible:
+                    if self.stop_signal.is_set() or not self.broker.connected():break
                     with self.lock:
-                        now_ms=int(time.time()*1000)
-                        self.best=[x for x in self.best if x.get('endAtMs',0)>now_ms]
-                        if len(self.best)>=3:
-                            break
-                        if any(x['symbol']==a['symbol'] for x in self.best):
-                            continue
-                        self.current=a['symbol']
+                        if len(self.best)>=3:break
+                        self.current=asset['symbol']
                     try:
-                        self._scan_asset(a)
+                        bars=self.broker.candles(asset['symbol'],60)
+                        candidate=grade_radar(bars)
+                        # Eight of eight M1 filters are mandatory; nine of nine after 5S.
+                        if not candidate or candidate.get('score')!=8 or candidate.get('total')!=8:
+                            continue
+                        moment=time.time()
+                        if not bars or not (0<=moment-(bars[-1]['time']+60)<=68):
+                            continue
+                        # Obtain real closed 5-second candles for THIS asset, not another market.
+                        # If the broker cannot provide them, we fail closed: no signal.
+                        five=self.broker.candles(asset['symbol'],5)
+                        tick_data=self.broker.ticks(asset['symbol'])
+                        moment=time.time()
+                        micro=validate_five_sec(five,tick_data,candidate['direction'],moment)
+                        if not micro:
+                            with self.lock:self.micro_rejected+=1
+                            continue
+                        if moment-(bars[-1]['time']+60)>68:
+                            continue
+                        newest=next((a for a in self.broker.get_symbols()
+                                     if a['symbol']==asset['symbol']),None)
+                        if not newest or newest['open'] is not True or newest.get('payout') is None:
+                            continue
+                        if newest['payout']<PAYOUT_MIN:
+                            continue
+                        entry_ms=int((math.floor(moment/60)+1)*60000)
+                        if entry_ms-int(moment*1000)<8000:
+                            continue
+                        expiry_seconds=int(candidate.get('expirySeconds',60))
+                        # One decision, one fixed entry/expiry. No automatic orders.
+                        checks=[bool(v) for v in candidate.get('checks',[])]
+                        if len(checks)!=8 or not all(checks):
+                            continue
+                        candidate.update({
+                            'symbol':asset['symbol'],'name':asset['name'],'payout':newest['payout'],
+                            'checkedAt':moment,'entryAtMs':entry_ms,
+                            'endsAtMs':entry_ms+1000*expiry_seconds,
+                            'score':9,'total':9,'verifiedLive':True,'verifiedMicro':True,
+                            'tickAtMs':micro['tickAtMs'],'microAtMs':micro['microAtMs'],
+                            'microTrend':micro['microTrend'],'checks':checks+[True],
+                            'filters':[{'name':label,'ok':passed} for label,passed in zip(
+                                ('Bollinger/tendência','EMA 9/21','RSI','Velas','Estrutura',
+                                 'Força','Suporte/resistência','Risco','M1 + velas 5S'),
+                                checks+[True])],
+                            'status':'M1 + 5S alinhados no momento da análise; sinal não é garantia'
+                        })
+                        with self.lock:
+                            if len(self.best)<3 and all(c['symbol']!=asset['symbol'] for c in self.best):
+                                self.best.append(candidate)
                     except Exception:
-                        pass  # The unofficial quote feed may reject an asset: never invent signals.
+                        # Market feed or 5S history may be unavailable; do not invent a signal.
+                        with self.lock:self.micro_rejected+=1
                     finally:
                         with self.lock:
-                            self.examined+=1
-                            self.seen_at=time.time()
-                    if self.stop_signal.wait(.7):
-                        break
-                with self.lock:
-                    self.current=None
+                            self.examined+=1;self.seen_at=time.time()
+                        if self.stop_signal.wait(1.3):break
+                with self.lock:self.current=None
         except Exception:
-            with self.lock:
-                self.error='Fonte indisponível. Aguarde a reconexão para retomar a análise.'
+            with self.lock:self.error='Fonte indisponível; a busca será retomada após reconectar.'
         finally:
-            with self.lock:
-                self.current=None
+            with self.lock:self.current=None
 
 def install(ns):
     Broker=ns['Broker'];Handler=ns['Handler'];broker=ns['broker'];send=ns['response_json']

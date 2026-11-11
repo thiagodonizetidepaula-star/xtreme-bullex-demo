@@ -16,32 +16,48 @@ async function req(url,method='GET',body){
 function empty(title,description){$('cards').innerHTML='<div class="empty"><span class="orbit">◎</span><strong>'+esc(title)+'</strong><p>'+esc(description)+'</p></div>';}
 function card(c){
  const direction=c.direction==='CALL'?'CALL':'SELL';
- const entry=Number(c.entryAtMs),end=Number(c.endAtMs);
- const afterEntry=now()>=entry;
- const seconds=afterEntry?end-now():entry-now();
+ const entry=Number(c.entryAtMs),end=Number(c.endsAtMs);
+ const secs=entry-now(),before=secs>0;
  const pc=Math.round(Number(c.score)*100/Math.max(1,Number(c.total)));
  const filters=Array.isArray(c.filters)?c.filters:[];
- return '<article class="card fresh '+direction.toLowerCase()+'" data-entry="'+entry+'" data-end="'+end+'"><div class="cardtop"><div><h4>'+esc(name(c.name||c.symbol))+'</h4><small>'+esc(c.pattern||'Análise de tendência')+' · M1 + 5S</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+(afterEntry?'SINAL FIXADO · AGUARDANDO EXPIRAÇÃO':'M1 E 5S ALINHADOS · ENTRADA PROGRAMADA')+'</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA</span><b>'+pc+'% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+'</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+'</strong></div><div><small class="timer-label">'+(afterEntry?'ENCERRA EM':'FALTA ENTRAR')+'</small><strong class="count">'+countdown(seconds)+'</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+' min</strong></div></div><p class="warning">Confluência registrada na emissão. Não representa taxa de acerto comprovada.</p></article>';
+ const checked=!!c.verifiedMicro&&!!c.verifiedLive;
+ return '<article class="card '+(checked?'fresh ':'')+direction.toLowerCase()+
+ '" data-entry="'+entry+'" data-end="'+end+'"><div class="cardtop"><div><h4>'+
+ esc(name(c.name||c.symbol))+'</h4><small>'+esc(c.pattern||'Confluência M1 + 5S')+
+ ' · M1 + 5S</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+
+ '% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+
+ (direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+
+ (before?'M1 E 5S CONCORDARAM · SINAL PROVISÓRIO':'JANELA DE EXPIRAÇÃO · SINAL FIXADO')+
+ '</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA (NÃO É ASSERTIVIDADE)</span><b>'+pc+
+ '% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+
+ filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+
+ '</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+
+ '</strong></div><div><small class="timer-title">'+(before?'ENTRA EM':'TERMINA EM')+
+ '</small><strong class="count">'+countdown((before?entry:end)-now())+
+ '</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+
+ ' min</strong></div></div><p class="warning">Confirmação registrada no momento da análise; o mercado pode mudar. Sem ordens automáticas.</p></article>';
 }
 function render(){
  if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para procurar ativos.');return;}
- if(!state.connected){empty('Sem cotações reais','Aguarde a reconexão da Pocket Option DEMO no servidor.');return;}
- const list=state.latest.filter(x=>x.payout>=87&&x.confirmed5s===true&&Number(x.score)/Math.max(1,Number(x.total))>=.90&&Number(x.endAtMs)>now()).slice(0,3);
- if(!list.length){empty('Nenhuma oportunidade aprovada','O radar continua procurando. Quando não há confluência, a decisão é AGUARDAR.');return;}
+ const list=state.latest.filter(x=>x.payout>=87&&x.verifiedMicro&&x.score/x.total>0.90&&
+   Number(x.endsAtMs)>now()).slice(0,3);
+ if(!list.length){
+  if(!state.connected){empty('Sem cotações reais','Aguarde a reconexão da Pocket Option DEMO no servidor.');return;}
+  empty('Nenhuma oportunidade aprovada','Aguardando consenso entre M1 e velas de 5 segundos. Sem alinhamento, nenhum sinal é mostrado.');
+  return;
+ }
  $('cards').innerHTML=list.map(card).join('');
 }
 function liveClock(){
- document.querySelectorAll('.card[data-entry]').forEach(el=>{
+ document.querySelectorAll('.card[data-entry][data-end]').forEach(el=>{
   const entry=Number(el.dataset.entry),end=Number(el.dataset.end);
-  const afterEntry=now()>=entry;
-  const left=(afterEntry?end:entry)-now();
-  const node=el.querySelector('.count');
-  if(node)node.textContent=countdown(left);
-  const label=el.querySelector('.timer-label');
-  if(label)label.textContent=afterEntry?'ENCERRA EM':'FALTA ENTRAR';
-  const phase=el.querySelector('.provisional');
-  if(phase)phase.textContent=left<=0?'OPERAÇÃO FINALIZADA · NOVA BUSCA':afterEntry?'SINAL FIXADO · AGUARDANDO EXPIRAÇÃO':'M1 E 5S ALINHADOS · ENTRADA PROGRAMADA';
-  if(now()>=end)el.classList.add('expired');
+  const before=now()<entry;
+  const left=(before?entry:end)-now();
+  const timer=el.querySelector('.count'),label=el.querySelector('.timer-title');
+  if(timer)timer.textContent=countdown(left);
+  if(label)label.textContent=before?'ENTRA EM':'TERMINA EM';
+  if(!before){const p=el.querySelector('.provisional');if(p)p.textContent='JANELA DE EXPIRAÇÃO · SINAL FIXADO';}
+  if(left<=0){el.classList.add('expired');const p=el.querySelector('.provisional');if(p)p.textContent='FINALIZADO · NOVA BUSCA AUTOMÁTICA';}
  });
 }
 async function startScan(){
@@ -59,14 +75,14 @@ async function poll(){
    state.scanning=!!s.running;state.latest=Array.isArray(s.candidates)?s.candidates:[];
    $('eligible').textContent=state.connected?String(s.eligible||0):'—';
    $('examined').textContent=state.connected?String(s.examined||0):'—';
-   $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Procurando em todos os ativos elegíveis…'):'Inicializando radar…');
+   $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Procurando M1 e confirmando a tendência em 5 segundos…'):'Inicializando radar…');
   }catch(e){if(e.status===401){state.authorized=false;state.scanning=false;state.latest=[];}else $('info').textContent=e.message;}
   if(!state.configured){$('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';}
   await startScan();
   $('health').textContent=state.connected?(state.scanning?'● RADAR ATIVO':'● DEMO CONECTADA'):'● SEM COTAÇÕES';
   $('health').className='health '+(state.connected?'online':'offline');
   $('scanState').textContent=state.scanning?'BUSCANDO':state.connected?'INICIANDO':'PARADO';
-  $('loginButton').textContent=state.authorized?(state.connected?'BUSCA AUTOMÁTICA ATIVA':'AGUARDANDO FEED'):'CONECTAR DEMO';
+  $('loginButton').textContent=state.authorized?(state.connected?'RADAR M1 + 5S ATIVO':'AGUARDANDO FEED'):'CONECTAR DEMO';
   $('loginButton').disabled=state.authorized;
   if(!state.authorized)$('info').textContent='Digite o PIN para ativar a busca automática.';
   render();
