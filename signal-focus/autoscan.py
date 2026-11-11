@@ -177,7 +177,7 @@ def grade_radar(bars):
     return max(results,key=lambda x:x['score'],default=None)
 
 class Scanner:
-    """Sequential scanner. Pins at most three M1 + five-second validated signals until expiry."""
+    """Sequential M1-only scanner; pins at most three provisional signals until expiry."""
     def __init__(self,broker):
         self.broker=broker;self.lock=threading.RLock();self.stop_signal=threading.Event()
         self.worker=None;self.stream_users=0;self.eligible=0;self.examined=0;self.round=0
@@ -207,16 +207,15 @@ class Scanner:
             cards=[dict(c) for c in self.best if c.get('endsAtMs',0)>ms]
             return {'running':active and not self.stop_signal.is_set(),
                     'stopping':active and self.stop_signal.is_set(),
-                    'minPayout':PAYOUT_MIN,'minConfluence':100,'maxSignals':3,
-                    'scanPeriod':'M1','microPeriod':'5S','eligible':self.eligible,
+                    'minPayout':PAYOUT_MIN,'minConfluence':90,'maxSignals':3,
+                    'scanPeriod':'M1','microPeriod':None,'eligible':self.eligible,
                     'examined':self.examined,'round':self.round,'current':self.current,
                     'candidates':cards[:3],'error':self.error,
-                    'microRejected':self.micro_rejected,
+                    'microRejected':0,
                     'lastUpdateMs':int(self.seen_at*1000),'serverTimeMs':ms,
-                    'mode':'m1-and-5s-confirmed-at-issuance','readOnly':True}
+                    'mode':'m1-confirmed-close-only','readOnly':True}
 
     def run(self):
-        from micro_validation import validate_five_sec
         try:
             while not self.stop_signal.is_set() and self.broker.connected():
                 now_ms=int(time.time()*1000)
@@ -248,22 +247,12 @@ class Scanner:
                     try:
                         bars=self.broker.candles(asset['symbol'],60)
                         candidate=grade_radar(bars)
-                        # Eight of eight M1 filters are mandatory; nine of nine after 5S.
-                        if not candidate or candidate.get('score')!=8 or candidate.get('total')!=8:
+                        # Strictly more than 90% of eight M1 checks means eight passed.
+                        # Never treat a confluence percentage as a win probability.
+                        if not candidate or candidate.get('total')!=8 or candidate.get('score',0)/8<=0.90:
                             continue
                         moment=time.time()
                         if not bars or not (0<=moment-(bars[-1]['time']+60)<=68):
-                            continue
-                        # Obtain real closed 5-second candles for THIS asset, not another market.
-                        # If the broker cannot provide them, we fail closed: no signal.
-                        five=self.broker.candles(asset['symbol'],5)
-                        tick_data=self.broker.ticks(asset['symbol'])
-                        moment=time.time()
-                        micro=validate_five_sec(five,tick_data,candidate['direction'],moment)
-                        if not micro:
-                            with self.lock:self.micro_rejected+=1
-                            continue
-                        if moment-(bars[-1]['time']+60)>68:
                             continue
                         newest=next((a for a in self.broker.get_symbols()
                                      if a['symbol']==asset['symbol']),None)
@@ -283,14 +272,12 @@ class Scanner:
                             'symbol':asset['symbol'],'name':asset['name'],'payout':newest['payout'],
                             'checkedAt':moment,'entryAtMs':entry_ms,
                             'endsAtMs':entry_ms+1000*expiry_seconds,
-                            'score':9,'total':9,'verifiedLive':True,'verifiedMicro':True,
-                            'tickAtMs':micro['tickAtMs'],'microAtMs':micro['microAtMs'],
-                            'microTrend':micro['microTrend'],'checks':checks+[True],
+                            'score':8,'total':8,'verifiedLive':False,'verifiedM1':True,
+                            'checks':checks,
                             'filters':[{'name':label,'ok':passed} for label,passed in zip(
                                 ('Bollinger/tendência','EMA 9/21','RSI','Velas','Estrutura',
-                                 'Força','Suporte/resistência','Risco','M1 + velas 5S'),
-                                checks+[True])],
-                            'status':'M1 + 5S alinhados no momento da análise; sinal não é garantia'
+                                 'Força','Suporte/resistência','Risco'),checks)],
+                            'status':'SINAL PROVISÓRIO M1 — sem confirmação 5S; não garante acerto'
                         })
                         with self.lock:
                             if len(self.best)<3 and all(c['symbol']!=asset['symbol'] for c in self.best):
