@@ -1,21 +1,21 @@
-"""Focus Pocket V4.1: rotate ALL eligible assets, use M1 candle-color majority.
+"""Focus Pocket Reset 1.0. Single cautious strategy, read-only authenticated feed.
 
-No fixed 100% prediction, no automatic orders, no signal on stale or absent data.
+Legacy scanner algorithms are removed; only focus_strategy.evaluate is executed.
 """
 import math
 import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
-from majority_candles import candle_majority
+from focus_strategy import evaluate
 
-PAYOUT_MIN=87.0
+PAYOUT_MIN=87
 
 def payout(value):
     if isinstance(value,bool):return None
     try:
-        v=float(value)
-        return v if math.isfinite(v) and 0<=v<=100 else None
+        n=float(value)
+        return n if math.isfinite(n) and 0<=n<=100 else None
     except (ValueError,TypeError,OverflowError):return None
 
 class Scanner:
@@ -29,14 +29,14 @@ class Scanner:
         self.eligible=0
         self.examined=0
         self.round=0
-        self.roundAnalyzed=0
         self.current=None
         self.error=None
-        self.seen_at=0
+        self.last_tick=0
         self.rejected=0
-        self.feedErrors=0
+        self.feed_errors=0
         self.cursor=0
-        self.ledger=SignalLedger(path="/tmp/focus-pocket-majority-m1-signals.sqlite3")
+        # New, empty ledger. Previous versions remain preserved only on the backup branch.
+        self.ledger=SignalLedger(path='/tmp/focus-pocket-reset-20261111.sqlite3')
         self.best=self.ledger.restore_pending()
 
     def active(self):
@@ -46,10 +46,9 @@ class Scanner:
         with self.lock:
             if self.active():return
             if self.stream_users:
-                raise RuntimeError("Feche o monitor antes de iniciar o radar.")
-            # Even without connection, the worker may wait and resume automatically.
+                raise RuntimeError('Pause o gráfico antigo antes de iniciar a busca.')
             self.stop_signal=threading.Event()
-            self.worker=threading.Thread(target=self.run,daemon=True,name="focus-majority-radar")
+            self.worker=threading.Thread(target=self.run,daemon=True,name='focus-reset-signal')
             self.worker.start()
 
     def stop(self):
@@ -58,152 +57,136 @@ class Scanner:
     def status(self):
         now=time.time()
         with self.lock:
-            status={'running':self.active() and not self.stop_signal.is_set(),
-                    'stopping':self.active() and self.stop_signal.is_set(),
-                    'minPayout':PAYOUT_MIN,'maxSignals':1,
-                    'scanPeriod':'M1','confirmationPeriod':None,'signalExpirySeconds':60,
-                    'eligible':self.eligible,'examined':self.examined,
-                    'round':self.round,'roundAnalyzed':self.roundAnalyzed,
-                    'rejected':self.rejected,'feedErrors':self.feedErrors,
-                    'current':self.current,'error':self.error,
-                    'lastUpdateMs':int(self.seen_at*1000),
-                    'serverTimeMs':int(now*1000),
-                    'candidates':[dict(c) for c in self.best
-                        if c['endsAtMs']>now*1000][:1],
-                    'mode':'majority-of-real-candle-colors-readonly',
-                    'readOnly':True}
-        status.update(self.ledger.status())
-        return status
+            info={'running':self.active() and not self.stop_signal.is_set(),
+                  'stopping':self.active() and self.stop_signal.is_set(),
+                  'version':'Focus Reset 1.0',
+                  'minPayout':PAYOUT_MIN,'maxSignals':1,
+                  'scanPeriod':'M1','signalExpirySeconds':60,
+                  'eligible':self.eligible,'examined':self.examined,'round':self.round,
+                  'current':self.current,'error':self.error,
+                  'feedErrors':self.feed_errors,'rejected':self.rejected,
+                  'candidates':[dict(c) for c in self.best if c['endsAtMs']>now*1000][:1],
+                  'lastUpdateMs':int(self.last_tick*1000),
+                  'serverTimeMs':int(now*1000),
+                  'mode':'focus-trend-retest-readonly',
+                  'readOnly':True}
+        info.update(self.ledger.status())
+        return info
 
     def run(self):
         from signal_ledger import verify_outcome
-        consecutive_errors=0
         try:
             while not self.stop_signal.is_set():
                 if not self.broker.connected():
                     with self.lock:
-                        self.error="Sem cotações reais: aguardando reconexão autenticada da Pocket Option DEMO."
                         self.current=None
-                    # The underlying broker auto-reconnects; do not lose scanner state.
-                    if self.stop_signal.wait(4):break
+                        self.error='Pocket Option desconectada. Aguardando reconexão autenticada.'
+                    if self.stop_signal.wait(5):break
                     continue
 
                 with self.lock:
-                    pinned=self.best[0] if self.best else None
+                    current=self.best[0] if self.best else None
                     self.current=None
-                if pinned:
-                    expiry=pinned['endsAtMs']/1000.0
-                    current=time.time()
-                    if current<expiry+4:
-                        if self.stop_signal.wait(min(1.3,max(.1,expiry+4-current))):break
+                    self.error=None
+                if current:
+                    expires=current['endsAtMs']/1000
+                    now=time.time()
+                    if now<expires+5:
+                        if self.stop_signal.wait(min(1.2,max(.1,expires+5-now))):break
                         continue
-                    if current>expiry+240:
-                        self.ledger.unverifiable(pinned['signalId'],
-                            'Cotação real M1 de entrada/expiração indisponível na janela de apuração')
+                    if now>expires+240:
+                        self.ledger.unverifiable(current['signalId'],
+                            'Sem velas reais do ativo no horário exato da operação')
                         with self.lock:self.best=[]
                         continue
                     try:
-                        prices=self.broker.candles(pinned['symbol'],60)
-                        evidence=verify_outcome(pinned,prices,time.time())
-                        if evidence and self.ledger.finish(pinned['signalId'],evidence):
+                        candles=self.broker.candles(current['symbol'],60)
+                        evidence=verify_outcome(current,candles,time.time())
+                        if evidence and self.ledger.finish(current['signalId'],evidence):
                             with self.lock:self.best=[]
-                            consecutive_errors=0
                             continue
                     except Exception:
-                        with self.lock:self.feedErrors+=1
+                        with self.lock:self.feed_errors+=1
                     if self.stop_signal.wait(3):break
                     continue
 
                 try:
-                    symbols=self.broker.get_symbols()
-                    eligible=sorted([a for a in symbols if a.get('open') is True and
-                       a.get('payout') is not None and a['payout']>=PAYOUT_MIN],
-                       key=lambda a:(-a['payout'],a['symbol']))
-                    consecutive_errors=0
+                    market=self.broker.get_symbols()
+                    options=sorted([a for a in market if a.get('open') is True
+                        and a.get('payout') is not None and a['payout']>=PAYOUT_MIN],
+                        key=lambda a:(-a['payout'],a['symbol']))
+                    with self.lock:
+                        self.eligible=len(options)
+                        self.round+=1
+                        self.examined=0
                 except Exception:
                     with self.lock:
-                        self.feedErrors+=1
-                        self.error="Catálogo de ativos indisponível; nova tentativa automática."
+                        self.feed_errors+=1
+                        self.error='Falha ao consultar ativos; nova tentativa automática.'
                     if self.stop_signal.wait(8):break
                     continue
 
-                n=len(eligible)
-                with self.lock:
-                    self.round+=1
-                    self.eligible=n
-                    self.roundAnalyzed=0
-                    self.error=None if n else "Nenhum ativo aberto com payout confirmado >=87%."
-                if not n:
+                if not options:
+                    with self.lock:self.error='Nenhum ativo aberto com payout de 87% ou mais.'
                     if self.stop_signal.wait(10):break
                     continue
 
-                # Rotate the beginning of each scan so every eligible asset is considered
-                # across cycles, even when one good candidate is discovered early.
-                start=self.cursor % n
-                rotated=eligible[start:]+eligible[:start]
-                found=False
-                for i,asset in enumerate(rotated):
-                    if self.stop_signal.is_set():break
-                    if not self.broker.connected():break
-                    with self.lock:
-                        if self.best:break
-                        self.current=asset['symbol']
+                n=len(options)
+                start=self.cursor%n
+                sequence=options[start:]+options[:start]
+                emitted=False
+                for idx,asset in enumerate(sequence):
+                    if self.stop_signal.is_set() or not self.broker.connected():break
+                    with self.lock:self.current=asset['symbol']
                     try:
-                        # Only one M1 history request per candidate. No M5/5S fan-out.
-                        bars=self.broker.candles(asset['symbol'],60)
-                        moment=time.time()
-                        candidate=candle_majority(bars,now=moment)
+                        candles=self.broker.candles(asset['symbol'],60)
+                        t=time.time()
+                        candidate=evaluate(candles,t)
                         if candidate is None:
                             with self.lock:self.rejected+=1
-                            consecutive_errors=0
                             continue
-                        # No stale signals and no backdated predictions.
-                        current_boundary=math.floor(moment/60)*60
-                        if candidate['timestamp']+60!=current_boundary:
+                        # Re-check payout and actual asset availability before publishing.
+                        latest=next((x for x in self.broker.get_symbols()
+                                     if x['symbol']==asset['symbol']),None)
+                        if not latest or latest.get('open') is not True or latest.get('payout') is None:
                             continue
-                        fresh=next((a for a in self.broker.get_symbols()
-                            if a['symbol']==asset['symbol']),None)
-                        if (not fresh or fresh['open'] is not True
-                            or fresh.get('payout') is None or fresh['payout']<PAYOUT_MIN):
-                            continue
-                        checked=time.time()
-                        entry=int((math.floor(checked/60)+1)*60000)
-                        if entry-checked*1000<10000 or checked-(candidate['timestamp']+60)>46:
-                            continue
-                        candidate.update({
-                            'symbol':asset['symbol'],'name':asset['name'],
-                            'payout':fresh['payout'],'checkedAt':checked,
-                            'entryAtMs':entry,'endsAtMs':entry+60000,
-                            'verifiedM1':True,'verifiedMajority':True,
-                            'verifiedLive':False,'qualityLabel':'PREDOMINÂNCIA, NÃO ASSERTIVIDADE',
-                            'winRate':None
-                        })
-                        registered=self.ledger.create(candidate)
-                        if registered:
-                            with self.lock:self.best=[registered]
-                            found=True
-                            # Resume searching from the next eligible asset after completion.
-                            self.cursor=(start+i+1)%n
+                        if latest['payout']<PAYOUT_MIN:continue
+                        clock=time.time()
+                        next_minute=(int(clock//60)+1)*60
+                        until=next_minute-clock
+                        # At least 9 seconds notice; no late or retroactive entries.
+                        if not 9<=until<=45:continue
+                        # The last completed M1 candle must be recent, never two minutes old.
+                        if clock-(candidate['timestamp']+60)>51:continue
+                        candidate.update({'symbol':asset['symbol'],
+                            'name':asset['name'],
+                            'payout':latest['payout'],
+                            'checkedAt':clock,
+                            'entryAtMs':int(next_minute*1000),
+                            'endsAtMs':int((next_minute+60)*1000),
+                            'verifiedM1':True,
+                            'signalTag':'TREND_RETEST_V1',
+                            'qualityLabel':'CRITÉRIOS ATENDIDOS, NÃO CHANCE DE ACERTO'})
+                        record=self.ledger.create(candidate)
+                        if record:
+                            with self.lock:self.best=[record]
+                            self.cursor=(start+idx+1)%n
+                            emitted=True
                             break
                     except Exception:
-                        consecutive_errors+=1
                         with self.lock:
-                            self.feedErrors+=1
-                            self.error="Histórico indisponível para um ou mais ativos."
-                        if consecutive_errors>=4:
-                            # Avoid hammering an already unstable WebSocket.
-                            if self.stop_signal.wait(7):break
-                            consecutive_errors=0
+                            self.feed_errors+=1
+                            self.error='Parte do histórico está indisponível.'
+                        if self.stop_signal.wait(2):break
                     finally:
                         with self.lock:
                             self.examined+=1
-                            self.roundAnalyzed+=1
-                            self.seen_at=time.time()
-                        if self.stop_signal.wait(.55):break
+                            self.last_tick=time.time()
+                        if self.stop_signal.wait(.35):break
                 with self.lock:self.current=None
-                if not found and self.stop_signal.wait(2):break
+                if not emitted and self.stop_signal.wait(2.5):break
         except Exception:
-            with self.lock:self.error="Problema temporário no feed; sem criar sinais fictícios."
+            with self.lock:self.error='Falha no feed da corretora. Nenhum sinal simulado.'
         finally:
             with self.lock:self.current=None
 

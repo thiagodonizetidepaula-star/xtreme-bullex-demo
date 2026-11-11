@@ -1,1 +1,63 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/><meta name="theme-color" content="#0a0f18"/><title>Focus Pocket · Radar</title><link rel="icon" href="/icon.svg" type="image/svg+xml"/><link rel="manifest" href="/manifest.webmanifest"/><link rel="stylesheet" href="/autoscan.css?v=2.1"/><script defer src="/autoscan-ui.js?v=4.1"></script></head><body><main class="shell"><header class="head"><div class="brand"><div class="mark">↗</div><div><small>RADAR DE OPORTUNIDADES</small><h1>FOCUS <span>POCKET</span></h1></div></div><span class="health" id="health">CONECTANDO...</span></header><section class="intro"><p class="overline">PAYOUT CONFIRMADO ≥87% · MAIORIA DE VELAS M1 · CONTA DEMO</p><h2>Radar <em>automático.</em></h2><p>Busca todos os ativos elegíveis e verifica a cor predominante das velas M1. Um sinal por vez.</p><button type="button" id="loginButton">CONECTAR DEMO</button></section><section class="metrics"><div>ATIVOS ELEGÍVEIS <strong id="eligible">—</strong></div><div>ANALISADOS <strong id="examined">—</strong></div><div>STATUS <strong id="scanState">AGUARDANDO</strong></div></section><section class="results"><div class="result-head"><h3>Oportunidades</h3><span id="info">Verificando mercado...</span></div><div class="cards" id="cards"><div class="empty">Aguardando cotações reais...</div></div></section><section class="ledger-panel" aria-label="Placar auditável de sinais"><div class="ledger-head"><h3>Placar de sinais verificados</h3><span>1 SINAL POR VEZ · PREÇO REAL M1</span></div><div class="ledger-grid"><div><small>WIN</small><strong id="wins">0</strong></div><div><small>LOSS</small><strong id="losses">0</strong></div><div><small>EMPATE</small><strong id="draws">0</strong></div><div><small>SEM VERIFICAÇÃO</small><strong id="unverified">0</strong></div></div><div class="ledger-rate"><span>Taxa de acerto observada</span><strong id="winRate">—</strong><small id="winRateN">Amostra verificada: 0 sinais</small></div><h4>Últimos sinais registrados</h4><div id="signalHistory" class="ledger-history"><p class="ledger-empty">Aguardando sinais…</p></div><p class="ledger-note">WIN/LOSS apenas com preços reais da vela M1 do mesmo ativo. NÃO representa operações executadas.</p><p class="ledger-storage" id="ledgerStorage">Histórico temporário</p></section><footer>A predominância de velas indica a direção observada, não a chance de WIN. Não existem resultados fictícios: sem cotações verificadas, mostrar SEM VERIFICAÇÃO. Sem ordens automáticas.</footer></main><dialog id="login"><form id="loginForm"><div class="loginTop"><h3>Conectar Radar</h3><button type="button" id="closeLogin">×</button></div><p>Digite o PIN do Render. Não coloque o SSID aqui.</p><label>PIN DE ACESSO<input id="pin" type="password" required autocomplete="off"/></label><p class="error" id="loginError"></p><button type="submit">ACESSAR</button></form></dialog></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08101c">
+<meta name="description" content="Focus Pocket — radar experimental de sinais com preços reais e resultados verificáveis.">
+<title>Focus Pocket · Novo Começo</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/autoscan.css?v=5.0">
+<script defer src="/autoscan-ui.js?v=5.0"></script>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div class="brand"><div class="logo">F</div><div><p>FOCUS POCKET</p><h1>Novo começo</h1></div></div>
+    <span id="status" class="tag muted">CONECTANDO</span>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">UMA ESTRATÉGIA · UM SINAL POR VEZ · CONTA DEMO</p>
+    <h2>Somente quando houver <em>confirmação.</em></h2>
+    <p>Meu método: tendência + recuo até a média + vela real fechada + RSI. Se o mercado não confirmar, o radar mostra AGUARDAR.</p>
+    <div class="actions"><button id="connect" class="primary" type="button">CONECTAR RADAR</button><button id="alerts" class="secondary" type="button">ATIVAR AVISOS</button></div>
+  </section>
+
+  <section class="metrics" aria-label="Monitoramento">
+    <div><small>ATIVOS ELEGÍVEIS</small><b id="eligible">—</b></div>
+    <div><small>CONFERIDOS NO CICLO</small><b id="examined">—</b></div>
+    <div><small>PAYOUT MÍNIMO</small><b>87%</b></div>
+  </section>
+
+  <section class="opportunity">
+    <div class="section-head"><h3>Próximo sinal</h3><span id="activity">Aguardando dados reais...</span></div>
+    <div id="signal" class="signal-placeholder"><span class="pulse">◎</span><strong>AGUARDAR</strong><p>Apenas sinais válidos, nunca sinais inventados para preencher a tela.</p></div>
+  </section>
+
+  <section class="score">
+    <div class="section-head"><h3>Resultados de sinais</h3><span>PREÇOS REAIS · NÃO ORDENS EXECUTADAS</span></div>
+    <div class="score-grid">
+      <div><small>WIN</small><strong id="wins">0</strong></div>
+      <div><small>LOSS</small><strong id="losses">0</strong></div>
+      <div><small>EMPATE</small><strong id="draws">0</strong></div>
+      <div><small>SEM VERIFICAÇÃO</small><strong id="unknown">0</strong></div>
+    </div>
+    <div class="rate"><span>Acerto observado</span><b id="rate">—</b><small id="sample">Ainda não há sinais verificados.</small></div>
+    <h4>Histórico recente</h4>
+    <div id="history" class="history"><p>Nenhum sinal registrado nesta versão.</p></div>
+    <p class="notice">Amostra pequena não comprova eficácia. O histórico é temporário no Render e pode ser perdido após reinício. O aplicativo não envia ordens e não garante WIN.</p>
+  </section>
+</main>
+<dialog id="login">
+  <form id="loginForm" class="login-form">
+    <div class="dialog-head"><h3>Conectar Radar</h3><button type="button" id="close" aria-label="Fechar">×</button></div>
+    <p>Insira apenas o PIN privado do aplicativo. Não coloque seu SSID aqui.</p>
+    <label>PIN DE ACESSO<input id="pin" type="password" required autocomplete="off"></label>
+    <p id="loginError" role="alert"></p>
+    <button class="primary" type="submit">ACESSAR</button>
+  </form>
+</dialog>
+</body>
+</html>
