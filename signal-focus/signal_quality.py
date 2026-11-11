@@ -32,6 +32,29 @@ def _rsi(values,period=14):
     if down==0:return 100.0
     return 100-100/(1+up/down)
 
+def rsi_entry_guard(history, side):
+    """Filter exhausted/reversing RSI using only closed M1 readings."""
+    if side not in (-1,1) or len(history)<7:
+        return False
+    h=history[-7:]
+    if any(v is None or not isinstance(v,(int,float)) or not math.isfinite(v) for v in h):
+        return False
+    current=h[-1]
+    latest_delta=current-h[-2]
+    three_bar_delta=current-h[-4]
+    if side==1:
+        # Do not buy when RSI has reached the upper region or recently rolled over.
+        if not (52<=current<=64):return False
+        if max(h[-6:])>=67 and current>=60:return False
+        if max(h[-6:])-current>=2.0 and max(h[-6:])>=63:return False
+    else:
+        # Symmetric protection against selling into an oversold bounce.
+        if not (36<=current<=48):return False
+        if min(h[-6:])<=33 and current<=40:return False
+        if current-min(h[-6:])>=2.0 and min(h[-6:])<=37:return False
+    return side*latest_delta>=0.4 and side*three_bar_delta>=1.5
+
+
 def evaluate(candles,now=None):
     now=time.time() if now is None else float(now)
     if len(candles)<50:return None
@@ -59,8 +82,10 @@ def evaluate(candles,now=None):
             for i in range(n-19,n))/19
     if not math.isfinite(atr) or atr<=1e-10:return None
     ema9=_ema(closes,9);ema21=_ema(closes,21)
-    rsi=_rsi(closes);rsi_old=_rsi(closes[:-3])
-    if rsi is None or rsi_old is None:return None
+    rsi_history=[_rsi(closes[:-lag] if lag else closes) for lag in range(6,-1,-1)]
+    if any(v is None for v in rsi_history):return None
+    rsi=rsi_history[-1];rsi_old=rsi_history[-4]
+    rsi_last_delta=rsi_history[-1]-rsi_history[-2]
     def boll(at):
         z=closes[at-19:at+1];mid=sum(z)/20
         sd=math.sqrt(sum((v-mid)**2 for v in z)/20)
@@ -79,8 +104,8 @@ def evaluate(candles,now=None):
     results=[]
     for direction,side in (('CALL',1),('SELL',-1)):
         trend=side*(ema9[-1]-ema21[-1])>.10*atr and side*(ema9[-1]-ema9[-4])>.07*atr
-        rsi_ok=(52<=rsi<=68) if side==1 else (32<=rsi<=48)
-        rsi_direction=side*(rsi-rsi_old)>=1.3
+        rsi_ok=rsi_entry_guard(rsi_history,side)
+        rsi_direction=(side*rsi_last_delta>=0.4 and side*(rsi-rsi_old)>=1.5)
         turning_band=lower-prev_lower if side==1 else upper-prev_upper
         bollinger=(side*(mid-prev_mid)>.07*atr
                    and side*(closes[-1]-mid)>.04*atr
@@ -115,6 +140,7 @@ def evaluate(candles,now=None):
             'pattern':('BOLLINGER CURVA + RSI' if bollinger else
                        ('ROMPIMENTO + RSI' if breakout else 'TENDÊNCIA + PULLBACK + RSI')),
             'expirySeconds':60,'rsi14':round(rsi,1),'rsiChange':round(rsi-rsi_old,1),
+            'rsiLastChange':round(rsi_last_delta,1),'rsiGuard':'LAST_CLOSED_M1_OK',
             'reasons':good[:4],'risks':bad[:3],
             'signalClass':'CONFLUÊNCIA TÉCNICA','winRate':None,
             'status':'PRÉ-SINAL M1, TAXA REAL DE ACERTO NÃO MEDIDA','timestamp':last['time']

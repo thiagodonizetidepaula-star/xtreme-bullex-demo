@@ -31,7 +31,7 @@ function card(c){
  '</p><div class="rating"><span>CONFIRMAÇÃO TÉCNICA (NÃO É TAXA DE ACERTO)</span><b>'+pc+
  '% <small>'+c.score+'/'+c.total+' critérios</small></b></div><div class="dots">'+
  filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+
- '</div><p class="evidence"><b>RSI 14:</b> '+Number(c.rsi14).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' · '+(Number(c.rsiChange)>=0?'↑':'↓')+' '+Math.abs(Number(c.rsiChange)).toFixed(1)+' pt</p>'+
+ '</div><p class="evidence"><b>RSI 14:</b> '+Number(c.rsi14).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' · '+(Number(c.rsiLastChange??c.rsiChange)>=0?'↑':'↓')+' '+Math.abs(Number(c.rsiLastChange??c.rsiChange)).toFixed(1)+' pt (última vela M1)</p>'+
  '<p class="evidence good"><b>A favor:</b> '+esc((c.reasons||[]).slice(0,3).join(' · ')||'Sem confirmação')+'</p>'+
  ((c.risks||[]).length?'<p class="evidence danger"><b>Contra:</b> '+esc(c.risks.slice(0,2).join(' · '))+'</p>':'')+
  '<p class="evidence neutral">Taxa de acerto real: <b>não medida</b></p>'+
