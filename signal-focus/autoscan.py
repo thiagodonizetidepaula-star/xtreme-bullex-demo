@@ -178,12 +178,16 @@ def grade_radar(bars):
     return max(results,key=lambda x:x['score'],default=None)
 
 class Scanner:
-    """Sequential M1-only scanner; pins at most three provisional signals until expiry."""
+    """One signal per cycle. Outcomes require exact broker OHLC M1 data."""
     def __init__(self,broker):
-        self.broker=broker;self.lock=threading.RLock();self.stop_signal=threading.Event()
+        from signal_ledger import SignalLedger
+        self.broker=broker
+        self.lock=threading.RLock()
+        self.stop_signal=threading.Event()
         self.worker=None;self.stream_users=0;self.eligible=0;self.examined=0;self.round=0
-        self.current=None;self.best=[];self.error=None;self.seen_at=0
-        self.micro_rejected=0
+        self.current=None;self.error=None;self.seen_at=0
+        self.ledger=SignalLedger()
+        self.best=self.ledger.restore_pending()
 
     def active(self):
         return bool(self.worker and self.worker.is_alive())
@@ -191,104 +195,112 @@ class Scanner:
     def start(self):
         with self.lock:
             if self.active():return
-            if self.stream_users:raise RuntimeError('Pause o gráfico antes de iniciar a busca automática.')
-            if not self.broker.connected():raise RuntimeError('Conecte a sessão DEMO antes de iniciar a busca.')
-            self.stop_signal=threading.Event();self.examined=0;self.round=0;self.eligible=0
-            self.current=None;self.best=[];self.error=None;self.seen_at=0;self.micro_rejected=0
-            self.worker=threading.Thread(target=self.run,daemon=True,name='focus-radar-v19')
+            if self.stream_users:raise RuntimeError('Pause o gráfico antes da busca.')
+            if not self.broker.connected():raise RuntimeError('Conecte a sessão DEMO.')
+            self.stop_signal=threading.Event()
+            self.worker=threading.Thread(target=self.run,daemon=True,name='focus-ledger-radar')
             self.worker.start()
 
     def stop(self):
         self.stop_signal.set()
 
     def status(self):
-        now=time.time();ms=int(now*1000)
+        now=time.time()
         with self.lock:
-            active=self.active()
-            cards=[dict(c) for c in self.best if c.get('endsAtMs',0)>ms]
-            return {'running':active and not self.stop_signal.is_set(),
-                    'stopping':active and self.stop_signal.is_set(),
-                    'minPayout':PAYOUT_MIN,'minConfluence':MIN_QUALITY,'maxSignals':3,
-                    'scanPeriod':'M1','microPeriod':None,'eligible':self.eligible,
-                    'examined':self.examined,'round':self.round,'current':self.current,
-                    'candidates':cards[:3],'error':self.error,
-                    'microRejected':0,
-                    'lastUpdateMs':int(self.seen_at*1000),'serverTimeMs':ms,
-                    'mode':'m1-weighted-risk-checks-unvalidated','readOnly':True}
+            data={'running':self.active() and not self.stop_signal.is_set(),
+                  'stopping':self.active() and self.stop_signal.is_set(),
+                  'minPayout':PAYOUT_MIN,'minConfluence':MIN_QUALITY,'maxSignals':1,
+                  'scanPeriod':'M1','microPeriod':None,'eligible':self.eligible,
+                  'examined':self.examined,'round':self.round,'current':self.current,
+                  'candidates':[dict(x) for x in self.best if x['endsAtMs']>now*1000][:1],
+                  'error':self.error,'lastUpdateMs':int(self.seen_at*1000),
+                  'serverTimeMs':int(now*1000),
+                  'mode':'real-broker-candle-outcome-signal-only','readOnly':True}
+        data.update(self.ledger.status())
+        return data
 
     def run(self):
+        from signal_ledger import verify_outcome
         try:
             while not self.stop_signal.is_set() and self.broker.connected():
-                now_ms=int(time.time()*1000)
                 with self.lock:
-                    self.best=[c for c in self.best if c.get('endsAtMs',0)>now_ms]
-                    pinned=list(self.best)
+                    pinned=self.best[0] if self.best else None
                     self.current=None
                 if pinned:
-                    # Keep the entire set of 1–3 cards fixed until the last scheduled expiry.
-                    remaining=max(c['endsAtMs'] for c in pinned)/1000-time.time()
-                    if self.stop_signal.wait(max(.2,min(1.5,remaining))):break
+                    expiry=pinned["endsAtMs"]/1000.0
+                    now=time.time()
+                    if now<expiry+5:
+                        if self.stop_signal.wait(min(1.5,max(.1,expiry+5-now))):break
+                        continue
+                    if now>expiry+240:
+                        self.ledger.unverifiable(pinned["signalId"],
+                            "Cotações oficiais de entrada/saída indisponíveis na janela de verificação")
+                        with self.lock:self.best=[]
+                        continue
+                    try:
+                        candles=self.broker.candles(pinned["symbol"],60)
+                        evidence=verify_outcome(pinned,candles,time.time())
+                        if evidence and self.ledger.finish(pinned["signalId"],evidence):
+                            with self.lock:self.best=[]
+                            continue
+                    except Exception:
+                        pass
+                    if self.stop_signal.wait(4):break
                     continue
+
                 assets=self.broker.get_symbols()
-                eligible=sorted(
-                    [a for a in assets if a['open'] is True and a.get('payout') is not None
-                     and a['payout']>=PAYOUT_MIN],
+                eligible=sorted([a for a in assets if a['open'] is True
+                    and a.get('payout') is not None and a['payout']>=PAYOUT_MIN],
                     key=lambda a:(-a['payout'],a['symbol']))
-                with self.lock:
-                    self.round+=1;self.eligible=len(eligible);self.error=None
+                with self.lock:self.round+=1;self.eligible=len(eligible);self.error=None
                 if not eligible:
-                    with self.lock:self.error='Sem ativos abertos com payout confirmado de 87% ou mais.'
+                    with self.lock:self.error='Nenhum ativo aberto com payout confirmado ≥87%.'
                     if self.stop_signal.wait(10):break
                     continue
                 for asset in eligible:
                     if self.stop_signal.is_set() or not self.broker.connected():break
                     with self.lock:
-                        if len(self.best)>=3:break
                         self.current=asset['symbol']
+                        if self.best:break
                     try:
                         bars=self.broker.candles(asset['symbol'],60)
                         candidate=evaluate(bars)
-                        # Weighted technical score; never a calibrated chance of winning.
                         if not candidate or candidate.get('qualityPct',0)<MIN_QUALITY:
                             continue
                         moment=time.time()
-                        if not bars or not (0<=moment-(bars[-1]['time']+60)<=68):
+                        if not bars or not 0<=moment-(bars[-1]['time']+60)<=46:
                             continue
                         newest=next((a for a in self.broker.get_symbols()
-                                     if a['symbol']==asset['symbol']),None)
+                            if a['symbol']==asset['symbol']),None)
                         if not newest or newest['open'] is not True or newest.get('payout') is None:
                             continue
-                        if newest['payout']<PAYOUT_MIN:
-                            continue
-                        entry_ms=int((math.floor(moment/60)+1)*60000)
-                        if entry_ms-int(moment*1000)<8000:
-                            continue
-                        expiry_seconds=int(candidate.get('expirySeconds',60))
-                        # One decision, one fixed entry/expiry. No automatic orders.
-                        checks=[bool(v) for v in candidate.get('checks',[])]
-                        if len(checks)!=10 or candidate['qualityPct']<MIN_QUALITY:
-                            continue
+                        if newest['payout']<PAYOUT_MIN:continue
+                        entry=int((math.floor(moment/60)+1)*60000)
+                        if entry-moment*1000<8000:continue
+                        seconds=int(candidate.get('expirySeconds',60))
+                        if seconds not in (60,120):continue
                         candidate.update({
-                            'symbol':asset['symbol'],'name':asset['name'],'payout':newest['payout'],
-                            'checkedAt':moment,'entryAtMs':entry_ms,
-                            'endsAtMs':entry_ms+1000*expiry_seconds,
+                            'symbol':asset['symbol'],'name':asset['name'],
+                            'payout':newest['payout'],'checkedAt':moment,
+                            'entryAtMs':entry,'endsAtMs':entry+1000*seconds,
                             'verifiedLive':False,'verifiedM1':True,
                             'qualityLabel':'ÍNDICE DE CONFIRMAÇÃO TÉCNICA',
                             'winRate':None
                         })
-                        with self.lock:
-                            if len(self.best)<3 and all(c['symbol']!=asset['symbol'] for c in self.best):
-                                self.best.append(candidate)
+                        # Save atomically BEFORE any card is exposed to the user.
+                        registered=self.ledger.create(candidate)
+                        if registered:
+                            with self.lock:self.best=[registered]
+                            break
                     except Exception:
-                        # Missing M1 data must never be treated as a signal.
-                        with self.lock:self.micro_rejected+=1
+                        # A failed import must NOT be counted as a loss or a new signal.
+                        pass
                     finally:
-                        with self.lock:
-                            self.examined+=1;self.seen_at=time.time()
+                        with self.lock:self.examined+=1;self.seen_at=time.time()
                         if self.stop_signal.wait(1.3):break
                 with self.lock:self.current=None
         except Exception:
-            with self.lock:self.error='Fonte indisponível; a busca será retomada após reconectar.'
+            with self.lock:self.error='Falha no feed. Sem inventar resultados.'
         finally:
             with self.lock:self.current=None
 

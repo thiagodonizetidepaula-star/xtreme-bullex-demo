@@ -6,3 +6,26 @@
 .evidence{margin:7px 0 0;font-size:11px;line-height:1.45;color:#c1cbd3;overflow-wrap:anywhere}
 .evidence.good{color:#a8efbb}.evidence.danger{color:#ff9c9c}.evidence.neutral{color:#adb7c4}
 .evidence b{font-weight:750}
+
+/* Focus Pocket V2.1 — verified-price signal ledger */
+.ledger-panel{border:1px solid #304638;background:#101820;border-radius:19px;padding:18px;margin:24px 0 6px}
+.ledger-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.ledger-head h3{margin:0;font-size:18px}
+.ledger-head span{font:10px ui-monospace,monospace;color:#a7c7b0}
+.ledger-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:18px 0}
+.ledger-grid>div{padding:10px 8px;background:#192630;border-radius:10px;min-width:0}
+.ledger-grid small{display:block;font-size:9px;color:#b2c1ca}
+.ledger-grid strong{display:block;font-size:24px;margin-top:6px;font-variant-numeric:tabular-nums}
+.ledger-grid>div:first-child strong,.result-win{color:#a7f4bb}
+.ledger-grid>div:nth-child(2) strong,.result-loss{color:#ff9d9d}
+.ledger-grid>div:nth-child(3) strong,.result-draw{color:#f4d597}
+.result-not_verified,.result-pending{color:#c6c6cc}
+.ledger-rate{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.ledger-rate span{color:#c6d1d4;font-size:12px}.ledger-rate strong{font-size:22px;color:#b4e4bf}
+.ledger-rate small{width:100%;color:#a0aeb7;font-size:11px}
+.ledger-panel h4{font-size:13px;margin:18px 0 8px}
+.ledger-history{display:grid;gap:7px}.ledger-row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#17222c;border-radius:9px;padding:11px;font-size:11px}
+.ledger-row b{white-space:nowrap}.ledger-row span{overflow-wrap:anywhere}
+.ledger-note,.ledger-storage,.ledger-empty{font-size:10px;color:#a0afba;line-height:1.55}
+.ledger-storage{color:#e3bd84}
+@media(max-width:500px){.ledger-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ledger-panel{padding:13px}.ledger-row{font-size:10px}}

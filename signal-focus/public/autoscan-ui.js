@@ -41,6 +41,33 @@ function card(c){
  '</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+
  ' min</strong></div></div><p class="warning">Índice baseado em indicadores, não em resultados. Sem ordens automáticas.</p></article>';
 }
+function renderLedger(data){
+ const score=data.scoreboard||{win:0,loss:0,draw:0,notVerified:0,pending:0,winRatePct:null,observedCount:0,persistent:false};
+ for(const [id,value] of [["wins",score.win||0],["losses",score.loss||0],["draws",score.draw||0],["unverified",score.notVerified||0]]){
+  const node=$(id);if(node)node.textContent=String(value);
+ }
+ const rate=$("winRate"),rateN=$("winRateN");
+ if(rate)rate.textContent=score.winRatePct==null?"—":Number(score.winRatePct).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%";
+ if(rateN)rateN.textContent="Amostra verificada: "+Number(score.observedCount||0)+" sinais · "+Number(score.pending||0)+" pendente(s)";
+ const storage=$("ledgerStorage");
+ if(storage)storage.textContent=score.persistent?"Histórico persistente":"Histórico temporário: pode ser perdido em reinicializações do Render";
+ const rows=$("signalHistory");if(!rows)return;
+ const items=Array.isArray(data.history)?data.history.slice(0,10):[];
+ rows.replaceChildren();
+ if(!items.length){const p=document.createElement("p");p.className="ledger-empty";p.textContent="Nenhum sinal registrado ainda.";rows.append(p);return;}
+ for(const x of items){
+  const row=document.createElement("div");row.className="ledger-row";
+  const t=document.createElement("span"),state=document.createElement("b");
+  t.textContent=name(x.symbol)+" · "+(x.direction==="CALL"?"CALL":"SELL")+" · "+clock(Number(x.entryAtMs));
+  const label={WIN:"WIN",LOSS:"LOSS",DRAW:"EMPATE",PENDING:"EM ANDAMENTO",NOT_VERIFIED:"SEM VERIFICAÇÃO"};
+  state.textContent=label[x.result]||"SEM VERIFICAÇÃO";
+  state.className="result-"+(x.result||"NOT_VERIFIED").toLowerCase();
+  if(x.entryPrice!=null&&x.exitPrice!=null){
+    t.title="Preço de entrada: "+x.entryPrice+" | Preço de vencimento: "+x.exitPrice+" | Fonte: "+(x.source||"");
+  }
+  row.append(t,state);rows.append(row);
+ }
+}
 function render(){
  if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para procurar ativos.');return;}
  const list=state.latest.filter(x=>x.payout>=87&&x.verifiedM1&&Number(x.qualityPct)>=82&&
@@ -78,6 +105,7 @@ async function poll(){
   try{
    const s=await req('/api/scanner/status');state.authorized=true;
    state.scanning=!!s.running;state.latest=Array.isArray(s.candidates)?s.candidates:[];
+   renderLedger(s);
    $('eligible').textContent=state.connected?String(s.eligible||0):'—';
    $('examined').textContent=state.connected?String(s.examined||0):'—';
    $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Analisando velas fechadas M1 dos ativos elegíveis…'):'Inicializando radar…');
