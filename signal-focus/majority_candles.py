@@ -60,7 +60,7 @@ def candle_majority(candles, now=None):
     momentum=side*(bars[-1]['close']-bars[-5]['close'])
     if momentum<.30*avg_range:return None
     # Avoid chasing extremely stretched candles after a 9-candle sequence.
-    if abs(last['close']-bars[-8]['close'])>7*avg_range:return None
+    if abs(last['close']-bars[-8]['close'])>9*avg_range:return None
     labels=('7 de 9 velas na direção','2 últimas velas confirmam',
             'Corpo da última vela válido','Sem rejeição excessiva','Movimento consistente')
     return {
