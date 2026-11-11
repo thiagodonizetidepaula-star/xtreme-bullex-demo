@@ -7,6 +7,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 from pathlib import Path
+from signal_quality import evaluate, MIN_QUALITY
 
 PAYOUT_MIN=87.0
 
@@ -207,13 +208,13 @@ class Scanner:
             cards=[dict(c) for c in self.best if c.get('endsAtMs',0)>ms]
             return {'running':active and not self.stop_signal.is_set(),
                     'stopping':active and self.stop_signal.is_set(),
-                    'minPayout':PAYOUT_MIN,'minConfluence':90,'maxSignals':3,
+                    'minPayout':PAYOUT_MIN,'minConfluence':MIN_QUALITY,'maxSignals':3,
                     'scanPeriod':'M1','microPeriod':None,'eligible':self.eligible,
                     'examined':self.examined,'round':self.round,'current':self.current,
                     'candidates':cards[:3],'error':self.error,
                     'microRejected':0,
                     'lastUpdateMs':int(self.seen_at*1000),'serverTimeMs':ms,
-                    'mode':'m1-confirmed-close-only','readOnly':True}
+                    'mode':'m1-weighted-risk-checks-unvalidated','readOnly':True}
 
     def run(self):
         try:
@@ -246,10 +247,9 @@ class Scanner:
                         self.current=asset['symbol']
                     try:
                         bars=self.broker.candles(asset['symbol'],60)
-                        candidate=grade_radar(bars)
-                        # Strictly more than 90% of eight M1 checks means eight passed.
-                        # Never treat a confluence percentage as a win probability.
-                        if not candidate or candidate.get('total')!=8 or candidate.get('score',0)/8<=0.90:
+                        candidate=evaluate(bars)
+                        # Weighted technical score; never a calibrated chance of winning.
+                        if not candidate or candidate.get('qualityPct',0)<MIN_QUALITY:
                             continue
                         moment=time.time()
                         if not bars or not (0<=moment-(bars[-1]['time']+60)<=68):
@@ -266,24 +266,21 @@ class Scanner:
                         expiry_seconds=int(candidate.get('expirySeconds',60))
                         # One decision, one fixed entry/expiry. No automatic orders.
                         checks=[bool(v) for v in candidate.get('checks',[])]
-                        if len(checks)!=8 or not all(checks):
+                        if len(checks)!=10 or candidate['qualityPct']<MIN_QUALITY:
                             continue
                         candidate.update({
                             'symbol':asset['symbol'],'name':asset['name'],'payout':newest['payout'],
                             'checkedAt':moment,'entryAtMs':entry_ms,
                             'endsAtMs':entry_ms+1000*expiry_seconds,
-                            'score':8,'total':8,'verifiedLive':False,'verifiedM1':True,
-                            'checks':checks,
-                            'filters':[{'name':label,'ok':passed} for label,passed in zip(
-                                ('Bollinger/tendência','EMA 9/21','RSI','Velas','Estrutura',
-                                 'Força','Suporte/resistência','Risco'),checks)],
-                            'status':'SINAL PROVISÓRIO M1 — sem confirmação 5S; não garante acerto'
+                            'verifiedLive':False,'verifiedM1':True,
+                            'qualityLabel':'ÍNDICE DE CONFIRMAÇÃO TÉCNICA',
+                            'winRate':None
                         })
                         with self.lock:
                             if len(self.best)<3 and all(c['symbol']!=asset['symbol'] for c in self.best):
                                 self.best.append(candidate)
                     except Exception:
-                        # Market feed or 5S history may be unavailable; do not invent a signal.
+                        # Missing M1 data must never be treated as a signal.
                         with self.lock:self.micro_rejected+=1
                     finally:
                         with self.lock:

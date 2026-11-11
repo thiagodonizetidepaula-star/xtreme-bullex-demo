@@ -18,7 +18,7 @@ function card(c){
  const direction=c.direction==='CALL'?'CALL':'SELL';
  const entry=Number(c.entryAtMs),end=Number(c.endsAtMs);
  const secs=entry-now(),before=secs>0;
- const pc=Math.round(Number(c.score)*100/Math.max(1,Number(c.total)));
+ const pc=Math.max(0,Math.min(95,Math.round(Number(c.qualityPct)||0)));
  const filters=Array.isArray(c.filters)?c.filters:[];
  const checked=!!c.verifiedM1;
  return '<article class="card '+(checked?'fresh ':'')+direction.toLowerCase()+
@@ -27,23 +27,27 @@ function card(c){
  ' · M1</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+
  '% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+
  (direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+
- (before?'FILTROS M1 APROVADOS · SINAL PROVISÓRIO':'JANELA DE EXPIRAÇÃO · SINAL FIXADO')+
- '</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA (NÃO É ASSERTIVIDADE)</span><b>'+pc+
- '% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+
+ (before?'RSI E TENDÊNCIA AVALIADOS · SINAL PROVISÓRIO':'JANELA DE EXPIRAÇÃO · SINAL FIXADO')+
+ '</p><div class="rating"><span>CONFIRMAÇÃO TÉCNICA (NÃO É TAXA DE ACERTO)</span><b>'+pc+
+ '% <small>'+c.score+'/'+c.total+' critérios</small></b></div><div class="dots">'+
  filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+
- '</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+
+ '</div><p class="evidence"><b>RSI 14:</b> '+Number(c.rsi14).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+' · '+(Number(c.rsiChange)>=0?'↑':'↓')+' '+Math.abs(Number(c.rsiChange)).toFixed(1)+' pt</p>'+
+ '<p class="evidence good"><b>A favor:</b> '+esc((c.reasons||[]).slice(0,3).join(' · ')||'Sem confirmação')+'</p>'+
+ ((c.risks||[]).length?'<p class="evidence danger"><b>Contra:</b> '+esc(c.risks.slice(0,2).join(' · '))+'</p>':'')+
+ '<p class="evidence neutral">Taxa de acerto real: <b>não medida</b></p>'+
+ '<div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+
  '</strong></div><div><small class="timer-title">'+(before?'ENTRA EM':'TERMINA EM')+
  '</small><strong class="count">'+countdown((before?entry:end)-now())+
  '</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+
- ' min</strong></div></div><p class="warning">Sinal provisório baseado em M1, sem confirmação 5S. Sem ordens automáticas.</p></article>';
+ ' min</strong></div></div><p class="warning">Índice baseado em indicadores, não em resultados. Sem ordens automáticas.</p></article>';
 }
 function render(){
  if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para procurar ativos.');return;}
- const list=state.latest.filter(x=>x.payout>=87&&x.verifiedM1&&x.score/x.total>0.90&&
+ const list=state.latest.filter(x=>x.payout>=87&&x.verifiedM1&&Number(x.qualityPct)>=82&&
    Number(x.endsAtMs)>now()).slice(0,3);
  if(!list.length){
   if(!state.connected){empty('Conexão com a Pocket Option indisponível','Sem preços reais. Confira a sessão DEMO privada no Render. O radar não cria sinais sem dados autenticados.');return;}
-  empty('Nenhuma oportunidade aprovada','Aguardando confluência acima de 90% nos filtros M1. Sem aprovação, nenhum sinal é mostrado.');
+  empty('Nenhuma oportunidade aprovada','Aguardando RSI, tendência, Bollinger e risco favoráveis. Sem aprovação, nenhum sinal é mostrado.');
   return;
  }
  $('cards').innerHTML=list.map(card).join('');
@@ -77,7 +81,7 @@ async function poll(){
    $('eligible').textContent=state.connected?String(s.eligible||0):'—';
    $('examined').textContent=state.connected?String(s.examined||0):'—';
    $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Analisando velas fechadas M1 dos ativos elegíveis…'):'Inicializando radar…');
-   sScanStatus='Ativos analisados: '+Number(s.examined||0)+' · exigência: 8/8 filtros M1 (confluência acima de 90%).';
+   sScanStatus='Ativos analisados: '+Number(s.examined||0)+' · qualidade técnica mínima 82/95; taxa real de acerto não medida.';
   }catch(e){if(e.status===401){state.authorized=false;state.scanning=false;state.latest=[];}else $('info').textContent=e.message;}
   if(!state.configured){
    $('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';
@@ -86,7 +90,7 @@ async function poll(){
      ?'Sem conexão: a sessão Pocket Option pode ter expirado ou sido recusada. Atualize PO_SSID nas variáveis privadas do Render.'
      :(p.message||'Aguardando cotações autenticadas.');
   }else if(state.connected && state.authorized && !state.latest.length && state.scanning){
-   $('info').textContent=sScanStatus||'Analisando ativos: são exigidos 8/8 filtros M1.';
+   $('info').textContent=sScanStatus||'Analisando ativos: RSI, tendência e riscos.';
   }
   await startScan();
   $('health').textContent=state.connected?(state.scanning?'● RADAR ATIVO':'● DEMO CONECTADA'):'● SEM COTAÇÕES';
