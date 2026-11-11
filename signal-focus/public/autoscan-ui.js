@@ -16,23 +16,32 @@ async function req(url,method='GET',body){
 function empty(title,description){$('cards').innerHTML='<div class="empty"><span class="orbit">◎</span><strong>'+esc(title)+'</strong><p>'+esc(description)+'</p></div>';}
 function card(c){
  const direction=c.direction==='CALL'?'CALL':'SELL';
- const seconds=Number(c.entryAtMs)-now();
- const confirmed=!!c.liveQuoteFresh&&seconds>2500;
+ const entry=Number(c.entryAtMs),end=Number(c.endAtMs);
+ const afterEntry=now()>=entry;
+ const seconds=afterEntry?end-now():entry-now();
  const pc=Math.round(Number(c.score)*100/Math.max(1,Number(c.total)));
  const filters=Array.isArray(c.filters)?c.filters:[];
- return '<article class="card '+(confirmed?'fresh ':'')+direction.toLowerCase()+'" data-entry="'+Number(c.entryAtMs)+'"><div class="cardtop"><div><h4>'+esc(name(c.name||c.symbol))+'</h4><small>'+esc(c.pattern||'Análise de tendência')+' · M1</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+(confirmed?'TICK REAL · PRÉ-SINAL':'PRÉ-SINAL · REQUER CONFIRMAÇÃO')+'</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA</span><b>'+pc+'% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+'</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(Number(c.entryAtMs))+'</strong></div><div><small>CONTAGEM</small><strong class="count">'+countdown(seconds)+'</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+' min</strong></div></div><p class="warning">'+(confirmed?'Revalidar cenário na entrada.':'Apenas histórico fechado: NÃO é sinal executável.')+'</p></article>';
+ return '<article class="card fresh '+direction.toLowerCase()+'" data-entry="'+entry+'" data-end="'+end+'"><div class="cardtop"><div><h4>'+esc(name(c.name||c.symbol))+'</h4><small>'+esc(c.pattern||'Análise de tendência')+' · M1 + 5S</small></div><b class="payout">'+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'% PAYOUT</b></div><div class="direction '+direction.toLowerCase()+'">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div><p class="provisional">'+(afterEntry?'SINAL FIXADO · AGUARDANDO EXPIRAÇÃO':'M1 E 5S ALINHADOS · ENTRADA PROGRAMADA')+'</p><div class="rating"><span>CONFLUÊNCIA TÉCNICA</span><b>'+pc+'% <small>'+c.score+'/'+c.total+'</small></b></div><div class="dots">'+filters.map(f=>'<i class="'+(f.ok?'yes':'no')+'" title="'+esc(f.name)+'" aria-label="'+esc(f.name)+'"></i>').join('')+'</div><div class="times"><div><small>ENTRADA PREVISTA</small><strong>'+clock(entry)+'</strong></div><div><small class="timer-label">'+(afterEntry?'ENCERRA EM':'FALTA ENTRAR')+'</small><strong class="count">'+countdown(seconds)+'</strong></div><div><small>EXPIRAÇÃO</small><strong>'+Number(c.expirySeconds)/60+' min</strong></div></div><p class="warning">Confluência registrada na emissão. Não representa taxa de acerto comprovada.</p></article>';
 }
 function render(){
  if(!state.authorized){empty('Radar protegido','Conecte sua sessão DEMO para procurar ativos.');return;}
  if(!state.connected){empty('Sem cotações reais','Aguarde a reconexão da Pocket Option DEMO no servidor.');return;}
- const list=state.latest.filter(x=>x.payout>=87&&x.entryAtMs>now()+2500);
+ const list=state.latest.filter(x=>x.payout>=87&&x.confirmed5s===true&&Number(x.score)/Math.max(1,Number(x.total))>=.90&&Number(x.endAtMs)>now()).slice(0,3);
  if(!list.length){empty('Nenhuma oportunidade aprovada','O radar continua procurando. Quando não há confluência, a decisão é AGUARDAR.');return;}
  $('cards').innerHTML=list.map(card).join('');
 }
 function liveClock(){
  document.querySelectorAll('.card[data-entry]').forEach(el=>{
-  const left=Number(el.dataset.entry)-now();const node=el.querySelector('.count');if(node)node.textContent=countdown(left);
-  if(left<=2500){el.classList.add('expired');const p=el.querySelector('.provisional');if(p)p.textContent='EXPIRADO · AGUARDAR NOVO SINAL';}
+  const entry=Number(el.dataset.entry),end=Number(el.dataset.end);
+  const afterEntry=now()>=entry;
+  const left=(afterEntry?end:entry)-now();
+  const node=el.querySelector('.count');
+  if(node)node.textContent=countdown(left);
+  const label=el.querySelector('.timer-label');
+  if(label)label.textContent=afterEntry?'ENCERRA EM':'FALTA ENTRAR';
+  const phase=el.querySelector('.provisional');
+  if(phase)phase.textContent=left<=0?'OPERAÇÃO FINALIZADA · NOVA BUSCA':afterEntry?'SINAL FIXADO · AGUARDANDO EXPIRAÇÃO':'M1 E 5S ALINHADOS · ENTRADA PROGRAMADA';
+  if(now()>=end)el.classList.add('expired');
  });
 }
 async function startScan(){
