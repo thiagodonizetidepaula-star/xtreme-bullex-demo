@@ -1,30 +1,41 @@
-"""Focus Pocket V3: one 5-second signal at a time; no legacy RSI/M1 strategies.
+"""Focus Pocket V4: Heikin-Ashi M5 trend + M1 confirmation, ONE signal.
 
-A lack of real Pocket Option 5s candles results in AGUARDAR, not a fake signal.
+Neither Heikin price nor visual confidence is used for WIN/LOSS. Never auto-trades.
 """
 import math
 import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
-from strategy_5s import evaluate_5s
+from heikin_strategy import evaluate_heikin
 
 PAYOUT_MIN=87.0
 
 def payout(v):
     if isinstance(v,bool):return None
     try:
-        x=float(v);return x if math.isfinite(x) and 0<=x<=100 else None
-    except (ValueError,TypeError,OverflowError):return None
+        x=float(v)
+        return x if math.isfinite(x) and 0<=x<=100 else None
+    except (ValueError,TypeError,OverflowError):
+        return None
 
 class Scanner:
     def __init__(self,broker):
         from signal_ledger import SignalLedger
-        self.broker=broker;self.lock=threading.RLock();self.stop_signal=threading.Event()
-        self.worker=None;self.stream_users=0;self.eligible=0;self.examined=0;self.round=0
-        self.current=None;self.error=None;self.seen_at=0;self.missing5s=0
-        # Dedicated ledger for the new 5S strategy, keeping former M1 records separate.
-        self.ledger=SignalLedger(path='/tmp/focus-pocket-only-5s-signals.sqlite3')
+        self.broker=broker
+        self.lock=threading.RLock()
+        self.stop_signal=threading.Event()
+        self.worker=None
+        self.stream_users=0
+        self.eligible=0
+        self.examined=0
+        self.round=0
+        self.current=None
+        self.error=None
+        self.seen_at=0
+        self.rejected=0
+        # Isolate the new Heikin-Ashi history from the old M1 and 5S variants.
+        self.ledger=SignalLedger(path="/tmp/focus-pocket-heikin-m1-signals.sqlite3")
         self.best=self.ledger.restore_pending()
 
     def active(self):
@@ -33,10 +44,12 @@ class Scanner:
     def start(self):
         with self.lock:
             if self.active():return
-            if self.stream_users:raise RuntimeError('Feche o monitor antes de iniciar o radar.')
-            if not self.broker.connected():raise RuntimeError('Sessão DEMO ainda desconectada.')
+            if self.stream_users:
+                raise RuntimeError("Feche o monitor para iniciar a busca Heikin-Ashi.")
+            if not self.broker.connected():
+                raise RuntimeError("Conecte a sessão DEMO antes de iniciar.")
             self.stop_signal=threading.Event()
-            self.worker=threading.Thread(target=self.run,daemon=True,name='focus-only-five-seconds')
+            self.worker=threading.Thread(target=self.run,daemon=True,name="focus-heikin-only")
             self.worker.start()
 
     def stop(self):
@@ -45,102 +58,120 @@ class Scanner:
     def status(self):
         now=time.time()
         with self.lock:
-            data={'running':self.active() and not self.stop_signal.is_set(),
+            info={'running':self.active() and not self.stop_signal.is_set(),
                   'stopping':self.active() and self.stop_signal.is_set(),
-                  'minPayout':PAYOUT_MIN,'maxSignals':1,'scanPeriod':'5S',
-                  'signalExpirySeconds':5,'eligible':self.eligible,'examined':self.examined,
-                  'round':self.round,'current':self.current,'missing5s':self.missing5s,
+                  'minPayout':PAYOUT_MIN,'maxSignals':1,
+                  'scanPeriod':'M1','confirmationPeriod':'M5',
+                  'signalExpirySeconds':60,
+                  'eligible':self.eligible,'examined':self.examined,
+                  'round':self.round,'current':self.current,
+                  'rejected':self.rejected,
                   'candidates':[dict(c) for c in self.best if c['endsAtMs']>now*1000][:1],
-                  'error':self.error,'lastUpdateMs':int(self.seen_at*1000),
-                  'serverTimeMs':int(now*1000),'mode':'single-five-second-experimental',
+                  'error':self.error,
+                  'lastUpdateMs':int(self.seen_at*1000),
+                  'serverTimeMs':int(now*1000),
+                  'mode':'heikin-M5-M1-one-signal-experimental',
                   'readOnly':True}
-        data.update(self.ledger.status())
-        return data
+        info.update(self.ledger.status())
+        return info
 
     def run(self):
         from signal_ledger import verify_outcome
         try:
             while not self.stop_signal.is_set() and self.broker.connected():
                 with self.lock:
-                    pinned=self.best[0] if self.best else None
+                    pending=self.best[0] if self.best else None
                     self.current=None
-                if pinned:
-                    expiry=pinned['endsAtMs']/1000.0
+                if pending:
+                    expiry=pending['endsAtMs']/1000.0
                     now=time.time()
-                    if now<expiry+1:
-                        if self.stop_signal.wait(min(0.7,max(.1,expiry+1-now))):break
+                    if now<expiry+4:
+                        if self.stop_signal.wait(min(1.4,max(.2,expiry+4-now))):break
                         continue
-                    if now>expiry+50:
-                        self.ledger.unverifiable(pinned['signalId'],
-                            'Histórico real 5S de entrada/vencimento indisponível')
+                    if now>expiry+240:
+                        self.ledger.unverifiable(pending['signalId'],
+                            'Sem velas reais M1 verificáveis na entrada/vencimento')
                         with self.lock:self.best=[]
                         continue
                     try:
-                        # No M1 fallback: 5-second records only, same asset.
-                        real5s=self.broker.candles(pinned['symbol'],5)
-                        verified=verify_outcome(pinned,real5s,time.time())
-                        if verified and self.ledger.finish(pinned['signalId'],verified):
+                        # Exact REAL standard M1 candle, never synthetic Heikin-Ashi.
+                        prices=self.broker.candles(pending['symbol'],60)
+                        evidence=verify_outcome(pending,prices,time.time())
+                        if evidence and self.ledger.finish(pending['signalId'],evidence):
                             with self.lock:self.best=[]
                             continue
                     except Exception:
                         pass
-                    if self.stop_signal.wait(.7):break
+                    if self.stop_signal.wait(3):break
                     continue
+
                 assets=self.broker.get_symbols()
                 eligible=sorted([a for a in assets if a['open'] is True
-                    and a.get('payout') is not None and a['payout']>=PAYOUT_MIN],
-                    key=lambda a:(-a['payout'],a['symbol']))
+                                 and a.get('payout') is not None
+                                 and a['payout']>=PAYOUT_MIN],
+                                key=lambda a:(-a['payout'],a['symbol']))
                 with self.lock:
-                    self.round+=1;self.eligible=len(eligible);self.error=None
+                    self.round+=1
+                    self.eligible=len(eligible)
+                    self.error=None
                 if not eligible:
-                    with self.lock:self.error='Nenhum ativo aberto com payout confirmado de 87% ou mais.'
-                    if self.stop_signal.wait(8):break
+                    with self.lock:
+                        self.error='Nenhum ativo aberto com payout real de 87% ou mais.'
+                    if self.stop_signal.wait(10):break
                     continue
                 found=False
                 for asset in eligible:
                     if self.stop_signal.is_set() or not self.broker.connected():break
                     with self.lock:
-                        self.current=asset['symbol']
                         if self.best:break
+                        self.current=asset['symbol']
                     try:
-                        # Always require real closed 5-second candles; never guess ticks.
-                        bars=self.broker.candles(asset['symbol'],5)
+                        bars_m1=self.broker.candles(asset['symbol'],60)
+                        bars_m5=self.broker.candles(asset['symbol'],300)
                         moment=time.time()
-                        signal=evaluate_5s(bars,now=moment)
-                        if not signal:
-                            with self.lock:self.missing5s+=1
+                        candidate=evaluate_heikin(bars_m1,bars_m5,now=moment)
+                        if candidate is None:
+                            with self.lock:self.rejected+=1
+                            continue
+                        # The M1 reading must be from the very last completed minute.
+                        completed_minute=math.floor(moment/60)*60
+                        if candidate['timestamp']+60!=completed_minute:
                             continue
                         fresh=next((a for a in self.broker.get_symbols()
-                            if a['symbol']==asset['symbol']),None)
+                                    if a['symbol']==asset['symbol']),None)
                         if not fresh or fresh['open'] is not True or fresh.get('payout') is None:
                             continue
                         if fresh['payout']<PAYOUT_MIN:continue
                         checked=time.time()
-                        entry=int((math.floor(checked/5)+1)*5000)
-                        # Do not issue signals without enough notice for manual reaction.
-                        if entry-checked*1000<1750:continue
-                        # The last candle must be immediately before the proposed entry.
-                        if entry//1000-(int(bars[-1]['time'])+5)!=5:continue
-                        signal.update({'symbol':asset['symbol'],'name':asset['name'],
-                            'payout':fresh['payout'],'checkedAt':checked,
-                            'entryAtMs':entry,'endsAtMs':entry+5000,
-                            'verifiedM1':False,'verifiedLive':False,'verified5S':True,
-                            'qualityLabel':'CRITÉRIOS DE CONTINUAÇÃO 5S','winRate':None})
-                        recorded=self.ledger.create(signal)
-                        if recorded:
-                            with self.lock:self.best=[recorded]
+                        entry=int((math.floor(checked/60)+1)*60000)
+                        # No late signals; allow the person to prepare for the next M1.
+                        if entry-checked*1000<10000:continue
+                        if checked-(candidate['timestamp']+60)>43:continue
+                        candidate.update({'symbol':asset['symbol'],'name':asset['name'],
+                                          'payout':fresh['payout'],
+                                          'checkedAt':checked,
+                                          'entryAtMs':entry,
+                                          'endsAtMs':entry+60000,
+                                          'verifiedM1':True,'verifiedHA':True,
+                                          'verifiedLive':False,
+                                          'qualityLabel':'10 CRITÉRIOS TÉCNICOS (NÃO É WIN%)',
+                                          'winRate':None})
+                        registered=self.ledger.create(candidate)
+                        if registered:
+                            with self.lock:self.best=[registered]
                             found=True
                             break
                     except Exception:
-                        with self.lock:self.missing5s+=1
+                        with self.lock:self.rejected+=1
                     finally:
                         with self.lock:
-                            self.examined+=1;self.seen_at=time.time()
+                            self.examined+=1
+                            self.seen_at=time.time()
                         if self.stop_signal.wait(.3):break
                 with self.lock:self.current=None
                 if not found and self.stop_signal.wait(.8):break
         except Exception:
-            with self.lock:self.error='Feed de velas 5S indisponível. Nenhum sinal fictício.'
+            with self.lock:self.error='Feed insuficiente. Sem sinais inventados.'
         finally:
             with self.lock:self.current=None
 

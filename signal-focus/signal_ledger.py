@@ -1,4 +1,4 @@
-"""Focus Pocket: audit trail for signal outcomes from REAL Pocket Option 5S candles.
+"""Focus Pocket: audit trail for signal outcomes from REAL Pocket Option M1 candles.
 
 The app does NOT place trades. WIN and LOSS here mean observed SIGNAL direction
 between the published entry boundary and the expiry boundary; never broker fills.
@@ -15,43 +15,56 @@ import threading
 import time
 import uuid
 
-SOURCE = "Pocket Option historical 5-second candles (unofficial read-only connector)"
+SOURCE = "Pocket Option historical M1 candle feed (unofficial read-only connector)"
 TERMINAL = ("WIN", "LOSS", "DRAW", "NOT_VERIFIED")
 
-def verify_outcome(signal,candles,checked_at=None):
-    """Verify exact 5s boundary with REAL successive 5s OHLC bars, no fallback."""
-    now=time.time() if checked_at is None else float(checked_at)
+def verify_outcome(signal, candles, checked_at=None):
+    """Use two exact M1 candle boundaries, with no interpolation or substitution."""
+    now = time.time() if checked_at is None else float(checked_at)
     try:
-        direction=signal['direction']
-        start=int(signal['entryAtMs'])//1000
-        end=int(signal['endsAtMs'])//1000
-        if direction not in ('CALL','SELL') or start%5 or end-start!=5 or now<end+1:
+        direction = signal["direction"]
+        start = int(signal["entryAtMs"]) // 1000
+        end = int(signal["endsAtMs"]) // 1000
+        if direction not in ("CALL", "SELL") or start % 60 or end % 60 or end <= start:
             return None
-        if not isinstance(candles,(tuple,list)):return None
-        required=(start-15,start-10,start-5,start)
-        found={}
+        if (end-start) not in (60, 120) or now < end+4:
+            return None
+        if not isinstance(candles, (list, tuple)):
+            return None
+        needed = list(range(start,end,60))
+        found = {}
         for candle in candles:
-            stamp=float(candle['time'])
-            if not math.isfinite(stamp) or stamp!=int(stamp):continue
-            stamp=int(stamp)
-            if stamp not in required:continue
-            if stamp in found:return None
-            vals={k:float(candle[k]) for k in ('open','high','low','close')}
-            if not all(math.isfinite(v) and v>0 for v in vals.values()):return None
-            if vals['high']<max(vals['open'],vals['close'],vals['low']) or vals['low']>min(vals['open'],vals['close'],vals['high']):return None
-            found[stamp]=vals
-        if len(found)!=4:return None
-        opening=found[start]['open']
-        closing=found[start]['close']
-        if opening==closing:result='DRAW'
-        elif (closing>opening)==(direction=='CALL'):result='WIN'
-        else:result='LOSS'
-        return {'status':result,'entryPrice':opening,'exitPrice':closing,
-                'source':SOURCE,'checkedAtMs':int(now*1000),
-                'method':'EXACT_5S_OHLC_REAL_CANDLE_OPEN_TO_CLOSE',
-                'note':'Resultado do sinal 5S, não comprovação de ordem executada'}
-    except (KeyError,TypeError,ValueError,OverflowError):return None
-
+            stamp = float(candle["time"])
+            if not math.isfinite(stamp) or int(stamp) != stamp:
+                continue
+            timestamp = int(stamp)
+            if timestamp not in needed:
+                continue
+            if timestamp in found:
+                return None
+            prices = {key:float(candle[key]) for key in ("open","high","low","close")}
+            if (not all(math.isfinite(v) and v>0 for v in prices.values())
+                or prices["low"]>min(prices["open"],prices["close"])
+                or prices["high"]<max(prices["open"],prices["close"])
+                or prices["low"]>prices["high"]):
+                return None
+            found[timestamp]=prices
+        if set(found)!=set(needed):
+            return None
+        entry=found[start]["open"]
+        closing=found[end-60]["close"]
+        if entry==closing:
+            result="DRAW"
+        elif (closing>entry)==(direction=="CALL"):
+            result="WIN"
+        else:
+            result="LOSS"
+        return {"status":result, "entryPrice":entry, "exitPrice":closing,
+                "source":SOURCE,"checkedAtMs":int(now*1000),
+                "method":"OHLC_OPEN_AT_ENTRY_AND_LAST_CLOSED_M1_CLOSE_AT_EXPIRY",
+                "note":"Resultado observado do SINAL, não prova de ordem executada"}
+    except (ValueError,TypeError,KeyError,IndexError,OverflowError):
+        return None
 
 class SignalLedger:
     def __init__(self,path=None):

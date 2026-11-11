@@ -16,4 +16,6 @@ jobs:
       - name: Test market-price signal outcomes (no fake wins)
         env:
           PYTHONPATH: signal-focus
-        run: python -m unittest discover -v -s signal-focus/test -p test_five_seconds_only.py
+        run: |
+          python -m unittest discover -v -s signal-focus/test -p test_heikin_strategy.py
+          python -m unittest discover -v -s signal-focus/test -p test_signal_ledger.py
