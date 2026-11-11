@@ -1,0 +1,19 @@
+name: Focus Pocket - audit signal outcomes
+on:
+  push:
+    branches: [signal-focus-pocket-mobile-v13-20261110]
+  workflow_dispatch:
+jobs:
+  verify-signal-ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test market-price signal outcomes (no fake wins)
+        env:
+          PYTHONPATH: signal-focus
+        run: python -m unittest discover -v -s signal-focus/test -p test_signal_ledger.py
