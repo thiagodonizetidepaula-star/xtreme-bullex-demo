@@ -42,7 +42,7 @@ function render(){
  const list=state.latest.filter(x=>x.payout>=87&&x.verifiedMicro&&x.score/x.total>0.90&&
    Number(x.endsAtMs)>now()).slice(0,3);
  if(!list.length){
-  if(!state.connected){empty('Sem cotações reais','Aguarde a reconexão da Pocket Option DEMO no servidor.');return;}
+  if(!state.connected){empty('Conexão com a Pocket Option indisponível','Sem preços reais. Confira a sessão DEMO privada no Render. O radar não cria sinais sem dados autenticados.');return;}
   empty('Nenhuma oportunidade aprovada','Aguardando consenso entre M1 e velas de 5 segundos. Sem alinhamento, nenhum sinal é mostrado.');
   return;
  }
@@ -70,14 +70,24 @@ async function startScan(){
 async function poll(){
  try{
   const p=await req('/api/status');state.connected=!!p.connected;state.configured=!!p.configured;
+  let sScanStatus='';
   try{
    const s=await req('/api/scanner/status');state.authorized=true;
    state.scanning=!!s.running;state.latest=Array.isArray(s.candidates)?s.candidates:[];
    $('eligible').textContent=state.connected?String(s.eligible||0):'—';
    $('examined').textContent=state.connected?String(s.examined||0):'—';
    $('info').textContent=s.error||(!state.connected?'Sem cotações. Aguardando conexão real.':s.running?(s.current?'Analisando '+name(s.current)+'…':'Procurando M1 e confirmando a tendência em 5 segundos…'):'Inicializando radar…');
+   sScanStatus='Ativos analisados: '+Number(s.examined||0)+' · Rejeições na verificação 5S: '+Number(s.microRejected||0)+' · padrão exigido: 9/9 filtros.';
   }catch(e){if(e.status===401){state.authorized=false;state.scanning=false;state.latest=[];}else $('info').textContent=e.message;}
-  if(!state.configured){$('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';}
+  if(!state.configured){
+   $('info').textContent=p.message||'Configure PO_SSID e APP_ACCESS_PIN no Render.';
+  }else if(!state.connected && state.authorized){
+   $('info').textContent=p.brokerStatus==='reconectando'
+     ?'Sem conexão: a sessão Pocket Option pode ter expirado ou sido recusada. Atualize PO_SSID nas variáveis privadas do Render.'
+     :(p.message||'Aguardando cotações autenticadas.');
+  }else if(state.connected && state.authorized && !state.latest.length && state.scanning){
+   $('info').textContent=sScanStatus||'Analisando ativos: são exigidos 9/9 filtros (M1 + 5S).';
+  }
   await startScan();
   $('health').textContent=state.connected?(state.scanning?'● RADAR ATIVO':'● DEMO CONECTADA'):'● SEM COTAÇÕES';
   $('health').className='health '+(state.connected?'online':'offline');
