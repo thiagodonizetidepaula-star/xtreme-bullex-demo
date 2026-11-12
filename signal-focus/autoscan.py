@@ -1,4 +1,4 @@
-"""Focus Pocket Strategy 2.0: EMA 9/21/200 + RSI + candle trigger + Bollinger filter; DEMO read-only.
+"""Focus Pocket Donchian 20 + CCI 20: confirmed channel reaction, real M1 prices, DEMO read-only.
 
 Legacy scanner algorithms are removed; only focus_strategy.evaluate is executed.
 """
@@ -39,7 +39,7 @@ class Scanner:
         self.history_short=0
         self.diagnostic='Aguardando início da verificação de cotações.'
         # New, empty ledger. Previous versions remain preserved only on the backup branch.
-        self.ledger=SignalLedger(path='/tmp/focus-pocket-ema200-rsi-candle-20261111.sqlite3')
+        self.ledger=SignalLedger(path='/tmp/focus-pocket-donchian-cci-20261111.sqlite3')
         self.best=self.ledger.restore_pending()
 
     def active(self):
@@ -62,7 +62,7 @@ class Scanner:
         with self.lock:
             info={'running':self.active() and not self.stop_signal.is_set(),
                   'stopping':self.active() and self.stop_signal.is_set(),
-                  'version':'Focus Strategy 2.0',
+                  'version':'Donchian CCI 1.0',
                   'minPayout':PAYOUT_MIN,'maxSignals':1,
                   'scanPeriod':'M1','signalExpirySeconds':60,
                   'eligible':self.eligible,'examined':self.examined,'round':self.round,
@@ -70,11 +70,11 @@ class Scanner:
                   'feedErrors':self.feed_errors,'rejected':self.rejected,
                   'diagnostic':self.diagnostic,
                   'lastCandleCount':self.last_candle_count,
-                  'requiredCandles':220,'insufficientHistory':self.history_short,
+                  'requiredCandles':45,'insufficientHistory':self.history_short,
                   'candidates':[dict(c) for c in self.best if c['endsAtMs']>now*1000][:1],
                   'lastUpdateMs':int(self.last_tick*1000),
                   'serverTimeMs':int(now*1000),
-                  'mode':'ema9-21-200-rsi14-engulf-bollinger-m1-readonly',
+                  'mode':'donchian20-cci20-m1-reversal-readonly',
                   'readOnly':True}
         info.update(self.ledger.status())
         return info
@@ -152,17 +152,17 @@ class Scanner:
                         candles=self.broker.candles(asset['symbol'],60)
                         count=len(candles) if isinstance(candles,(list,tuple)) else 0
                         with self.lock:self.last_candle_count=count
-                        if count<220:
+                        if count<45:
                             with self.lock:
                                 self.history_short+=1
-                                self.diagnostic=f'HISTÓRICO INSUFICIENTE: {count} de 220 velas M1 necessárias.'
+                                self.diagnostic=f'HISTÓRICO INSUFICIENTE: {count} de 45 velas M1 necessárias.'
                             continue
                         t=time.time()
                         candidate=evaluate(candles,t)
                         if candidate is None:
                             with self.lock:
                                 self.rejected+=1
-                                self.diagnostic='SEM CONFIRMAÇÃO TÉCNICA: nenhum sinal aprovado nas velas disponíveis.'
+                                self.diagnostic='SEM CONFIRMAÇÃO: não houve toque/rejeição Donchian + virada CCI suficientes.'
                             continue
                         # Re-check payout and actual asset availability before publishing.
                         latest=next((x for x in self.broker.get_symbols()
@@ -184,8 +184,8 @@ class Scanner:
                             'entryAtMs':int(next_minute*1000),
                             'endsAtMs':int((next_minute+60)*1000),
                             'verifiedM1':True,
-                            'signalTag':'EMA200_RSI14_CANDLE_V2',
-                            'qualityLabel':'EMA9/21/200 + RSI14 + ENGOLFO/REJEIÇÃO + BOLLINGER — NÃO É CHANCE DE WIN'})
+                            'signalTag':'DONCHIAN20_CCI20_V1',
+                            'qualityLabel':'TOQUE DONCHIAN20 + VIRADA CCI20 — CONFIRMAÇÃO NÃO É PROBABILIDADE DE WIN'})
                         record=self.ledger.create(candidate)
                         if record:
                             with self.lock:

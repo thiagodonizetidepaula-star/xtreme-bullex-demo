@@ -33,13 +33,14 @@ function showSignal(c){
  $('signal').innerHTML='<div class="signal-top"><h4>'+safe(fmtName(c.name||c.symbol))+
  '</h4><span>PAYOUT '+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%</span></div>'+
  '<div class="direction">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div>'+
- '<p>SINAL PROVISÓRIO · EMA 9/21/200 + RSI 14 + BOLLINGER · M1</p>'+
- '<p>PADRÃO IDENTIFICADO: '+safe(c.pattern||'ENGOLFO / REJEIÇÃO')+'</p>'+
+ '<p>SINAL PROVISÓRIO · DONCHIAN 20 + CCI 20 · M1</p>'+
+ '<p>PADRÃO IDENTIFICADO: '+safe(c.pattern||'TOQUE + REJEIÇÃO NO CANAL')+'</p>'+
+ '<p>CCI 20: '+Number(c.cci20).toFixed(1)+' (anterior '+Number(c.cciPrevious).toFixed(1)+')</p>'+
  '<div class="signal-meta"><div><small>ENTRADA SUGERIDA</small><strong>'+local(entry)+
  '</strong></div><div><small>EXPIRAÇÃO</small><strong>1 minuto</strong></div>'+
  '<div><small id="timerLabel">TEMPO ATÉ ENTRAR</small><strong id="count" class="count">'+countdown(entry-now())+
- '</strong></div></div><div class="pills">'+tag+'</div><p>RSI: '+Number(c.rsi14).toFixed(1)+
- '. As confirmações técnicas não são probabilidade de WIN. Nenhuma ordem é executada.</p>';
+ '</strong></div></div><div class="pills">'+tag+'</div><p>CCI 20 confirmado: '+Number(c.cci20).toFixed(1)+
+ '. Indicadores não são probabilidade de WIN. Nenhuma ordem é executada.</p>';
  state.shownId=String(c.signalId||entry+'-'+c.symbol);
 }
 function notify(c){

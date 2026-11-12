@@ -1,129 +1,107 @@
-"""Focus Pocket — EMA 9/21/200 + RSI 14 + candle trigger, Bollinger risk gate.
+"""Donchian(20) + CCI(20), based on video demonstration of channel reversal.
 
-Experimental signal detection only. Never trades and never reports win probability.
-Use REAL closed M1 OHLC from the authenticated broker, no partial/filled candles.
+Only completed REAL Pocket Option M1 OHLC. This is an experimental adaptation:
+the clip does not establish exact expiry, Donchian length or every entry rule.
+Upper/lower levels are computed from PREVIOUS 20 candles (no look-ahead).
+No WIN guarantee, auto-orders, or fake signal statistics.
 """
 import math
 import time
 
-PERIOD=60
-MIN_CANDLES=220
+PERIOD = 60
+DONCHIAN = 20
+CCI_PERIOD = 20
+MIN_CANDLES = 45
 
-def _ema(values, period):
-    alpha=2/(period+1)
-    result=[];current=values[0]
-    for v in values:
-        current+=alpha*(v-current)
-        result.append(current)
-    return result
-
-def _rsi(values, period=14):
-    if len(values)<period+2:return None
-    diffs=[values[i]-values[i-1] for i in range(1,len(values))]
-    gain=sum(max(x,0) for x in diffs[:period])/period
-    loss=sum(max(-x,0) for x in diffs[:period])/period
-    for change in diffs[period:]:
-        gain=(gain*(period-1)+max(change,0))/period
-        loss=(loss*(period-1)+max(-change,0))/period
-    if gain==0 and loss==0:return 50.0
-    return 100.0 if loss==0 else 100.0-100.0/(1+gain/loss)
-
-def _clean_closed(data, now):
-    if not isinstance(data,(list,tuple)) or len(data)<MIN_CANDLES:return None
-    cleaned=[]
-    try:
-        for raw in data:
-            bar={k:float(raw[k]) for k in ("time","open","high","low","close")}
-            if not all(math.isfinite(v) for v in bar.values()):return None
-            if bar["time"]!=int(bar["time"]) or int(bar["time"])%PERIOD:return None
-            if min(bar[x] for x in ("open","high","low","close"))<=0:return None
-            if bar["high"]<max(bar["open"],bar["close"],bar["low"]) or bar["low"]>min(bar["open"],bar["close"],bar["high"]):return None
-            if bar["time"]+PERIOD<=now:cleaned.append(bar)
-    except (KeyError,TypeError,ValueError,OverflowError):
+def clean_closed(raw, now):
+    if not isinstance(raw,(list,tuple)) or len(raw)<MIN_CANDLES:
         return None
-    if len(cleaned)<MIN_CANDLES:return None
-    cleaned=cleaned[-MIN_CANDLES:]
-    if any(cleaned[i]["time"]-cleaned[i-1]["time"]!=PERIOD for i in range(1,len(cleaned))):return None
-    age=now-(cleaned[-1]["time"]+PERIOD)
-    if not 0<=age<=45:return None
-    return cleaned
+    bars=[]
+    try:
+        for item in raw:
+            b={k:float(item[k]) for k in ('time','open','high','low','close')}
+            if not all(math.isfinite(v) for v in b.values()):
+                return None
+            if b['time']!=int(b['time']) or int(b['time'])%PERIOD:
+                return None
+            if min(b[k] for k in ('open','high','low','close'))<=0:
+                return None
+            if b['high']<max(b['open'],b['close'],b['low']) or b['low']>min(b['open'],b['close'],b['high']):
+                return None
+            if b['time']+PERIOD<=now:bars.append(b)
+    except (TypeError,ValueError,KeyError,OverflowError):
+        return None
+    if len(bars)<MIN_CANDLES:return None
+    bars=bars[-MIN_CANDLES:]
+    if any(bars[i]['time']-bars[i-1]['time']!=PERIOD for i in range(1,len(bars))):
+        return None
+    if not 0<=now-(bars[-1]['time']+PERIOD)<=44:
+        return None
+    return bars
 
-def _candle_pattern(prior,last,side,atr):
-    pbody=abs(prior["close"]-prior["open"])
-    body=abs(last["close"]-last["open"])
-    span=last["high"]-last["low"]
-    if span<=0 or side*(last["close"]-last["open"])<=0:return None
-    if side==1:
-        engulf=(prior["close"]<prior["open"] and last["open"]<=prior["close"]+.12*atr
-                and last["close"]>=prior["open"]-.10*atr
-                and body>=max(.24*atr,.7*pbody) and body/span>=.45)
-        lowerwick=min(last["open"],last["close"])-last["low"]
-        reject=(lowerwick>=max(.20*atr,1.25*body) and
-                (last["high"]-last["close"])/span<=.25)
-        return "ENGOLFO DE ALTA" if engulf else "REJEIÇÃO DE BAIXA" if reject else None
-    engulf=(prior["close"]>prior["open"] and last["open"]>=prior["close"]-.12*atr
-            and last["close"]<=prior["open"]+.10*atr
-            and body>=max(.24*atr,.7*pbody) and body/span>=.45)
-    upperwick=last["high"]-max(last["open"],last["close"])
-    reject=(upperwick>=max(.20*atr,1.25*body) and
-            (last["close"]-last["low"])/span<=.25)
-    return "ENGOLFO DE BAIXA" if engulf else "REJEIÇÃO DE ALTA" if reject else None
+def cci_at(bars, offset=0, period=CCI_PERIOD):
+    end=len(bars)-offset
+    window=bars[end-period:end]
+    if len(window)!=period:return None
+    tp=[(b['high']+b['low']+b['close'])/3 for b in window]
+    average=sum(tp)/period
+    deviation=sum(abs(x-average) for x in tp)/period
+    if deviation<=1e-12:return 0.0
+    return (tp[-1]-average)/(.015*deviation)
 
 def evaluate(candles,now=None):
     now=time.time() if now is None else float(now)
-    bars=_clean_closed(candles,now)
+    bars=clean_closed(candles,now)
     if bars is None:return None
-    close=[bar["close"] for bar in bars]
-    e9,e21,e200=(_ema(close,n) for n in (9,21,200))
-    rsi=_rsi(close);rsi_previous=_rsi(close[:-1])
-    if rsi is None or rsi_previous is None:return None
-    last,prior=bars[-1],bars[-2]
-    ranges=[x["high"]-x["low"] for x in bars[-20:-1]]
-    atr=sum(ranges)/len(ranges)
-    if not math.isfinite(atr) or atr<=1e-10:return None
-    width_window=close[-20:];mean=sum(width_window)/20
-    sd=math.sqrt(sum((x-mean)**2 for x in width_window)/20)
-    upper,lower=mean+2*sd,mean-2*sd
-    bandwidth=upper-lower
-    if bandwidth<1.6*atr or not math.isfinite(bandwidth):return None
-    span=last["high"]-last["low"]
-    if span<=0 or span>2.4*atr:return None
-    # Do not chase after a price spike or at a Bollinger extremity.
-    bb_pos=(last["close"]-lower)/bandwidth
-    for side,direction in ((1,"CALL"),(-1,"SELL")):
-        trend=(side*(e9[-1]-e21[-1])>=.06*atr
-               and side*(e21[-1]-e200[-1])>=.12*atr
-               and side*(e9[-1]-e9[-4])>=.04*atr
-               and side*(e200[-1]-e200[-6])>=.015*atr
-               and side*(last["close"]-e200[-1])>=.10*atr)
-        # Avoid RSI overbought CALL and oversold SELL, and require live momentum
-        rsi_valid=(50<=rsi<=64 if side==1 else 36<=rsi<=50)
-        rsi_valid=rsi_valid and side*(rsi-rsi_previous)>=.20
-        pattern=_candle_pattern(prior,last,side,atr)
-        retracement=(side*(prior["close"]-prior["open"])<=0 or
-                     side*(prior["close"]-bars[-3]["close"])<=0)
-        pullback=min(abs(prior["close"]-e9[-2]),
-                     abs(prior["low"]-e9[-2]) if side==1 else abs(prior["high"]-e9[-2]),
-                     abs(prior["close"]-e21[-2]))<=1.5*atr
-        bollinger_safe=(.32<=bb_pos<=.79 if side==1 else .21<=bb_pos<=.68)
-        body=abs(last["close"]-last["open"])
-        reversal_wick=(last["high"]-max(last["open"],last["close"]) if side==1
-                       else min(last["open"],last["close"])-last["low"])
-        risk=(reversal_wick/span<=.34 and
-              abs(last["close"]-e9[-1])<=1.8*atr and
-              body/span>=.18)
-        checks=(trend,rsi_valid,pattern is not None,retracement and pullback,bollinger_safe,risk)
+    current=bars[-1]
+    previous=bars[-2]
+    lookback=bars[-DONCHIAN-1:-1]  # no current signal candle
+    upper=max(b['high'] for b in lookback)
+    lower=min(b['low'] for b in lookback)
+    middle=(upper+lower)/2
+    atr=sum(b['high']-b['low'] for b in bars[-15:-1])/14
+    spread=upper-lower
+    height=current['high']-current['low']
+    if atr<=1e-10 or spread<1.6*atr or height<=0 or height>2.7*atr:return None
+    cci_now=cci_at(bars)
+    cci_before=cci_at(bars,1)
+    cci_older=cci_at(bars,2)
+    if None in (cci_now,cci_before,cci_older):return None
+    if not all(math.isfinite(v) for v in (cci_now,cci_before,cci_older)):return None
+    for direction,side in (('CALL',1),('SELL',-1)):
+        if side==1:
+            contacted=current['low']<=lower+.20*atr
+            recovered=(current['close']>=lower+.23*atr and current['close']>current['open']
+                       and current['close']>=previous['close']+.10*atr)
+            wick=min(current['open'],current['close'])-current['low']
+            wick_ok=wick>=.24*height
+            momentum=(cci_before<=-90 and cci_now>cci_before+12 and cci_now>-240
+                      and cci_now>=cci_older-3)
+            not_overextreme=current['close']<middle+.18*spread
+            pattern='REBOTE NA BANDA INFERIOR'
+        else:
+            contacted=current['high']>=upper-.20*atr
+            recovered=(current['close']<=upper-.23*atr and current['close']<current['open']
+                       and current['close']<=previous['close']-.10*atr)
+            wick=current['high']-max(current['open'],current['close'])
+            wick_ok=wick>=.24*height
+            momentum=(cci_before>=90 and cci_now<cci_before-12 and cci_now<240
+                      and cci_now<=cci_older+3)
+            not_overextreme=current['close']>middle-.18*spread
+            pattern='REJEIÇÃO NA BANDA SUPERIOR'
+        checks=(contacted,recovered,wick_ok,momentum,not_overextreme)
         if not all(checks):continue
-        labels=("EMA 9/21/200 alinhadas","RSI 14 com espaço","Engolfo ou rejeição confirmado",
-                "Recuo próximo à média","Bollinger sem preço esticado","Sem rejeição contrária forte")
+        labels=('Toque real no limite Donchian 20','Fechamento de reação',
+                'Pavio mostra rejeição','CCI 20 virou na direção','Sem deslocamento extremo')
         return {
-          "direction":direction,"pattern":pattern,"strategy":"EMA 9/21/200 + RSI14 + price action; Bollinger filtro",
-          "score":6,"total":6,"filters":[{"name":label,"ok":v} for label,v in zip(labels,checks)],
-          "timestamp":int(last["time"]),"verifiedM1":True,"expirySeconds":60,"timeframeSeconds":60,
-          "rsi14":round(rsi,2),"rsiDelta":round(rsi-rsi_previous,2),
-          "bollingerPosition":round(bb_pos,3),
-          "status":"PRÉ-SINAL EXPERIMENTAL; SEM GARANTIA DE ACERTO",
-          "qualityPct":None,"winRate":None,
-          "sourceCandles":"OHLC M1 fechados do ativo, sem preços estimados"
+            'direction':direction,'pattern':pattern,'strategy':'DONCHIAN 20 + CCI 20',
+            'score':5,'total':5,'filters':[{'name':label,'ok':ok} for label,ok in zip(labels,checks)],
+            'timestamp':int(current['time']),'verifiedM1':True,
+            'expirySeconds':60,'timeframeSeconds':60,
+            'donchianUpper':upper,'donchianLower':lower,'donchianMiddle':middle,
+            'cci20':round(cci_now,1),'cciPrevious':round(cci_before,1),
+            'status':'SINAL PROVISÓRIO DONCHIAN + CCI, SEM GARANTIA',
+            'qualityPct':None,'winRate':None,
+            'sourceCandles':'OHLC real M1 do mesmo ativo, sem estimativas'
         }
     return None
