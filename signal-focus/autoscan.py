@@ -35,6 +35,9 @@ class Scanner:
         self.rejected=0
         self.feed_errors=0
         self.cursor=0
+        self.last_candle_count=None
+        self.history_short=0
+        self.diagnostic='Aguardando início da verificação de cotações.'
         # New, empty ledger. Previous versions remain preserved only on the backup branch.
         self.ledger=SignalLedger(path='/tmp/focus-pocket-ema200-rsi-candle-20261111.sqlite3')
         self.best=self.ledger.restore_pending()
@@ -65,6 +68,9 @@ class Scanner:
                   'eligible':self.eligible,'examined':self.examined,'round':self.round,
                   'current':self.current,'error':self.error,
                   'feedErrors':self.feed_errors,'rejected':self.rejected,
+                  'diagnostic':self.diagnostic,
+                  'lastCandleCount':self.last_candle_count,
+                  'requiredCandles':220,'insufficientHistory':self.history_short,
                   'candidates':[dict(c) for c in self.best if c['endsAtMs']>now*1000][:1],
                   'lastUpdateMs':int(self.last_tick*1000),
                   'serverTimeMs':int(now*1000),
@@ -81,6 +87,7 @@ class Scanner:
                     with self.lock:
                         self.current=None
                         self.error='Pocket Option desconectada. Aguardando reconexão autenticada.'
+                        self.diagnostic='SEM CONEXÃO AUTENTICADA: verifique a sessão DEMO nas configurações privadas do Render.'
                     if self.stop_signal.wait(5):break
                     continue
 
@@ -123,11 +130,14 @@ class Scanner:
                     with self.lock:
                         self.feed_errors+=1
                         self.error='Falha ao consultar ativos; nova tentativa automática.'
+                        self.diagnostic='FALHA AO CONSULTAR ATIVOS E PAYOUTS.'
                     if self.stop_signal.wait(8):break
                     continue
 
                 if not options:
-                    with self.lock:self.error='Nenhum ativo aberto com payout de 87% ou mais.'
+                    with self.lock:
+                        self.error='Nenhum ativo aberto com payout de 87% ou mais.'
+                        self.diagnostic='SEM ATIVOS ELEGÍVEIS OU CATÁLOGO DE PAYOUT INDISPONÍVEL.'
                     if self.stop_signal.wait(10):break
                     continue
 
@@ -140,10 +150,19 @@ class Scanner:
                     with self.lock:self.current=asset['symbol']
                     try:
                         candles=self.broker.candles(asset['symbol'],60)
+                        count=len(candles) if isinstance(candles,(list,tuple)) else 0
+                        with self.lock:self.last_candle_count=count
+                        if count<220:
+                            with self.lock:
+                                self.history_short+=1
+                                self.diagnostic=f'HISTÓRICO INSUFICIENTE: {count} de 220 velas M1 necessárias.'
+                            continue
                         t=time.time()
                         candidate=evaluate(candles,t)
                         if candidate is None:
-                            with self.lock:self.rejected+=1
+                            with self.lock:
+                                self.rejected+=1
+                                self.diagnostic='SEM CONFIRMAÇÃO TÉCNICA: nenhum sinal aprovado nas velas disponíveis.'
                             continue
                         # Re-check payout and actual asset availability before publishing.
                         latest=next((x for x in self.broker.get_symbols()
@@ -169,7 +188,9 @@ class Scanner:
                             'qualityLabel':'EMA9/21/200 + RSI14 + ENGOLFO/REJEIÇÃO + BOLLINGER — NÃO É CHANCE DE WIN'})
                         record=self.ledger.create(candidate)
                         if record:
-                            with self.lock:self.best=[record]
+                            with self.lock:
+                                self.best=[record]
+                                self.diagnostic='SINAL REGISTRADO: aguardando conclusão para conferir resultado real.'
                             self.cursor=(start+idx+1)%n
                             emitted=True
                             break
@@ -177,6 +198,7 @@ class Scanner:
                         with self.lock:
                             self.feed_errors+=1
                             self.error='Parte do histórico está indisponível.'
+                            self.diagnostic='FALHA NA LEITURA DE VELAS: conexão ou histórico instável.'
                         if self.stop_signal.wait(2):break
                     finally:
                         with self.lock:

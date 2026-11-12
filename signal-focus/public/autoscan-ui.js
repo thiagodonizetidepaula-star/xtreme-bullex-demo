@@ -103,12 +103,12 @@ async function poll(){
      state.signal=(Array.isArray(detail.candidates)&&detail.candidates.length)?detail.candidates[0]:null;
      $('eligible').textContent=state.connected?String(detail.eligible||0):'—';
      $('examined').textContent=state.connected?String(detail.examined||0)+' / '+String(detail.eligible||0):'—';
-     $('activity').textContent=detail.error||(state.connected?(detail.current?'Analisando '+fmtName(detail.current):'Monitorando ativos...'):'Aguardando conexão autenticada...');
+     $('activity').textContent=detail.error||detail.diagnostic||(state.connected?(detail.current?'Analisando '+fmtName(detail.current):'Monitorando ativos...'):'Aguardando conexão autenticada...');
      renderLedger(detail);
    }
    if(state.authorized)await start();
    $('status').className='tag '+(state.connected?'good':'bad');
-   $('status').textContent=state.connected?'● DEMO CONECTADA':'● SEM FEED';
+   $('status').textContent=state.connected?'● DEMO CONECTADA':'● SEM COTAÇÕES';
    $('connect').textContent=state.authorized?(state.connected?'RADAR ATIVO':'AGUARDANDO FEED'):'CONECTAR RADAR';
    $('connect').disabled=state.authorized;
    if(!state.configured)$('activity').textContent='Configuração privada de sessão ausente no Render.';
