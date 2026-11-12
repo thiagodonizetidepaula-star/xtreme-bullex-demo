@@ -33,12 +33,13 @@ function showSignal(c){
  $('signal').innerHTML='<div class="signal-top"><h4>'+safe(fmtName(c.name||c.symbol))+
  '</h4><span>PAYOUT '+Number(c.payout).toLocaleString('pt-BR',{maximumFractionDigits:1})+'%</span></div>'+
  '<div class="direction">'+(direction==='CALL'?'↗ CALL':'↘ SELL')+'</div>'+
- '<p>SINAL PROVISÓRIO · FOCUS TREND RETEST · ANÁLISE M1</p>'+
+ '<p>SINAL PROVISÓRIO · EMA 9/21/200 + RSI 14 + BOLLINGER · M1</p>'+
+ '<p>PADRÃO IDENTIFICADO: '+safe(c.pattern||'ENGOLFO / REJEIÇÃO')+'</p>'+
  '<div class="signal-meta"><div><small>ENTRADA SUGERIDA</small><strong>'+local(entry)+
  '</strong></div><div><small>EXPIRAÇÃO</small><strong>1 minuto</strong></div>'+
  '<div><small id="timerLabel">TEMPO ATÉ ENTRAR</small><strong id="count" class="count">'+countdown(entry-now())+
  '</strong></div></div><div class="pills">'+tag+'</div><p>RSI: '+Number(c.rsi14).toFixed(1)+
- '. Filtros atendidos ≠ taxa comprovada de acerto. Nenhuma ordem é executada.</p>';
+ '. As confirmações técnicas não são probabilidade de WIN. Nenhuma ordem é executada.</p>';
  state.shownId=String(c.signalId||entry+'-'+c.symbol);
 }
 function notify(c){

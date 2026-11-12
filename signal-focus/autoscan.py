@@ -1,4 +1,4 @@
-"""Focus Pocket Reset 1.0. Single cautious strategy, read-only authenticated feed.
+"""Focus Pocket Strategy 2.0: EMA 9/21/200 + RSI + candle trigger + Bollinger filter; DEMO read-only.
 
 Legacy scanner algorithms are removed; only focus_strategy.evaluate is executed.
 """
@@ -36,7 +36,7 @@ class Scanner:
         self.feed_errors=0
         self.cursor=0
         # New, empty ledger. Previous versions remain preserved only on the backup branch.
-        self.ledger=SignalLedger(path='/tmp/focus-pocket-reset-20261111.sqlite3')
+        self.ledger=SignalLedger(path='/tmp/focus-pocket-ema200-rsi-candle-20261111.sqlite3')
         self.best=self.ledger.restore_pending()
 
     def active(self):
@@ -59,7 +59,7 @@ class Scanner:
         with self.lock:
             info={'running':self.active() and not self.stop_signal.is_set(),
                   'stopping':self.active() and self.stop_signal.is_set(),
-                  'version':'Focus Reset 1.0',
+                  'version':'Focus Strategy 2.0',
                   'minPayout':PAYOUT_MIN,'maxSignals':1,
                   'scanPeriod':'M1','signalExpirySeconds':60,
                   'eligible':self.eligible,'examined':self.examined,'round':self.round,
@@ -68,7 +68,7 @@ class Scanner:
                   'candidates':[dict(c) for c in self.best if c['endsAtMs']>now*1000][:1],
                   'lastUpdateMs':int(self.last_tick*1000),
                   'serverTimeMs':int(now*1000),
-                  'mode':'focus-trend-retest-readonly',
+                  'mode':'ema9-21-200-rsi14-engulf-bollinger-m1-readonly',
                   'readOnly':True}
         info.update(self.ledger.status())
         return info
@@ -165,8 +165,8 @@ class Scanner:
                             'entryAtMs':int(next_minute*1000),
                             'endsAtMs':int((next_minute+60)*1000),
                             'verifiedM1':True,
-                            'signalTag':'TREND_RETEST_V1',
-                            'qualityLabel':'CRITÉRIOS ATENDIDOS, NÃO CHANCE DE ACERTO'})
+                            'signalTag':'EMA200_RSI14_CANDLE_V2',
+                            'qualityLabel':'EMA9/21/200 + RSI14 + ENGOLFO/REJEIÇÃO + BOLLINGER — NÃO É CHANCE DE WIN'})
                         record=self.ledger.create(candidate)
                         if record:
                             with self.lock:self.best=[record]
