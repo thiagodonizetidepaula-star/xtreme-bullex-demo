@@ -1,0 +1,23 @@
+name: Xtreme Sniper IA - testes offline
+
+on:
+  pull_request:
+    paths:
+      - "asian-signal-ai/**"
+      - ".github/workflows/xtreme-ai-check.yml"
+  push:
+    branches:
+      - "feature/xtreme-sniper-ai-readonly"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validar sintaxe do motor e API
+        run: python -m py_compile asian-signal-ai/ai_engine.py asian-signal-ai/ai_server.py
+      - name: Rodar testes offline
+        run: python -m unittest discover -s asian-signal-ai -p test_ai_engine.py -v
